@@ -78,6 +78,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
+      "shortcutName": "PrintEase Desktop",
       "deleteAppDataOnUninstall": false
     },
     "publish": [

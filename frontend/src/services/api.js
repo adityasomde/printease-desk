@@ -159,6 +159,13 @@ export function getHubAgentSummary() {
   return apiRequest("/api/hub-agents/summary");
 }
 
+export function registerDesktopAgent(payload = {}) {
+  return apiRequest("/api/hub-agents/desktop/register", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function pairAgent(pairingCode) {
   return apiRequest("/api/hub-agents/pair", {
     method: "POST",

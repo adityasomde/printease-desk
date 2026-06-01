@@ -34,6 +34,7 @@ const HEARTBEAT_INTERVAL_MS = 15000;
 const PRINTER_SYNC_INTERVAL_MS = 30000;
 const DESKTOP_PROTOCOL_ORIGIN = "app://printease";
 const DESKTOP_AUTH_FILE = "desktop-auth.json";
+const DESKTOP_AGENT_FILE = "desktop-agent.json";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -209,6 +210,10 @@ function getDesktopAuthPath() {
   return path.join(app.getPath("userData"), DESKTOP_AUTH_FILE);
 }
 
+function getDesktopAgentPath() {
+  return path.join(app.getPath("userData"), DESKTOP_AGENT_FILE);
+}
+
 function normalizeDesktopAuthPayload(payload = {}) {
   const token = typeof payload.token === "string" ? payload.token : "";
   const user = payload.user && typeof payload.user === "object" ? payload.user : null;
@@ -302,6 +307,167 @@ async function clearStoredDesktopAuth() {
     return {
       success: false,
       error: error?.message || "Could not clear desktop auth storage.",
+    };
+  }
+}
+
+function normalizeDesktopAgentPayload(payload = {}) {
+  const token = typeof payload.agentToken === "string" ? payload.agentToken : payload.accessToken;
+  const agentId = typeof payload.agentId === "string" ? payload.agentId : "";
+  const hubId = typeof payload.hubId === "string" ? payload.hubId : payload.shopId;
+  const deviceId = typeof payload.deviceId === "string" ? payload.deviceId : agentSession.deviceId;
+  const deviceName = typeof payload.deviceName === "string" ? payload.deviceName : agentSession.deviceName;
+
+  if (!token || !agentId || !hubId || !deviceId || !deviceName) {
+    return null;
+  }
+
+  return {
+    agentToken: token,
+    agentId,
+    hubId,
+    linkedHubUserId: typeof payload.linkedHubUserId === "string" ? payload.linkedHubUserId : "",
+    linkedHubCentreId: typeof payload.linkedHubCentreId === "string" ? payload.linkedHubCentreId : "",
+    deviceId,
+    deviceName,
+    pairedAt: typeof payload.pairedAt === "string" ? payload.pairedAt : new Date().toISOString(),
+    selectedPrinterName: typeof payload.selectedPrinterName === "string"
+      ? payload.selectedPrinterName
+      : agentSession.selectedPrinterName,
+    savedAt: new Date().toISOString(),
+  };
+}
+
+function applyStoredAgentToSession(agent) {
+  if (!agent) return false;
+
+  agentSession.deviceId = agent.deviceId || agentSession.deviceId;
+  agentSession.deviceName = agent.deviceName || agentSession.deviceName;
+  agentSession.agentId = agent.agentId || "";
+  agentSession.hubId = agent.hubId || "";
+  agentSession.accessToken = agent.agentToken || "";
+  agentSession.pairedAt = agent.pairedAt || "";
+  agentSession.selectedPrinterName = agent.selectedPrinterName || agentSession.selectedPrinterName || "";
+  agentSession.pairingCode = "";
+  agentSession.pairingSessionId = "";
+  agentSession.expiresAt = "";
+  return isAgentPaired();
+}
+
+async function getStoredDesktopAgent() {
+  try {
+    const agentPath = getDesktopAgentPath();
+    if (!fs.existsSync(agentPath)) {
+      return { success: true, agent: null };
+    }
+
+    const stored = JSON.parse(await fs.promises.readFile(agentPath, "utf8"));
+    const agent = normalizeDesktopAgentPayload(decodeDesktopAuth(stored));
+
+    return {
+      success: true,
+      agent: agent ? {
+        agentId: agent.agentId,
+        hubId: agent.hubId,
+        deviceId: agent.deviceId,
+        deviceName: agent.deviceName,
+        linkedHubUserId: agent.linkedHubUserId,
+        linkedHubCentreId: agent.linkedHubCentreId,
+        pairedAt: agent.pairedAt,
+        selectedPrinterName: agent.selectedPrinterName,
+        savedAt: agent.savedAt,
+      } : null,
+      encrypted: Boolean(stored.encrypted),
+      session: sanitizeAgentSession(),
+    };
+  } catch (error) {
+    return {
+      success: false,
+      agent: null,
+      error: error?.message || "Could not read desktop agent storage.",
+      session: sanitizeAgentSession(),
+    };
+  }
+}
+
+async function setStoredDesktopAgent(_event, payload = {}) {
+  try {
+    const agent = normalizeDesktopAgentPayload(payload);
+    if (!agent) {
+      return { success: false, error: "Desktop agent credential payload is invalid.", session: sanitizeAgentSession() };
+    }
+
+    await fs.promises.mkdir(app.getPath("userData"), { recursive: true });
+    await fs.promises.writeFile(getDesktopAgentPath(), JSON.stringify(encodeDesktopAuth(agent), null, 2), "utf8");
+    applyStoredAgentToSession(agent);
+
+    await saveConfig({
+      deviceId: agentSession.deviceId,
+      deviceName: agentSession.deviceName,
+      agentId: agentSession.agentId,
+      hubId: agentSession.hubId,
+      selectedPrinterName: agentSession.selectedPrinterName,
+    });
+
+    emitAgentSession();
+    return { success: true, session: sanitizeAgentSession() };
+  } catch (error) {
+    return {
+      success: false,
+      error: error?.message || "Could not save desktop agent credential.",
+      session: sanitizeAgentSession(),
+    };
+  }
+}
+
+async function restoreStoredDesktopAgent() {
+  try {
+    const agentPath = getDesktopAgentPath();
+    if (!fs.existsSync(agentPath)) return { success: true, restored: false };
+
+    const stored = JSON.parse(await fs.promises.readFile(agentPath, "utf8"));
+    const agent = normalizeDesktopAgentPayload(decodeDesktopAuth(stored));
+    const restored = applyStoredAgentToSession(agent);
+
+    if (restored) {
+      await saveConfig({
+        deviceId: agentSession.deviceId,
+        deviceName: agentSession.deviceName,
+        agentId: agentSession.agentId,
+        hubId: agentSession.hubId,
+        selectedPrinterName: agentSession.selectedPrinterName,
+      });
+      console.log("[DESKTOP AGENT] restored stored agent credential", {
+        agentId: agentSession.agentId,
+        hubId: agentSession.hubId,
+        deviceId: agentSession.deviceId,
+      });
+    }
+
+    return { success: true, restored };
+  } catch (error) {
+    console.warn("[DESKTOP AGENT RESTORE FAILED]", error?.message || error);
+    return { success: false, restored: false, error: error?.message || "Could not restore desktop agent credential." };
+  }
+}
+
+async function clearStoredDesktopAgent() {
+  try {
+    await fs.promises.rm(getDesktopAgentPath(), { force: true });
+    agentSession.agentId = "";
+    agentSession.hubId = "";
+    agentSession.accessToken = "";
+    agentSession.pairedAt = "";
+    agentSession.pairingCode = "";
+    agentSession.pairingSessionId = "";
+    agentSession.expiresAt = "";
+    emitAgentSession();
+    return { success: true, session: sanitizeAgentSession() };
+  } catch (error) {
+    return {
+      success: false,
+      error: error?.message || "Could not clear desktop agent credential.",
+      session: sanitizeAgentSession(),
     };
   }
 }
@@ -707,6 +873,15 @@ async function confirmAgentPairing() {
       hubId: agentSession.hubId,
       selectedPrinterName: agentSession.selectedPrinterName,
     });
+    await setStoredDesktopAgent(null, {
+      agentToken: agentSession.accessToken,
+      agentId: agentSession.agentId,
+      hubId: agentSession.hubId,
+      deviceId: agentSession.deviceId,
+      deviceName: agentSession.deviceName,
+      pairedAt: agentSession.pairedAt,
+      selectedPrinterName: agentSession.selectedPrinterName,
+    });
 
     result.runtime = await startAgentRuntime("agent:paired");
   }
@@ -734,6 +909,10 @@ async function sendAgentHeartbeat() {
     agentSession.lastHeartbeatError = "";
   } else {
     agentSession.lastHeartbeatError = result.message || "Heartbeat failed.";
+    if (result.status === 401 || result.status === 403) {
+      await clearStoredDesktopAgent();
+      agentSession.lastHeartbeatError = "Stored desktop agent credential was rejected. Register or pair this desktop again.";
+    }
   }
 
   emitAgentSession();
@@ -969,6 +1148,17 @@ function registerIpcHandlers() {
   ipcMain.handle("desktopAuth:get", () => getStoredDesktopAuth());
   ipcMain.handle("desktopAuth:set", setStoredDesktopAuth);
   ipcMain.handle("desktopAuth:clear", () => clearStoredDesktopAuth());
+  ipcMain.handle("desktopAgent:get", () => getStoredDesktopAgent());
+  ipcMain.handle("desktopAgent:set", setStoredDesktopAgent);
+  ipcMain.handle("desktopAgent:clear", () => clearStoredDesktopAgent());
+  ipcMain.handle("desktopAgent:device-identity", async () => {
+    await ensureDeviceIdentity();
+    return {
+      success: true,
+      deviceId: agentSession.deviceId,
+      deviceName: agentSession.deviceName,
+    };
+  });
 }
 
 function isAllowedNavigation(url) {
@@ -1085,6 +1275,7 @@ app.whenReady().then(async () => {
   registerDesktopProtocol();
   setConfigDirectory(app.getPath("userData"));
   await ensureDeviceIdentity();
+  await restoreStoredDesktopAgent();
   await migrateFileLocalStorageAuth();
   registerIpcHandlers();
   createMainWindow();

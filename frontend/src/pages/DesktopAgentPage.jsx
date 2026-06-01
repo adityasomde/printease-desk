@@ -1,17 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link2, Printer, RefreshCw, Send, Wifi, X, ShieldCheck, Loader2 } from "lucide-react";
 import Card from "../components/Card";
+import { registerDesktopAgent } from "../services/api";
 import {
   checkBackendHealth,
   confirmApprovalPairing,
   confirmPairing,
   diagnosePrinters,
   getAgentStatus,
+  getDeviceIdentity,
   getDesktopStatus,
   isDesktop,
   listPrinters,
   openApprovalUrl,
   selectPrinter as selectDesktopPrinter,
+  saveStoredAgent,
   onAgentUpdated,
   onPrintersUpdated,
   pollPrintJobs,
@@ -393,6 +396,64 @@ export default function DesktopAgentPage() {
     setAgentBusy(false);
   }
 
+  async function registerLoggedInHubAgent() {
+    setAgentBusy(true);
+    setAgentMessage("");
+    setApprovalMessage("");
+    setError("");
+    setErrorDetail("");
+    setHelpCommands([]);
+
+    try {
+      const currentSession = agentSession || await getAgentStatus();
+      const identity = await getDeviceIdentity();
+      const deviceId = currentSession?.deviceId;
+      const deviceName = currentSession?.deviceName || identity?.deviceName || "PrintEase Desktop";
+
+      if (!deviceId && !identity?.deviceId) {
+        setError("Desktop device identity is not ready. Refresh this page and try again.");
+        return;
+      }
+
+      const result = await registerDesktopAgent({
+        deviceId: deviceId || identity.deviceId,
+        deviceName,
+        platform: status?.platform || window.printeaseDesktop?.platform || "desktop",
+        appVersion: status?.version,
+      });
+      const agentToken = result?.agentToken || result?.accessToken;
+
+      if (!result?.success || !agentToken || !result?.agentId || !result?.hubId) {
+        setError(result?.message || "Could not register this desktop agent.");
+        return;
+      }
+
+      const stored = await saveStoredAgent({
+        agentToken,
+        agentId: result.agentId,
+        hubId: result.hubId,
+        linkedHubUserId: result.linkedHubUserId,
+        linkedHubCentreId: result.linkedHubCentreId,
+        deviceId: deviceId || identity.deviceId,
+        deviceName,
+        selectedPrinterName,
+        pairedAt: new Date().toISOString(),
+      });
+
+      if (stored?.success === false) {
+        setError(stored.error || stored.message || "Registered, but could not save desktop agent credentials.");
+        return;
+      }
+
+      if (stored?.session) setAgentSession(stored.session);
+      setAgentMessage("Desktop registered for this hub. It will reconnect automatically after restart.");
+    } catch (registrationError) {
+      setError(registrationError.message || "Could not register desktop agent for this hub.");
+    } finally {
+      setAgentBusy(false);
+    }
+  }
+
   async function checkHealth() {
     const result = await checkBackendHealth();
     setBackendHealth(result);
@@ -499,6 +560,17 @@ export default function DesktopAgentPage() {
           </div>
 
           <div className="grid gap-2 sm:min-w-[300px]">
+            {!agentSession?.paired && (
+              <button
+                type="button"
+                disabled={agentBusy}
+                onClick={registerLoggedInHubAgent}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-3 font-semibold text-white disabled:bg-slate-300"
+              >
+                {agentBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck size={16} />}
+                Register This Desktop
+              </button>
+            )}
             <button
               type="button"
               disabled={agentBusy || approvalPolling}

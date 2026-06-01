@@ -143,6 +143,21 @@ async function callDesktop(method, fallbackMessage, payload) {
   }
 }
 
+async function callDesktopAgent(method, flatMethod, fallbackMessage, payload) {
+  const bridge = getBridge();
+  const agentBridge = bridge?.agent;
+  if (!agentBridge?.[method]) return callDesktop(flatMethod, fallbackMessage, payload);
+
+  try {
+    return await agentBridge[method](payload);
+  } catch (error) {
+    return {
+      success: false,
+      message: error.message || fallbackMessage,
+    };
+  }
+}
+
 export function getAgentStatus() {
   return callDesktop("getAgentStatus", "Could not load agent status.");
 }
@@ -197,4 +212,20 @@ export function saveStoredAuth(payload = {}) {
 
 export function clearStoredAuth() {
   return callDesktop("clearStoredAuth", "Could not clear desktop auth storage.");
+}
+
+export function getStoredAgent() {
+  return callDesktopAgent("getStored", "getStoredAgent", "Could not load desktop agent storage.");
+}
+
+export function saveStoredAgent(payload = {}) {
+  return callDesktopAgent("setStored", "saveStoredAgent", "Could not save desktop agent storage.", payload);
+}
+
+export function clearStoredAgent() {
+  return callDesktopAgent("clearStored", "clearStoredAgent", "Could not clear desktop agent storage.");
+}
+
+export function getDeviceIdentity() {
+  return callDesktopAgent("getDeviceIdentity", "getDeviceIdentity", "Could not load desktop device identity.");
 }

@@ -3,9 +3,17 @@ const { contextBridge, ipcRenderer } = require("electron");
 try {
   console.log(`[DESKTOP PRELOAD] loading ${window.location.href}`);
 
+  const agentBridge = {
+    getStored: () => ipcRenderer.invoke("desktopAgent:get"),
+    setStored: (payload) => ipcRenderer.invoke("desktopAgent:set", payload),
+    clearStored: () => ipcRenderer.invoke("desktopAgent:clear"),
+    getDeviceIdentity: () => ipcRenderer.invoke("desktopAgent:device-identity"),
+  };
+
   const bridge = {
     isDesktop: true,
     bridgeVersion: "0.1.14-cjs",
+    agent: agentBridge,
     getDesktopStatus: () => ipcRenderer.invoke("desktop:status"),
     checkBackendHealth: () => ipcRenderer.invoke("backend:health"),
     listPrinters: () => ipcRenderer.invoke("printers:list"),
@@ -38,6 +46,10 @@ try {
     getStoredAuth: () => ipcRenderer.invoke("desktopAuth:get"),
     saveStoredAuth: (payload) => ipcRenderer.invoke("desktopAuth:set", payload),
     clearStoredAuth: () => ipcRenderer.invoke("desktopAuth:clear"),
+    getStoredAgent: () => ipcRenderer.invoke("desktopAgent:get"),
+    saveStoredAgent: (payload) => ipcRenderer.invoke("desktopAgent:set", payload),
+    clearStoredAgent: () => ipcRenderer.invoke("desktopAgent:clear"),
+    getDeviceIdentity: () => ipcRenderer.invoke("desktopAgent:device-identity"),
     onUpdateStatus: (callback) => {
       const listener = (_event, payload) => callback(payload);
       ipcRenderer.on("updater:status", listener);

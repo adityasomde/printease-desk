@@ -3,9 +3,14 @@ import os from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 
 const execFileAsync = promisify(execFile);
 const DEFAULT_TIMEOUT_MS = 30000;
+const WINDOWS_HELPER_MISSING_MESSAGE = "Windows PDF print helper is missing. Reinstall PrintEase Desktop or contact support.";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const DESKTOP_SHELL_ROOT = path.resolve(__dirname, "..");
 
 function isWin() {
   return process.platform === "win32";
@@ -14,8 +19,7 @@ function isWin() {
 function helpCommands() {
   return [
     "PowerShell: Get-Printer | Select Name,Default,PrinterStatus",
-    "Install SumatraPDF or place SumatraPDF.exe at desktop-shell/vendor/sumatrapdf/SumatraPDF.exe",
-    "Optional env: set PRINTEASE_SUMATRA_PATH=C:\\Path\\To\\SumatraPDF.exe",
+    "Expected helper: desktop-shell/vendor/win/SumatraPDF.exe",
   ];
 }
 
@@ -123,7 +127,7 @@ export async function diagnosePrinters() {
       printersFound: Boolean(printerResult.printers?.length),
       sumatraFound: Boolean(sumatra),
     },
-    error: !sumatra ? "Windows PDF printing engine not found." : printerResult.error || "",
+    error: !sumatra ? WINDOWS_HELPER_MISSING_MESSAGE : printerResult.error || "",
     helpCommands: helpCommands(),
   };
 }
@@ -131,11 +135,8 @@ export async function diagnosePrinters() {
 export function findSumatraPdf() {
   const candidates = [
     process.env.PRINTEASE_SUMATRA_PATH,
-    path.join(process.cwd(), "vendor", "sumatrapdf", "SumatraPDF.exe"),
-    path.join(process.cwd(), "desktop-shell", "vendor", "sumatrapdf", "SumatraPDF.exe"),
-    process.resourcesPath ? path.join(process.resourcesPath, "vendor", "sumatrapdf", "SumatraPDF.exe") : "",
-    "C:\\Program Files\\SumatraPDF\\SumatraPDF.exe",
-    "C:\\Program Files (x86)\\SumatraPDF\\SumatraPDF.exe",
+    path.join(DESKTOP_SHELL_ROOT, "vendor", "win", "SumatraPDF.exe"),
+    process.resourcesPath ? path.join(process.resourcesPath, "vendor", "win", "SumatraPDF.exe") : "",
   ].filter(Boolean);
 
   return candidates.find((candidate) => {
@@ -212,8 +213,8 @@ export async function printPdfFile({ filePath, printerName, options = {} } = {})
     if (!sumatra) {
       return {
         success: false,
-        error: "Windows PDF printing engine not found.",
-        message: "Install SumatraPDF or bundle SumatraPDF.exe.",
+        error: WINDOWS_HELPER_MISSING_MESSAGE,
+        message: WINDOWS_HELPER_MISSING_MESSAGE,
         reasonCode: "WINDOWS_PDF_ENGINE_NOT_FOUND",
         helpCommands: helpCommands(),
       };

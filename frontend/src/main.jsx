@@ -6,7 +6,9 @@ import "./index.css";
 
 const isDesktopFileRuntime =
   typeof window !== "undefined" &&
-  (window.location.protocol === "file:" || window.printeaseDesktop?.isDesktop);
+  (window.location.protocol === "file:" ||
+    window.location.protocol === "app:" ||
+    window.printeaseDesktop?.isDesktop);
 
 const Router = isDesktopFileRuntime ? HashRouter : BrowserRouter;
 

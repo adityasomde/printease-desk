@@ -3,7 +3,7 @@ import fs from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { diagnosePrinters, listPrinters, stopPrinting, testPrint } from "./printer/printExecutor.js";
 import { confirmPairing, sendHeartbeat, startPairing } from "./agent/heartbeat.js";
 import { createJobPoller, processNextJob } from "./agent/jobPoller.js";
@@ -13,13 +13,27 @@ import { loadConfig, saveConfig, setConfigDirectory } from "./local/config.js";
 import { checkForUpdates, getUpdateStatus, initializeUpdater, installUpdateNow } from "./updater.js";
 
 const require = createRequire(import.meta.url);
-const { app, BrowserWindow, ipcMain, session, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, net, protocol, safeStorage, session, shell } = require("electron");
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "app",
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+    },
+  },
+]);
 
 const DEV_FRONTEND_URL = process.env.PRINTEASE_FRONTEND_URL || "http://127.0.0.1:5175";
 const USE_DEV_FRONTEND = process.env.PRINTEASE_USE_DEV_FRONTEND === "1";
-const VERSION = "0.1.13";
+const VERSION = "0.1.14";
 const HEARTBEAT_INTERVAL_MS = 15000;
 const PRINTER_SYNC_INTERVAL_MS = 30000;
+const DESKTOP_PROTOCOL_ORIGIN = "app://printease";
+const DESKTOP_AUTH_FILE = "desktop-auth.json";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -58,6 +72,55 @@ function getProductionIndexPath() {
 
   // Development fallback: after `npm run build --prefix frontend`, Vite outputs here.
   return path.join(__dirname, "..", "frontend", "dist", "index.html");
+}
+
+function getFrontendDistRoot() {
+  return path.dirname(getProductionIndexPath());
+}
+
+function getDesktopAppUrl() {
+  return `${DESKTOP_PROTOCOL_ORIGIN}/index.html`;
+}
+
+function isPathInside(parentPath, childPath) {
+  const relative = path.relative(parentPath, childPath);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function registerDesktopProtocol() {
+  if (!app.isPackaged) return;
+
+  protocol.handle("app", (request) => {
+    const frontendRoot = getFrontendDistRoot();
+
+    try {
+      const requestUrl = new URL(request.url);
+      if (requestUrl.hostname !== "printease") {
+        return new Response("Not found", { status: 404 });
+      }
+
+      const requestedPath = decodeURIComponent(requestUrl.pathname || "/");
+      const relativePath = requestedPath === "/" ? "index.html" : requestedPath.replace(/^\/+/, "");
+      const candidatePath = path.normalize(path.join(frontendRoot, relativePath));
+
+      if (!isPathInside(frontendRoot, candidatePath)) {
+        return new Response("Forbidden", { status: 403 });
+      }
+
+      if (fs.existsSync(candidatePath) && fs.statSync(candidatePath).isFile()) {
+        return net.fetch(pathToFileURL(candidatePath).toString());
+      }
+
+      if (!path.extname(candidatePath)) {
+        return net.fetch(pathToFileURL(getProductionIndexPath()).toString());
+      }
+
+      return new Response("Not found", { status: 404 });
+    } catch (error) {
+      console.warn("[DESKTOP PROTOCOL FAILED]", error?.message || error);
+      return net.fetch(pathToFileURL(getProductionIndexPath()).toString());
+    }
+  });
 }
 
 function getDevServerErrorHtml() {
@@ -116,7 +179,12 @@ async function loadFrontend(window) {
   const localIndex = getProductionIndexPath();
 
   if (app.isPackaged) {
-    await window.loadFile(localIndex);
+    try {
+      await window.loadURL(getDesktopAppUrl());
+    } catch (error) {
+      console.warn("[DESKTOP APP PROTOCOL LOAD FAILED]", error?.message || error);
+      await window.loadFile(localIndex);
+    }
     return;
   }
 
@@ -134,6 +202,145 @@ async function loadFrontend(window) {
     }
 
     await window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(getDevServerErrorHtml())}`);
+  }
+}
+
+function getDesktopAuthPath() {
+  return path.join(app.getPath("userData"), DESKTOP_AUTH_FILE);
+}
+
+function normalizeDesktopAuthPayload(payload = {}) {
+  const token = typeof payload.token === "string" ? payload.token : "";
+  const user = payload.user && typeof payload.user === "object" ? payload.user : null;
+
+  if (!token || !user) {
+    return null;
+  }
+
+  return {
+    token,
+    user,
+    savedAt: new Date().toISOString(),
+  };
+}
+
+function encodeDesktopAuth(payload) {
+  const text = JSON.stringify(payload);
+
+  if (safeStorage?.isEncryptionAvailable?.()) {
+    return {
+      encrypted: true,
+      data: Buffer.from(safeStorage.encryptString(text)).toString("base64"),
+    };
+  }
+
+  return {
+    encrypted: false,
+    data: text,
+  };
+}
+
+function decodeDesktopAuth(stored) {
+  if (!stored || typeof stored !== "object") return null;
+
+  if (stored.encrypted) {
+    const decrypted = safeStorage.decryptString(Buffer.from(String(stored.data || ""), "base64"));
+    return JSON.parse(decrypted);
+  }
+
+  return JSON.parse(String(stored.data || "{}"));
+}
+
+async function getStoredDesktopAuth() {
+  try {
+    const authPath = getDesktopAuthPath();
+    if (!fs.existsSync(authPath)) {
+      return { success: true, auth: null };
+    }
+
+    const stored = JSON.parse(await fs.promises.readFile(authPath, "utf8"));
+    const auth = decodeDesktopAuth(stored);
+
+    return {
+      success: true,
+      auth: normalizeDesktopAuthPayload(auth),
+      encrypted: Boolean(stored.encrypted),
+    };
+  } catch (error) {
+    return {
+      success: false,
+      auth: null,
+      error: error?.message || "Could not read desktop auth storage.",
+    };
+  }
+}
+
+async function setStoredDesktopAuth(_event, payload = {}) {
+  try {
+    const auth = normalizeDesktopAuthPayload(payload);
+    if (!auth) {
+      return { success: false, error: "Desktop auth payload is invalid." };
+    }
+
+    await fs.promises.mkdir(app.getPath("userData"), { recursive: true });
+    await fs.promises.writeFile(getDesktopAuthPath(), JSON.stringify(encodeDesktopAuth(auth), null, 2), "utf8");
+
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error?.message || "Could not save desktop auth storage.",
+    };
+  }
+}
+
+async function clearStoredDesktopAuth() {
+  try {
+    await fs.promises.rm(getDesktopAuthPath(), { force: true });
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error?.message || "Could not clear desktop auth storage.",
+    };
+  }
+}
+
+async function migrateFileLocalStorageAuth() {
+  if (!app.isPackaged) return;
+
+  const existing = await getStoredDesktopAuth();
+  if (existing?.auth?.token && existing.auth.user) return;
+
+  const localIndex = getProductionIndexPath();
+  if (!fs.existsSync(localIndex)) return;
+
+  const migrationWindow = new BrowserWindow({
+    show: false,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+
+  try {
+    await migrationWindow.loadFile(localIndex);
+    const stored = await migrationWindow.webContents.executeJavaScript(`(() => {
+      const token = localStorage.getItem("printease_token");
+      const userText = localStorage.getItem("printease_user");
+      return { token, userText };
+    })()`);
+
+    if (stored?.token && stored?.userText) {
+      const user = JSON.parse(stored.userText);
+      await setStoredDesktopAuth(null, { token: stored.token, user });
+      console.log("[DESKTOP AUTH] migrated file localStorage auth");
+    }
+  } catch (error) {
+    console.warn("[DESKTOP AUTH MIGRATION FAILED]", error?.message || error);
+  } finally {
+    migrationWindow.destroy();
   }
 }
 
@@ -759,11 +966,15 @@ function registerIpcHandlers() {
   ipcMain.handle("updater:check", () => checkForUpdates());
   ipcMain.handle("updater:status", () => getUpdateStatus());
   ipcMain.handle("updater:install", () => installUpdateNow());
+  ipcMain.handle("desktopAuth:get", () => getStoredDesktopAuth());
+  ipcMain.handle("desktopAuth:set", setStoredDesktopAuth);
+  ipcMain.handle("desktopAuth:clear", () => clearStoredDesktopAuth());
 }
 
 function isAllowedNavigation(url) {
   if (url.startsWith("data:text/html")) return true;
   if (url.startsWith("file://")) return true;
+  if (url.startsWith(DESKTOP_PROTOCOL_ORIGIN)) return true;
 
   try {
     return new URL(url).origin === new URL(DEV_FRONTEND_URL).origin;
@@ -823,11 +1034,15 @@ function createMainWindow() {
       url: validatedURL,
     });
 
-    if (validatedURL.startsWith("file://")) {
+    if (validatedURL.startsWith("file://") || validatedURL.startsWith(DESKTOP_PROTOCOL_ORIGIN)) {
       const localIndex = getProductionIndexPath();
       if (fs.existsSync(localIndex)) {
         const failedHash = new URL(validatedURL).hash;
-        await mainWindow?.loadFile(localIndex);
+        if (app.isPackaged) {
+          await mainWindow?.loadURL(getDesktopAppUrl());
+        } else {
+          await mainWindow?.loadFile(localIndex);
+        }
         if (failedHash && failedHash !== "#") {
           await mainWindow?.webContents.executeJavaScript(
             `window.location.hash = ${JSON.stringify(failedHash.slice(1))};`
@@ -867,8 +1082,10 @@ function createMainWindow() {
 
 app.whenReady().then(async () => {
   await session.defaultSession.clearCache();
+  registerDesktopProtocol();
   setConfigDirectory(app.getPath("userData"));
   await ensureDeviceIdentity();
+  await migrateFileLocalStorageAuth();
   registerIpcHandlers();
   createMainWindow();
   initializeUpdater({ mainWindow });

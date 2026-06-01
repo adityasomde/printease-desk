@@ -57,6 +57,13 @@ latest-linux.yml
 latest.yml
 latest-mac.yml
 
+# Optional checked-in Windows PDF print helper, if redistribution is approved
+!desktop-shell/vendor/
+!desktop-shell/vendor/**
+!desktop-shell/vendor/win/
+!desktop-shell/vendor/win/SumatraPDF.exe
+!desktop-shell/vendor/win/THIRD_PARTY_NOTICES.md
+
 # Archives/backups
 *.zip
 *.tar
@@ -97,6 +104,10 @@ desktop.ini
 
 !desktop-shell/
 !desktop-shell/**
+# Keep generated/downloaded Windows installers ignored inside desktop-shell,
+# but allow the exact vendored print helper name.
+desktop-shell/vendor/win/*.exe
+!desktop-shell/vendor/win/SumatraPDF.exe
 
 !.github/
 !.github/**

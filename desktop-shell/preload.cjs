@@ -5,7 +5,7 @@ try {
 
   const bridge = {
     isDesktop: true,
-    bridgeVersion: "0.1.13-cjs",
+    bridgeVersion: "0.1.14-cjs",
     getDesktopStatus: () => ipcRenderer.invoke("desktop:status"),
     checkBackendHealth: () => ipcRenderer.invoke("backend:health"),
     listPrinters: () => ipcRenderer.invoke("printers:list"),
@@ -35,6 +35,9 @@ try {
     checkForUpdates: () => ipcRenderer.invoke("updater:check"),
     getUpdateStatus: () => ipcRenderer.invoke("updater:status"),
     installUpdateNow: () => ipcRenderer.invoke("updater:install"),
+    getStoredAuth: () => ipcRenderer.invoke("desktopAuth:get"),
+    saveStoredAuth: (payload) => ipcRenderer.invoke("desktopAuth:set", payload),
+    clearStoredAuth: () => ipcRenderer.invoke("desktopAuth:clear"),
     onUpdateStatus: (callback) => {
       const listener = (_event, payload) => callback(payload);
       ipcRenderer.on("updater:status", listener);

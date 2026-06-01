@@ -1,6 +1,6 @@
 {
   "name": "printease-desktop-shell",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "private": true,
   "type": "module",
   "packageManager": "traversal@0.0.0",
@@ -59,6 +59,14 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "vendor/win/SumatraPDF.exe",
+        "to": "vendor/win/SumatraPDF.exe"
+      },
+      {
+        "from": "vendor/win/THIRD_PARTY_NOTICES.md",
+        "to": "vendor/win/THIRD_PARTY_NOTICES.md"
       }
     ],
     "win": {

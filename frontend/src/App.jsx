@@ -17,7 +17,7 @@ import TrackPage from "./pages/TrackPage";
 import HistoryPage from "./pages/HistoryPage";
 import { initialCentres, initialOrders } from "./data/demoData";
 import { calculateTotalAmount, countSelectedPages, getPricePerPage } from "./utils/price";
-import { isDesktop, onPrintersUpdated } from "./utils/desktopBridge";
+import { clearStoredAuth, getStoredAuth, isDesktop, onPrintersUpdated, saveStoredAuth } from "./utils/desktopBridge";
 import { apiRequest } from "./services/api";
 import { loadRazorpayCheckout } from "./utils/razorpay";
 
@@ -76,7 +76,10 @@ class RouteErrorBoundary extends Component {
 
     const showDetail =
       typeof window !== "undefined" &&
-      (window.location.protocol === "file:" || window.printeaseDesktop?.isDesktop || import.meta.env.DEV);
+      (window.location.protocol === "file:" ||
+        window.location.protocol === "app:" ||
+        window.printeaseDesktop?.isDesktop ||
+        import.meta.env.DEV);
 
     return (
       <section className="mx-auto max-w-xl rounded-2xl border border-rose-200 bg-white p-6 shadow-sm">
@@ -263,6 +266,27 @@ function upsertOrder(orderList, nextOrder) {
   return orderList.map((item, index) => (index === existingIndex ? nextOrder : item));
 }
 
+async function persistAuthSession(token, user) {
+  localStorage.setItem("printease_token", token);
+  localStorage.setItem("printease_user", JSON.stringify(user));
+
+  const result = await saveStoredAuth({ token, user });
+  if (result?.success === false && isDesktop()) {
+    console.warn("[PrintEase desktop auth save failed]", result.error || result.message);
+  }
+}
+
+function clearAuthSession() {
+  localStorage.removeItem("printease_token");
+  localStorage.removeItem("printease_user");
+
+  clearStoredAuth().then((result) => {
+    if (result?.success === false && isDesktop()) {
+      console.warn("[PrintEase desktop auth clear failed]", result.error || result.message);
+    }
+  });
+}
+
 export default function App() {
   const routerNavigate = useNavigate();
   const location = useLocation();
@@ -364,7 +388,19 @@ export default function App() {
 
   useEffect(() => {
     async function restoreSession() {
-      const token = localStorage.getItem("printease_token");
+      let token = localStorage.getItem("printease_token");
+
+      if (!token && isDesktop()) {
+        const stored = await getStoredAuth();
+        const storedAuth = stored?.auth;
+
+        if (stored?.success && storedAuth?.token && storedAuth?.user) {
+          token = storedAuth.token;
+          localStorage.setItem("printease_token", storedAuth.token);
+          localStorage.setItem("printease_user", JSON.stringify(storedAuth.user));
+          setCurrentUser(storedAuth.user);
+        }
+      }
 
       if (!token) return;
 
@@ -395,8 +431,7 @@ export default function App() {
 
         if (restoredUser?.role === "hub" && !signedInCentre) {
           // If a hub user isn't linked to a centre, invalidate session
-          localStorage.removeItem("printease_token");
-          localStorage.removeItem("printease_user");
+          clearAuthSession();
           setCurrentUser(null);
           return;
         }
@@ -413,7 +448,7 @@ export default function App() {
             : {}),
         };
 
-        localStorage.setItem("printease_user", JSON.stringify(finalUser));
+        await persistAuthSession(token, finalUser);
         setCurrentUser(finalUser);
 
         if (signedInCentre) {
@@ -426,8 +461,7 @@ export default function App() {
       } catch (error) {
         console.error("Session restore failed:", error?.message || error);
 
-        localStorage.removeItem("printease_token");
-        localStorage.removeItem("printease_user");
+        clearAuthSession();
         setCurrentUser(null);
       }
     }
@@ -571,8 +605,7 @@ export default function App() {
         });
 
         const nextUser = toCurrentUser(data.user);
-        localStorage.setItem("printease_token", data.token);
-        localStorage.setItem("printease_user", JSON.stringify(nextUser));
+        await persistAuthSession(data.token, nextUser);
         setCurrentUser(nextUser);
         await loadOrdersForSession(nextUser);
         navigate("userDashboard", { replace: true });
@@ -604,8 +637,7 @@ export default function App() {
         const centre = normalizeCentre(data.centre);
         const nextUser = toCurrentUser(data.user, centre);
         const nextCentres = upsertCentre(centres, centre);
-        localStorage.setItem("printease_token", data.token);
-        localStorage.setItem("printease_user", JSON.stringify(nextUser));
+        await persistAuthSession(data.token, nextUser);
         setCentres((prev) => upsertCentre(prev, centre));
         setCurrentUser(nextUser);
         await loadOrdersForSession(nextUser, nextCentres);
@@ -636,9 +668,8 @@ export default function App() {
         return;
       }
 
-      localStorage.setItem("printease_token", data.token);
       const nextUser = toCurrentUser(data.user, signedInCentre);
-      localStorage.setItem("printease_user", JSON.stringify(nextUser));
+      await persistAuthSession(data.token, nextUser);
       const nextCentres = signedInCentre ? upsertCentre(centres, signedInCentre) : centres;
       if (signedInCentre) setCentres((prev) => upsertCentre(prev, signedInCentre));
       setCurrentUser(nextUser);
@@ -655,8 +686,7 @@ export default function App() {
   }
 
   function logout() {
-    localStorage.removeItem("printease_token");
-    localStorage.removeItem("printease_user");
+    clearAuthSession();
     setCurrentUser(null);
     setPostAuthRedirect(null);
     setDocumentFile(null);

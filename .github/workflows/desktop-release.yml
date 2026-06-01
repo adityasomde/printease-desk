@@ -62,19 +62,9 @@ jobs:
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: printease-desktop-linux
+          name: linux-release-assets
           if-no-files-found: error
           path: |
-            desktop-shell/release/*.AppImage
-            desktop-shell/release/*.AppImage.blockmap
-            desktop-shell/release/*.deb
-            desktop-shell/release/latest-linux.yml
-
-      - name: Publish GitHub release assets
-        if: startsWith(github.ref, 'refs/tags/desktop-v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
             desktop-shell/release/*.AppImage
             desktop-shell/release/*.AppImage.blockmap
             desktop-shell/release/*.deb
@@ -119,24 +109,53 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm run dist:win --prefix desktop-shell
 
+      - name: List Windows release files
+        shell: pwsh
+        run: |
+          Get-ChildItem -Recurse desktop-shell/release
+
       - name: Verify package contents
         run: npm run verify:package --prefix desktop-shell
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: printease-desktop-windows
+          name: windows-release-assets
           if-no-files-found: error
           path: |
             desktop-shell/release/*.exe
             desktop-shell/release/*.exe.blockmap
             desktop-shell/release/latest.yml
 
+  publish-release:
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/desktop-v')
+
+    steps:
+      - name: Download Linux release assets
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-release-assets
+          path: release-assets/linux
+
+      - name: Download Windows release assets
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-release-assets
+          path: release-assets/windows
+
+      - name: List release assets
+        run: find release-assets -type f -maxdepth 3 -print
+
       - name: Publish GitHub release assets
-        if: startsWith(github.ref, 'refs/tags/desktop-v')
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            desktop-shell/release/*.exe
-            desktop-shell/release/*.exe.blockmap
-            desktop-shell/release/latest.yml
+            release-assets/linux/*.AppImage
+            release-assets/linux/*.AppImage.blockmap
+            release-assets/linux/*.deb
+            release-assets/linux/latest-linux.yml
+            release-assets/windows/*.exe
+            release-assets/windows/*.exe.blockmap
+            release-assets/windows/latest.yml

@@ -185,22 +185,3 @@ export function startJobPolling(payload = {}) {
 export function stopJobPolling() {
   return callDesktop("stopJobPolling", "Could not stop print job polling.");
 }
-
-export function checkForUpdates() {
-  return callDesktop("checkForUpdates", "Could not check for updates.");
-}
-
-export function getUpdateStatus() {
-  return callDesktop("getUpdateStatus", "Could not load update status.");
-}
-
-export function installUpdateNow() {
-  return callDesktop("installUpdateNow", "Could not install update.");
-}
-
-export function onUpdateStatus(callback) {
-  const bridge = getBridge();
-  if (!bridge?.onUpdateStatus) return () => {};
-
-  return bridge.onUpdateStatus(callback);
-}

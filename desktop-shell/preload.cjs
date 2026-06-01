@@ -5,7 +5,7 @@ try {
 
   const bridge = {
     isDesktop: true,
-    bridgeVersion: "0.1.4-cjs",
+    bridgeVersion: "0.1.5-cjs",
     getDesktopStatus: () => ipcRenderer.invoke("desktop:status"),
     checkBackendHealth: () => ipcRenderer.invoke("backend:health"),
     listPrinters: () => ipcRenderer.invoke("printers:list"),

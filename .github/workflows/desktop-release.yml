@@ -51,7 +51,7 @@ jobs:
       - name: Build Linux AppImage and DEB
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run dist:linux --prefix desktop-shell -- --publish never
+        run: npm run dist:linux --prefix desktop-shell
 
       - name: Verify package contents
         run: npm run verify:package --prefix desktop-shell

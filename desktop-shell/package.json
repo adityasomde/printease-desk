@@ -1,8 +1,9 @@
 {
   "name": "printease-desktop-shell",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
+  "packageManager": "traversal@0.0.0",
   "main": "main.js",
   "files": [
     "main.js",
@@ -16,12 +17,12 @@
   "scripts": {
     "dev": "electron .",
     "start": "electron .",
-    "pack": "electron-builder --dir",
-    "dist": "electron-builder",
-    "dist:win": "electron-builder --win nsis",
+    "pack": "npm_config_loglevel=error electron-builder --dir",
+    "dist": "npm_config_loglevel=error electron-builder",
+    "dist:win": "npm_config_loglevel=error electron-builder --win nsis",
     "verify:package": "node scripts/verify-package-files.cjs",
-    "dist:linux": "electron-builder --linux AppImage deb",
-    "dist:appimage": "electron-builder --linux AppImage"
+    "dist:linux": "npm_config_loglevel=error electron-builder --linux AppImage deb --publish never && node scripts/create-linux-blockmaps.cjs",
+    "dist:appimage": "npm_config_loglevel=error electron-builder --linux AppImage --publish never && node scripts/create-linux-blockmaps.cjs"
   },
   "devDependencies": {
     "electron": "^33.0.0",
@@ -32,6 +33,7 @@
   },
   "productName": "PrintEase Desktop",
   "description": "PrintEase Desktop app and local printer agent",
+  "homepage": "https://github.com/adityasomde/printease-desk",
   "build": {
     "appId": "com.printease.desktop",
     "productName": "PrintEase Desktop",

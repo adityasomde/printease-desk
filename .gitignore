@@ -144,3 +144,7 @@ backend/
 *SUPABASE_SERVICE_KEY*
 *JWT_SECRET*
 *AGENT_TOKEN_SECRET*
+
+# Local helper scripts with machine-specific paths
+sync-frontend-from-mvp.sh
+local-*.sh

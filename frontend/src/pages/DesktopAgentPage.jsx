@@ -1,19 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link2, Printer, RefreshCw, Send, Wifi, X, ShieldCheck, Loader2 } from "lucide-react";
+import { Download, Link2, Printer, RefreshCw, Send, Wifi, X, ShieldCheck, Loader2 } from "lucide-react";
 import Card from "../components/Card";
 import {
   checkBackendHealth,
+  checkForUpdates,
   confirmApprovalPairing,
   confirmPairing,
   diagnosePrinters,
   getAgentStatus,
   getDesktopStatus,
+  getUpdateStatus,
+  installUpdateNow,
   isDesktop,
   listPrinters,
   openApprovalUrl,
   selectPrinter as selectDesktopPrinter,
   onAgentUpdated,
   onPrintersUpdated,
+  onUpdateStatus,
   pollPrintJobs,
   sendHeartbeat,
   startApprovalPairing as requestApprovalPairing,
@@ -75,6 +79,9 @@ export default function DesktopAgentPage() {
   const [approvalPolling, setApprovalPolling] = useState(false);
   const [approvalMessage, setApprovalMessage] = useState("");
   const [manualPairingVisible, setManualPairingVisible] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState(null);
+  const [checkingUpdates, setCheckingUpdates] = useState(false);
+  const [installingUpdate, setInstallingUpdate] = useState(false);
   const approvalTimerRef = useRef(null);
   const approvalSessionIdRef = useRef("");
 
@@ -111,10 +118,15 @@ export default function DesktopAgentPage() {
         if (result.selectedPrinterName) setSelectedPrinterName(result.selectedPrinterName);
       }
     });
+    const unsubscribeUpdates = onUpdateStatus((result) => {
+      setDesktopAvailable(true);
+      setUpdateStatus(result);
+    });
 
     return () => {
       unsubscribePrinters();
       unsubscribeAgent();
+      unsubscribeUpdates();
     };
   }, []);
 
@@ -151,6 +163,11 @@ export default function DesktopAgentPage() {
         setAgentSession(nextSession);
         if (nextSession.selectedPrinterName) setSelectedPrinterName(nextSession.selectedPrinterName);
       }
+    });
+
+    getUpdateStatus().then((result) => {
+      if (result?.success === false) return;
+      setUpdateStatus(result);
     });
   }, [desktopAvailable]);
 
@@ -405,6 +422,36 @@ export default function DesktopAgentPage() {
     setMessage("Backend health check passed.");
   }
 
+  async function runUpdateCheck() {
+    setCheckingUpdates(true);
+    setAgentMessage("");
+    setError("");
+
+    const result = await checkForUpdates();
+    if (result?.success === false) {
+      setError(result.error || result.message || "Could not check for updates.");
+    } else {
+      setUpdateStatus(result);
+    }
+
+    setCheckingUpdates(false);
+  }
+
+  async function restartToUpdate() {
+    setInstallingUpdate(true);
+    setAgentMessage("");
+    setError("");
+
+    const result = await installUpdateNow();
+    if (result?.success === false) {
+      setError(result.error || result.message || "Could not install update.");
+    } else {
+      setUpdateStatus(result);
+    }
+
+    setInstallingUpdate(false);
+  }
+
   if (!desktopAvailable) {
     return (
       <Card>
@@ -469,6 +516,46 @@ export default function DesktopAgentPage() {
             >
               <Printer size={16} /> Diagnose
             </button>
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <Download size={20} />
+              <h3 className="text-xl font-bold">Desktop Updates</h3>
+            </div>
+            <p className="mt-2 text-sm font-semibold text-slate-700">
+              {updateStatus?.message || "Update status is not loaded yet."}
+            </p>
+            {updateStatus?.version && (
+              <p className="mt-1 text-sm text-slate-600">Version: {updateStatus.version}</p>
+            )}
+            {typeof updateStatus?.percent === "number" && (
+              <p className="mt-1 text-sm text-slate-600">Download: {updateStatus.percent}%</p>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={runUpdateCheck}
+              disabled={checkingUpdates}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-3 font-semibold disabled:opacity-60"
+            >
+              <RefreshCw size={16} /> {checkingUpdates ? "Checking" : "Check Updates"}
+            </button>
+            {updateStatus?.status === "downloaded" && (
+              <button
+                type="button"
+                onClick={restartToUpdate}
+                disabled={installingUpdate}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 font-semibold text-white disabled:bg-slate-300"
+              >
+                <Download size={16} /> {installingUpdate ? "Restarting" : "Restart to Update"}
+              </button>
+            )}
           </div>
         </div>
       </Card>

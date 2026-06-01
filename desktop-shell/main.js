@@ -17,7 +17,7 @@ const { app, BrowserWindow, ipcMain, session, shell } = require("electron");
 
 const DEV_FRONTEND_URL = process.env.PRINTEASE_FRONTEND_URL || "http://127.0.0.1:5175";
 const USE_DEV_FRONTEND = process.env.PRINTEASE_USE_DEV_FRONTEND === "1";
-const VERSION = "0.1.1";
+const VERSION = "0.1.4";
 const HEARTBEAT_INTERVAL_MS = 15000;
 const PRINTER_SYNC_INTERVAL_MS = 30000;
 
@@ -814,9 +814,32 @@ function createMainWindow() {
     }
   });
 
-  mainWindow.webContents.on("did-fail-load", async (_event, _errorCode, _errorDescription, validatedURL, isMainFrame) => {
-    if (!isMainFrame || app.isPackaged || !validatedURL.startsWith(DEV_FRONTEND_URL)) return;
-    await mainWindow?.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(getDevServerErrorHtml())}`);
+  mainWindow.webContents.on("did-fail-load", async (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (!isMainFrame) return;
+
+    console.warn("[DESKTOP LOAD FAILED]", {
+      errorCode,
+      errorDescription,
+      url: validatedURL,
+    });
+
+    if (validatedURL.startsWith("file://")) {
+      const localIndex = getProductionIndexPath();
+      if (fs.existsSync(localIndex)) {
+        const failedHash = new URL(validatedURL).hash;
+        await mainWindow?.loadFile(localIndex);
+        if (failedHash && failedHash !== "#") {
+          await mainWindow?.webContents.executeJavaScript(
+            `window.location.hash = ${JSON.stringify(failedHash.slice(1))};`
+          );
+        }
+      }
+      return;
+    }
+
+    if (!app.isPackaged && validatedURL.startsWith(DEV_FRONTEND_URL)) {
+      await mainWindow?.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(getDevServerErrorHtml())}`);
+    }
   });
   mainWindow.webContents.on("did-finish-load", () => {
     mainWindow.webContents

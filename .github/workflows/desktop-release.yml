@@ -44,6 +44,7 @@ jobs:
           node --check desktop-shell/printer/windowsPrinter.js
           node --check desktop-shell/scripts/sync-frontend-dist.cjs
           node --check desktop-shell/scripts/verify-package-files.cjs
+          node --check desktop-shell/scripts/run-electron-builder.cjs
 
       - name: Verify frontend bundle exists
         run: |
@@ -65,9 +66,9 @@ jobs:
           if-no-files-found: error
           path: |
             desktop-shell/release/*.AppImage
+            desktop-shell/release/*.AppImage.blockmap
             desktop-shell/release/*.deb
             desktop-shell/release/latest-linux.yml
-            desktop-shell/release/*.blockmap
 
       - name: Publish GitHub release assets
         if: startsWith(github.ref, 'refs/tags/desktop-v')
@@ -75,9 +76,9 @@ jobs:
         with:
           files: |
             desktop-shell/release/*.AppImage
+            desktop-shell/release/*.AppImage.blockmap
             desktop-shell/release/*.deb
             desktop-shell/release/latest-linux.yml
-            desktop-shell/release/*.blockmap
 
   build-windows:
     runs-on: windows-latest
@@ -111,6 +112,7 @@ jobs:
           node --check desktop-shell/updater.js
           node --check desktop-shell/printer/printExecutor.js
           node --check desktop-shell/printer/windowsPrinter.js
+          node --check desktop-shell/scripts/run-electron-builder.cjs
 
       - name: Build Windows installer
         env:

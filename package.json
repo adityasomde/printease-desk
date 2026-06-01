@@ -11,6 +11,7 @@
     "desktop:dev-vite": "PRINTEASE_USE_DEV_FRONTEND=1 npm run dev --prefix desktop-shell",
     "pack": "npm run build:frontend && npm run pack --prefix desktop-shell",
     "dist:linux": "npm run build:frontend && npm run dist:linux --prefix desktop-shell",
+    "dist:win": "npm run build:frontend && npm run dist:win --prefix desktop-shell",
     "dist:appimage": "npm run build:frontend && npm run dist:appimage --prefix desktop-shell",
     "verify:package": "npm run verify:package --prefix desktop-shell"
   }

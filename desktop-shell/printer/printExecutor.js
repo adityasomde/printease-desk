@@ -69,6 +69,10 @@ export async function printFile({ printerName, filePath, copies = 1 } = {}) {
 }
 
 export async function stopPrinting() {
+  if (process.platform === "win32") {
+    return windowsPrinter.stopPrinting();
+  }
+
   paused = true;
 
   return {

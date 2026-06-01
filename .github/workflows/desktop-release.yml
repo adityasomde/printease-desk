@@ -1,4 +1,4 @@
-name: Desktop Linux Release
+name: Desktop Release
 
 on:
   workflow_dispatch:
@@ -40,6 +40,8 @@ jobs:
           node --check desktop-shell/main.js
           node --check desktop-shell/preload.cjs
           node --check desktop-shell/updater.js
+          node --check desktop-shell/printer/printExecutor.js
+          node --check desktop-shell/printer/windowsPrinter.js
           node --check desktop-shell/scripts/sync-frontend-dist.cjs
           node --check desktop-shell/scripts/verify-package-files.cjs
 
@@ -76,3 +78,63 @@ jobs:
             desktop-shell/release/*.deb
             desktop-shell/release/latest-linux.yml
             desktop-shell/release/*.blockmap
+
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            desktop-shell/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
+
+      - name: Install desktop dependencies
+        run: npm ci --prefix desktop-shell
+
+      - name: Build real frontend source
+        run: npm run build:frontend
+
+      - name: Check desktop syntax
+        run: |
+          node --check desktop-shell/main.js
+          node --check desktop-shell/preload.cjs
+          node --check desktop-shell/updater.js
+          node --check desktop-shell/printer/printExecutor.js
+          node --check desktop-shell/printer/windowsPrinter.js
+
+      - name: Build Windows installer
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run dist:win --prefix desktop-shell
+
+      - name: Verify package contents
+        run: npm run verify:package --prefix desktop-shell
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: printease-desktop-windows
+          if-no-files-found: error
+          path: |
+            desktop-shell/release/*.exe
+            desktop-shell/release/*.exe.blockmap
+            desktop-shell/release/latest.yml
+
+      - name: Publish GitHub release assets
+        if: startsWith(github.ref, 'refs/tags/desktop-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            desktop-shell/release/*.exe
+            desktop-shell/release/*.exe.blockmap
+            desktop-shell/release/latest.yml

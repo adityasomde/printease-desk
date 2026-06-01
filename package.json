@@ -1,0 +1,17 @@
+{
+  "name": "printease-desk",
+  "version": "0.1.0",
+  "private": false,
+  "description": "PrintEase Desktop Linux release/update repo. Contains the real frontend source plus Electron desktop shell.",
+  "scripts": {
+    "install:all": "npm ci --prefix frontend && npm ci --prefix desktop-shell",
+    "build:frontend": "npm run build --prefix frontend && node desktop-shell/scripts/sync-frontend-dist.cjs",
+    "dev": "npm run build:frontend && npm run dev --prefix desktop-shell",
+    "dev:vite": "npm run dev --prefix frontend",
+    "desktop:dev-vite": "PRINTEASE_USE_DEV_FRONTEND=1 npm run dev --prefix desktop-shell",
+    "pack": "npm run build:frontend && npm run pack --prefix desktop-shell",
+    "dist:linux": "npm run build:frontend && npm run dist:linux --prefix desktop-shell",
+    "dist:appimage": "npm run build:frontend && npm run dist:appimage --prefix desktop-shell",
+    "verify:package": "npm run verify:package --prefix desktop-shell"
+  }
+}

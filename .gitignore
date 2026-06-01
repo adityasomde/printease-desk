@@ -1,0 +1,146 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+desktop-shell/node_modules/
+
+# Secrets / env files
+.env
+.env.*
+!.env.example
+
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
+desktop-shell/.env
+desktop-shell/.env.*
+!desktop-shell/.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+electron-builder-debug.yml
+electron-builder.env
+
+# Frontend build cache/output
+frontend/dist/
+frontend/.vite/
+frontend/.cache/
+
+# Keep frontend-dist tracked because Electron loads UI from it
+!frontend-dist/
+!frontend-dist/**
+
+# Electron output
+desktop-shell/release/
+desktop-shell/dist/
+desktop-shell/out/
+desktop-shell/build/
+desktop-shell/.webpack/
+desktop-shell/.vite/
+
+# Generated app packages
+*.AppImage
+*.deb
+*.rpm
+*.snap
+*.exe
+*.dmg
+*.pkg
+*.msi
+*.blockmap
+latest-linux.yml
+latest.yml
+latest-mac.yml
+
+# Archives/backups
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+
+# Temp/cache
+tmp/
+temp/
+.cache/
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+
+# OS/editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.example.json
+.idea/
+*.iml
+
+# Keep important source files
+!frontend/
+!frontend/src/
+!frontend/src/**
+!frontend/public/
+!frontend/public/**
+
+!frontend-dist/
+!frontend-dist/**
+
+!desktop-shell/
+!desktop-shell/**
+
+!.github/
+!.github/**
+
+!docs/
+!docs/**
+
+!package.json
+!package-lock.json
+!frontend/package.json
+!frontend/package-lock.json
+!desktop-shell/package.json
+!desktop-shell/package-lock.json
+# dependencies
+node_modules/
+**/node_modules/
+
+# generated desktop/frontend build output
+release/
+out/
+build/
+.cache/
+.vite/
+frontend/dist/
+desktop-shell/release/
+
+# logs / local archives
+*.log
+*.zip
+.DS_Store
+
+# env / secrets
+.env
+.env.*
+**/.env
+**/.env.*
+!**/.env.example
+
+# backend must not live in desktop release repo
+backend/
+**/backend/**
+
+# never commit secret-like files
+*DATABASE_URL*
+*SUPABASE_SERVICE_KEY*
+*JWT_SECRET*
+*AGENT_TOKEN_SECRET*

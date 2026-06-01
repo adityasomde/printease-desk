@@ -1,0 +1,50 @@
+const { contextBridge, ipcRenderer } = require("electron");
+
+try {
+  console.log(`[DESKTOP PRELOAD] loading ${window.location.href}`);
+
+  const bridge = {
+    isDesktop: true,
+    bridgeVersion: "0.1.0-cjs",
+    getDesktopStatus: () => ipcRenderer.invoke("desktop:status"),
+    checkBackendHealth: () => ipcRenderer.invoke("backend:health"),
+    listPrinters: () => ipcRenderer.invoke("printers:list"),
+    selectPrinter: (payload) => ipcRenderer.invoke("printers:select", payload),
+    onPrintersUpdated: (callback) => {
+      const listener = (_event, result) => callback(result);
+      ipcRenderer.on("printers:updated", listener);
+      return () => ipcRenderer.removeListener("printers:updated", listener);
+    },
+    diagnosePrinters: () => ipcRenderer.invoke("printers:diagnose"),
+    testPrint: (payload) => ipcRenderer.invoke("printers:test-print", payload),
+    stopPrinting: () => ipcRenderer.invoke("printing:stop"),
+    getAgentStatus: () => ipcRenderer.invoke("agent:status"),
+    onAgentUpdated: (callback) => {
+      const listener = (_event, result) => callback(result);
+      ipcRenderer.on("agent:updated", listener);
+      return () => ipcRenderer.removeListener("agent:updated", listener);
+    },
+    startPairing: (payload) => ipcRenderer.invoke("agent:start-pairing", payload),
+    openApprovalUrl: (url) => ipcRenderer.invoke("agent:open-approval-url", url),
+    confirmPairing: () => ipcRenderer.invoke("agent:confirm-pairing"),
+    sendHeartbeat: () => ipcRenderer.invoke("agent:heartbeat"),
+    syncPrinters: () => ipcRenderer.invoke("agent:sync-printers"),
+    pollPrintJobs: (payload) => ipcRenderer.invoke("agent:poll-once", payload),
+    startJobPolling: (payload) => ipcRenderer.invoke("agent:start-polling"),
+    stopJobPolling: () => ipcRenderer.invoke("agent:stop-polling"),
+    checkForUpdates: () => ipcRenderer.invoke("updater:check"),
+    getUpdateStatus: () => ipcRenderer.invoke("updater:status"),
+    installUpdateNow: () => ipcRenderer.invoke("updater:install"),
+    onUpdateStatus: (callback) => {
+      const listener = (_event, payload) => callback(payload);
+      ipcRenderer.on("updater:status", listener);
+      return () => ipcRenderer.removeListener("updater:status", listener);
+    },
+  };
+
+  contextBridge.exposeInMainWorld("printeaseDesktop", bridge);
+  console.log(`[DESKTOP PRELOAD] bridge exposed ${bridge.bridgeVersion}`);
+} catch (error) {
+  console.error(`[DESKTOP PRELOAD] failed ${error?.stack || error?.message || String(error)}`);
+  throw error;
+}

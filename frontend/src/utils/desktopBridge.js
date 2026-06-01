@@ -13,7 +13,8 @@ function desktopFallback() {
 }
 
 export function isDesktop() {
-  return Boolean(getBridge()?.isDesktop);
+  if (typeof window === "undefined") return false;
+  return Boolean(getBridge()?.isDesktop || window.location.protocol === "file:");
 }
 
 export async function listPrinters() {

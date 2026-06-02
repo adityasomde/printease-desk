@@ -29,7 +29,7 @@ protocol.registerSchemesAsPrivileged([
 
 const DEV_FRONTEND_URL = process.env.PRINTEASE_FRONTEND_URL || "http://127.0.0.1:5175";
 const USE_DEV_FRONTEND = process.env.PRINTEASE_USE_DEV_FRONTEND === "1";
-const VERSION = "0.1.14";
+const VERSION = "0.1.16";
 const HEARTBEAT_INTERVAL_MS = 15000;
 const PRINTER_SYNC_INTERVAL_MS = 30000;
 const DESKTOP_PROTOCOL_ORIGIN = "app://printease";

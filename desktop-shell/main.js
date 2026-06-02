@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { diagnoseWindowsPrintHelper } from "./printer/windowsPrinter.js";
 import { diagnosePrinters, listPrinters, stopPrinting, testPrint } from "./printer/printExecutor.js";
 import { confirmPairing, sendHeartbeat, startPairing } from "./agent/heartbeat.js";
 import { createJobPoller, processNextJob } from "./agent/jobPoller.js";
@@ -29,7 +30,7 @@ protocol.registerSchemesAsPrivileged([
 
 const DEV_FRONTEND_URL = process.env.PRINTEASE_FRONTEND_URL || "http://127.0.0.1:5175";
 const USE_DEV_FRONTEND = process.env.PRINTEASE_USE_DEV_FRONTEND === "1";
-const VERSION = "0.1.17";
+const VERSION = "0.1.18";
 const HEARTBEAT_INTERVAL_MS = 15000;
 const PRINTER_SYNC_INTERVAL_MS = 30000;
 const DESKTOP_PROTOCOL_ORIGIN = "app://printease";
@@ -1107,6 +1108,7 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle("printing:stop", () => stopPrinting());
+  ipcMain.handle("printer:diagnoseWindowsHelper", () => diagnoseWindowsPrintHelper());
   ipcMain.handle("agent:status", () => sanitizeAgentSession());
   ipcMain.handle("agent:start-pairing", startAgentPairing);
   ipcMain.handle("agent:open-approval-url", async (_event, url) => {

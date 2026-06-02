@@ -6,7 +6,9 @@ import {
   checkBackendHealth,
   confirmApprovalPairing,
   confirmPairing,
+  clearStoredAgent,
   diagnosePrinters,
+  diagnoseWindowsPrintHelper,
   getAgentStatus,
   getDeviceIdentity,
   getDesktopStatus,
@@ -76,6 +78,7 @@ export default function DesktopAgentPage() {
   const [agentMessage, setAgentMessage] = useState("");
   const [backendHealth, setBackendHealth] = useState(null);
   const [printerDiagnostics, setPrinterDiagnostics] = useState(null);
+  const [windowsHelperDiagnostics, setWindowsHelperDiagnostics] = useState(null);
   const [autoPollingStarted, setAutoPollingStarted] = useState(false);
   const [approvalPolling, setApprovalPolling] = useState(false);
   const [approvalMessage, setApprovalMessage] = useState("");
@@ -286,6 +289,23 @@ export default function DesktopAgentPage() {
     setMessage("Printer diagnostics completed.");
   }
 
+  async function checkWindowsPrintHelper() {
+    setError("");
+    setErrorDetail("");
+    setHelpCommands([]);
+    setMessage("");
+
+    const result = await diagnoseWindowsPrintHelper();
+    setWindowsHelperDiagnostics(result);
+
+    if (result?.success === false) {
+      setError(result.error || result.message || "Windows print helper check failed.");
+      return;
+    }
+
+    setMessage(result?.message || "Windows print helper found.");
+  }
+
   async function sendTestPrint() {
     setError("");
     setErrorDetail("");
@@ -342,6 +362,36 @@ export default function DesktopAgentPage() {
 
     setAgentBusy(false);
     return result;
+  }
+
+  async function clearLocalAgentAndReconnect() {
+    setAgentBusy(true);
+    setAgentMessage("");
+    setApprovalMessage("");
+    setError("");
+    setErrorDetail("");
+    setHelpCommands([]);
+
+    try {
+      const result = await clearStoredAgent();
+      if (result?.success === false) {
+        setError(result.error || result.message || "Could not clear local desktop agent.");
+        return;
+      }
+
+      const nextSession = await getAgentStatus();
+      if (nextSession?.success) {
+        setAgentSession(nextSession);
+      } else {
+        setAgentSession(null);
+      }
+      setAutoPollingStarted(false);
+      setAgentMessage("Local desktop agent credentials cleared. Register this desktop again to reconnect.");
+    } catch (clearError) {
+      setError(clearError.message || "Could not clear local desktop agent.");
+    } finally {
+      setAgentBusy(false);
+    }
   }
 
   function stopApprovalPolling() {
@@ -556,6 +606,13 @@ export default function DesktopAgentPage() {
             >
               <Printer size={16} /> Diagnose
             </button>
+            <button
+              type="button"
+              onClick={checkWindowsPrintHelper}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-3 font-semibold"
+            >
+              <Printer size={16} /> Check Windows Print Helper
+            </button>
           </div>
         </div>
       </Card>
@@ -651,6 +708,14 @@ export default function DesktopAgentPage() {
               className="rounded-xl border px-4 py-2 font-semibold disabled:opacity-50"
             >
               Send Heartbeat
+            </button>
+            <button
+              type="button"
+              disabled={agentBusy}
+              onClick={clearLocalAgentAndReconnect}
+              className="rounded-xl border border-amber-200 px-4 py-2 font-semibold text-amber-700 disabled:opacity-50"
+            >
+              Clear Local Agent
             </button>
             <button
               type="button"
@@ -790,6 +855,26 @@ export default function DesktopAgentPage() {
                   {probe.error && <p className="mt-2 text-xs text-rose-700">{probe.error}</p>}
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {windowsHelperDiagnostics && (
+          <div className="mt-5 rounded-2xl border bg-slate-50 p-4 text-sm">
+            <p className="font-semibold text-slate-900">Windows print helper</p>
+            <div className="mt-3 grid gap-2 text-slate-700">
+              <p>Status: {windowsHelperDiagnostics.exists ? "Found" : "Missing"}</p>
+              <p>Packaged: {windowsHelperDiagnostics.isPackaged ? "Yes" : "No"}</p>
+              <p className="break-all">Path: {windowsHelperDiagnostics.expectedSumatraPath || "unknown"}</p>
+              {windowsHelperDiagnostics.resourcesPath && (
+                <p className="break-all">Resources: {windowsHelperDiagnostics.resourcesPath}</p>
+              )}
+              <p>Size: {windowsHelperDiagnostics.sizeBytes || 0} bytes</p>
+              {(windowsHelperDiagnostics.message || windowsHelperDiagnostics.error) && (
+                <p className={windowsHelperDiagnostics.success ? "font-semibold text-emerald-700" : "font-semibold text-rose-700"}>
+                  {windowsHelperDiagnostics.message || windowsHelperDiagnostics.error}
+                </p>
+              )}
             </div>
           </div>
         )}

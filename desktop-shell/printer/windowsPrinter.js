@@ -4,6 +4,7 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
+import { app } from "electron";
 
 const execFileAsync = promisify(execFile);
 const DEFAULT_TIMEOUT_MS = 30000;
@@ -19,8 +20,56 @@ function isWin() {
 function helpCommands() {
   return [
     "PowerShell: Get-Printer | Select Name,Default,PrinterStatus",
-    "Expected helper: desktop-shell/vendor/win/SumatraPDF.exe",
+    "Expected packaged helper: resources/vendor/win/SumatraPDF.exe",
   ];
+}
+
+function getPackagedSumatraPdfPath() {
+  return process.resourcesPath
+    ? path.join(process.resourcesPath, "vendor", "win", "SumatraPDF.exe")
+    : "";
+}
+
+function getDevSumatraPdfPath() {
+  return path.join(DESKTOP_SHELL_ROOT, "vendor", "win", "SumatraPDF.exe");
+}
+
+export function getSumatraPdfPath() {
+  if (process.env.PRINTEASE_SUMATRA_PATH) return process.env.PRINTEASE_SUMATRA_PATH;
+  return app?.isPackaged ? getPackagedSumatraPdfPath() : getDevSumatraPdfPath();
+}
+
+export function diagnoseWindowsPrintHelper() {
+  const expectedSumatraPath = getSumatraPdfPath();
+
+  try {
+    const exists = Boolean(expectedSumatraPath && fs.existsSync(expectedSumatraPath));
+    const stat = exists ? fs.statSync(expectedSumatraPath) : null;
+
+    return {
+      success: exists,
+      platform: process.platform,
+      isPackaged: Boolean(app?.isPackaged),
+      resourcesPath: process.resourcesPath || "",
+      expectedSumatraPath,
+      exists,
+      sizeBytes: stat?.size || 0,
+      message: exists
+        ? "Windows print helper found."
+        : "Windows print helper is missing from expected path.",
+    };
+  } catch (error) {
+    return {
+      success: false,
+      platform: process.platform,
+      isPackaged: Boolean(app?.isPackaged),
+      resourcesPath: process.resourcesPath || "",
+      expectedSumatraPath,
+      exists: false,
+      sizeBytes: 0,
+      error: error.message || "Could not inspect Windows print helper.",
+    };
+  }
 }
 
 async function runPowerShell(command) {
@@ -114,7 +163,8 @@ export async function diagnosePrinters() {
   }
 
   const printerResult = await listPrinters();
-  const sumatra = findSumatraPdf();
+  const helperDiagnostics = diagnoseWindowsPrintHelper();
+  const sumatra = helperDiagnostics.exists ? helperDiagnostics.expectedSumatraPath : "";
 
   return {
     success: Boolean(printerResult.success && printerResult.printers?.length && sumatra),
@@ -122,6 +172,7 @@ export async function diagnosePrinters() {
     path: process.env.PATH || "",
     printerResult,
     sumatraPath: sumatra || "",
+    helperDiagnostics,
     checks: {
       powershell: printerResult.success,
       printersFound: Boolean(printerResult.printers?.length),
@@ -133,19 +184,12 @@ export async function diagnosePrinters() {
 }
 
 export function findSumatraPdf() {
-  const candidates = [
-    process.env.PRINTEASE_SUMATRA_PATH,
-    path.join(DESKTOP_SHELL_ROOT, "vendor", "win", "SumatraPDF.exe"),
-    process.resourcesPath ? path.join(process.resourcesPath, "vendor", "win", "SumatraPDF.exe") : "",
-  ].filter(Boolean);
-
-  return candidates.find((candidate) => {
-    try {
-      return fs.existsSync(candidate);
-    } catch {
-      return false;
-    }
-  }) || "";
+  const candidate = getSumatraPdfPath();
+  try {
+    return candidate && fs.existsSync(candidate) ? candidate : "";
+  } catch {
+    return "";
+  }
 }
 
 function validatePdf(filePath) {
@@ -208,14 +252,17 @@ export async function printPdfFile({ filePath, printerName, options = {} } = {})
   try {
     validatePdf(filePath);
     const printer = await getValidatedPrinter(printerName);
-    const sumatra = findSumatraPdf();
+    const helperDiagnostics = diagnoseWindowsPrintHelper();
+    const sumatra = helperDiagnostics.exists ? helperDiagnostics.expectedSumatraPath : "";
 
     if (!sumatra) {
       return {
         success: false,
+        code: "SUMATRA_MISSING",
         error: WINDOWS_HELPER_MISSING_MESSAGE,
         message: WINDOWS_HELPER_MISSING_MESSAGE,
         reasonCode: "WINDOWS_PDF_ENGINE_NOT_FOUND",
+        diagnostics: helperDiagnostics,
         helpCommands: helpCommands(),
       };
     }

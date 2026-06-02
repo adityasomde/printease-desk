@@ -10,10 +10,15 @@ try {
     getDeviceIdentity: () => ipcRenderer.invoke("desktopAgent:device-identity"),
   };
 
+  const printerBridge = {
+    diagnoseWindowsHelper: () => ipcRenderer.invoke("printer:diagnoseWindowsHelper"),
+  };
+
   const bridge = {
     isDesktop: true,
-    bridgeVersion: "0.1.17-cjs",
+    bridgeVersion: "0.1.18-cjs",
     agent: agentBridge,
+    printer: printerBridge,
     getDesktopStatus: () => ipcRenderer.invoke("desktop:status"),
     checkBackendHealth: () => ipcRenderer.invoke("backend:health"),
     listPrinters: () => ipcRenderer.invoke("printers:list"),
@@ -24,6 +29,7 @@ try {
       return () => ipcRenderer.removeListener("printers:updated", listener);
     },
     diagnosePrinters: () => ipcRenderer.invoke("printers:diagnose"),
+    diagnoseWindowsPrintHelper: () => ipcRenderer.invoke("printer:diagnoseWindowsHelper"),
     testPrint: (payload) => ipcRenderer.invoke("printers:test-print", payload),
     stopPrinting: () => ipcRenderer.invoke("printing:stop"),
     getAgentStatus: () => ipcRenderer.invoke("agent:status"),

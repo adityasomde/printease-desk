@@ -73,6 +73,28 @@ export async function diagnosePrinters() {
   }
 }
 
+export async function diagnoseWindowsPrintHelper() {
+  const bridge = getBridge();
+  const diagnoseHelper = bridge?.printer?.diagnoseWindowsHelper || bridge?.diagnoseWindowsPrintHelper;
+  if (!diagnoseHelper) {
+    return {
+      success: false,
+      available: false,
+      message: "Desktop printer diagnostic bridge is not available.",
+    };
+  }
+
+  try {
+    return await diagnoseHelper();
+  } catch (error) {
+    return {
+      success: false,
+      available: false,
+      error: error.message || "Could not inspect Windows print helper.",
+    };
+  }
+}
+
 export async function testPrint(payload = {}) {
   const bridge = getBridge();
   if (!bridge?.testPrint) return desktopFallback();

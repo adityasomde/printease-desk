@@ -109,6 +109,18 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm run dist:win --prefix desktop-shell
 
+      - name: Verify bundled Windows print helper
+        shell: pwsh
+        run: |
+          $helper = Get-ChildItem -Recurse desktop-shell/release -Filter SumatraPDF.exe |
+            Where-Object { ($_.FullName -replace '\\', '/') -like '*/resources/vendor/win/SumatraPDF.exe' } |
+            Select-Object -First 1
+          if (-not $helper) {
+            Write-Error "SumatraPDF.exe was not found in the Windows packaged output at resources/vendor/win/SumatraPDF.exe"
+            exit 1
+          }
+          Write-Host "Found SumatraPDF.exe at $($helper.FullName)"
+
       - name: List Windows release files
         shell: pwsh
         run: |

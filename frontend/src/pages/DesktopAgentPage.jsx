@@ -10,6 +10,7 @@ import {
   getAgentStatus,
   getDeviceIdentity,
   getDesktopStatus,
+  getStoredAgent,
   isDesktop,
   listPrinters,
   openApprovalUrl,
@@ -70,6 +71,7 @@ export default function DesktopAgentPage() {
   const [errorDetail, setErrorDetail] = useState("");
   const [helpCommands, setHelpCommands] = useState([]);
   const [agentSession, setAgentSession] = useState(null);
+  const [agentStatusLoaded, setAgentStatusLoaded] = useState(false);
   const [agentBusy, setAgentBusy] = useState(false);
   const [agentMessage, setAgentMessage] = useState("");
   const [backendHealth, setBackendHealth] = useState(null);
@@ -138,8 +140,11 @@ export default function DesktopAgentPage() {
 
   useEffect(() => {
     if (!desktopAvailable) return;
+    let active = true;
+    setAgentStatusLoaded(false);
 
     getDesktopStatus().then((nextStatus) => {
+      if (!active) return;
       if (nextStatus?.success === false) {
         setError(nextStatus.error || "Could not load desktop status.");
         return;
@@ -149,12 +154,32 @@ export default function DesktopAgentPage() {
       if (nextStatus.printerResult) applyPrinterResult(nextStatus.printerResult);
     });
 
-    getAgentStatus().then((nextSession) => {
+    async function loadAgentStatus() {
+      const stored = await getStoredAgent();
+      if (!active) return;
+      if (stored?.session?.success) {
+        setAgentSession(stored.session);
+        if (stored.session.selectedPrinterName) setSelectedPrinterName(stored.session.selectedPrinterName);
+      }
+
+      const nextSession = await getAgentStatus();
+      if (!active) return;
       if (nextSession?.success) {
         setAgentSession(nextSession);
         if (nextSession.selectedPrinterName) setSelectedPrinterName(nextSession.selectedPrinterName);
       }
+      setAgentStatusLoaded(true);
+    }
+
+    loadAgentStatus().catch((loadError) => {
+      if (!active) return;
+      setError(loadError.message || "Could not load desktop agent status.");
+      setAgentStatusLoaded(true);
     });
+
+    return () => {
+      active = false;
+    };
   }, [desktopAvailable]);
 
   useEffect(() => {
@@ -420,6 +445,7 @@ export default function DesktopAgentPage() {
         deviceName,
         platform: status?.platform || window.printeaseDesktop?.platform || "desktop",
         appVersion: status?.version,
+        clientAction: "registerDesktopAgent",
       });
       const agentToken = result?.agentToken || result?.accessToken;
 
@@ -543,7 +569,7 @@ export default function DesktopAgentPage() {
             </div>
             <div className="mt-3 grid gap-2 text-sm text-slate-600">
               <p>Device: {agentSession?.deviceName || "PrintEase Desktop"}</p>
-              <p>Paired: {agentSession?.paired ? "Yes" : "No"}</p>
+              <p>Paired: {!agentStatusLoaded ? "Checking" : agentSession?.paired ? "Yes" : "No"}</p>
               {agentSession?.agentId && <p className="break-all">Agent ID: {agentSession.agentId}</p>}
               {agentSession?.hubId && <p className="break-all">Hub ID: {agentSession.hubId}</p>}
               {agentSession?.pairingCode && (
@@ -560,7 +586,12 @@ export default function DesktopAgentPage() {
           </div>
 
           <div className="grid gap-2 sm:min-w-[300px]">
-            {!agentSession?.paired && (
+            {!agentStatusLoaded && (
+              <p className="rounded-xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600">
+                Checking saved desktop agent...
+              </p>
+            )}
+            {agentStatusLoaded && !agentSession?.paired && (
               <button
                 type="button"
                 disabled={agentBusy}

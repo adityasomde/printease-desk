@@ -12,7 +12,7 @@ try {
 
   const bridge = {
     isDesktop: true,
-    bridgeVersion: "0.1.16-cjs",
+    bridgeVersion: "0.1.17-cjs",
     agent: agentBridge,
     getDesktopStatus: () => ipcRenderer.invoke("desktop:status"),
     checkBackendHealth: () => ipcRenderer.invoke("backend:health"),

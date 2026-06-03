@@ -449,19 +449,18 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
           </div>
         </div>
         <div className="mt-6 overflow-x-auto">
-          <table className="w-full min-w-[900px] text-left text-sm lg:text-base table-fixed">
+          <table className="w-full min-w-[840px] table-fixed text-left text-sm">
             <thead>
-              <tr className="text-slate-500">
-                <th className="w-20 px-1 py-6">Order ID</th>
-                <th className="w-32 px-1 py-6">Customer</th>
-                <th className="w-36 px-1 py-6">Document</th>
-                <th className="w-16 px-1 py-6">Pages</th>
-                <th className="w-16 px-1 py-6">Amount</th>
-                <th className="w-24 px-1 py-6">Payment</th>
-                <th className="w-28 px-1 py-6">Status</th>
-                <th className="w-16 px-1 py-6">Files</th>
-                <th className="w-32 px-1 py-6">Update</th>
-                <th className="w-36 px-1 py-6">Agent</th>
+              <tr className="border-b text-xs uppercase tracking-wide text-slate-500">
+                <th className="w-24 px-2 py-3">Order</th>
+                <th className="w-36 px-2 py-3">Customer</th>
+                <th className="w-40 px-2 py-3">Document</th>
+                <th className="w-16 px-2 py-3">Pages</th>
+                <th className="w-16 px-2 py-3">Amount</th>
+                <th className="w-24 px-2 py-3">Payment</th>
+                <th className="w-20 px-2 py-3">Files</th>
+                <th className="w-32 px-2 py-3">Update</th>
+                <th className="w-36 px-2 py-3">Agent</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -472,19 +471,19 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
 
                 return (
                   <tr key={item.id} className="align-top odd:bg-white even:bg-slate-50">
-                    <td className="px-1 py-6 font-semibold">
+                    <td className="px-2 py-4 font-semibold">
                       <p className="truncate max-w-[8rem]" title={item.id}>{item.id}</p>
                     </td>
-                    <td className="px-1 py-6">
-                      <p className="text-lg font-semibold text-slate-900 truncate max-w-[10rem]" title={item.customerName}>{item.customerName || "Customer"}</p>
+                    <td className="px-2 py-4">
+                      <p className="truncate font-semibold text-slate-900" title={item.customerName}>{item.customerName || "Customer"}</p>
                       {item.customerMobile && <p className="text-xs text-slate-500">{item.customerMobile}</p>}
                     </td>
-                    <td className="px-1 py-6">
+                    <td className="px-2 py-4">
                       <p className="truncate" title={item.document}>{item.document}</p>
                     </td>
-                    <td className="px-1 py-6 whitespace-nowrap text-lg font-medium">{item.pages} × {item.copies}</td>
-                    <td className="px-1 py-6 whitespace-nowrap text-lg font-semibold">₹{item.amount}</td>
-                    <td className="w-28 max-w-[7rem] px-1 py-6">
+                    <td className="px-2 py-4 whitespace-nowrap font-medium">{item.pages} × {item.copies}</td>
+                    <td className="px-2 py-4 whitespace-nowrap font-semibold">₹{item.amount}</td>
+                    <td className="w-24 max-w-[6rem] px-2 py-4">
                       <StatusBadge color="green">{item.paymentStatus}</StatusBadge>
                       {isPaymentPending(item) && (
                         <p className="mt-1 text-xs text-slate-500">Awaiting payment.</p>
@@ -493,11 +492,7 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
                         <p className="mt-1 text-xs text-emerald-700">Ready to queue.</p>
                       )}
                     </td>
-                    <td className="px-1 py-6">
-                      <StatusBadge>{displayStatus(item.status)}</StatusBadge>
-                      {job?.failureReasonText && <p className="mt-1 text-xs font-semibold text-rose-600">{job.failureReasonText}</p>}
-                    </td>
-                    <td className="px-1 py-6">
+                    <td className="px-2 py-4">
                       <button
                         type="button"
                         onClick={() => openDocuments(item)}
@@ -506,15 +501,16 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
                         <FileText size={14} /> Docs
                       </button>
                     </td>
-                    <td className="px-1 py-6">
+                    <td className="px-2 py-4">
                       <select value={item.status} onChange={(e) => updateOrderStatus(item.id, e.target.value)} className="w-full rounded-xl border px-2 py-1.5 text-sm lg:text-sm">
                         {hubStatusOptions.map((status) => <option key={status} value={status}>{displayStatus(status)}</option>)}
                       </select>
                     </td>
-                    <td className="px-1 py-6">
+                    <td className="px-2 py-4">
                       <div className="flex flex-col gap-2">
                         {job && <StatusBadge>{displayStatus(job.status)}</StatusBadge>}
                         {job && normalizeStatus(job.status) !== "failed" && <p className="text-xs text-slate-500">{displayStatus(job.status)} in desktop queue</p>}
+                        {job?.failureReasonText && <p className="text-xs font-semibold text-rose-600">{job.failureReasonText}</p>}
                         {isPaymentPending(item) && (
                           <button
                             onClick={() => markCashCollected(item)}
@@ -548,7 +544,7 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
               })}
               {filteredOrders.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="py-10 text-center text-sm text-slate-500">
+                  <td colSpan={9} className="py-10 text-center text-sm text-slate-500">
                     No orders match this search.
                   </td>
                 </tr>

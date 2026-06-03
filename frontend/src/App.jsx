@@ -237,6 +237,7 @@ function formatOrderDate(value) {
 
 function extractCustomerName(order) {
   if (!order) return null;
+  // common direct fields
   if (order.customerName) return order.customerName;
   if (order.customer_name) return order.customer_name;
   if (order.userName) return order.userName;
@@ -259,6 +260,7 @@ function extractCustomerName(order) {
     user.username,
   ];
 
+  // try first/last name combinations
   if (customer.firstName && customer.lastName) candidates.unshift(`${customer.firstName} ${customer.lastName}`);
   if (customer.first_name && customer.last_name) candidates.unshift(`${customer.first_name} ${customer.last_name}`);
   if (user.firstName && user.lastName) candidates.unshift(`${user.firstName} ${user.lastName}`);

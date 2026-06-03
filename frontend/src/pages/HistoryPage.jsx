@@ -81,6 +81,13 @@ export default function HistoryPage({ orders, currentUser, lastUpdatedAt }) {
                 <td>{item.date}</td>
               </tr>
             ))}
+            {orders.length === 0 && (
+              <tr>
+                <td colSpan={9} className="py-8 text-center text-sm text-slate-500">
+                  No print orders yet. Start a new upload when you are ready to print.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

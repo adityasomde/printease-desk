@@ -235,6 +235,38 @@ function formatOrderDate(value) {
   });
 }
 
+function extractCustomerName(order) {
+  if (!order) return null;
+  if (order.customerName) return order.customerName;
+  if (order.customer_name) return order.customer_name;
+  if (order.userName) return order.userName;
+  if (order.user_name) return order.user_name;
+  if (order.name) return order.name;
+
+  const customer = order.customer || {};
+  const user = order.user || {};
+
+  const candidates = [
+    customer.name,
+    customer.full_name,
+    customer.fullName,
+    customer.displayName,
+    customer.username,
+    user.name,
+    user.full_name,
+    user.fullName,
+    user.displayName,
+    user.username,
+  ];
+
+  if (customer.firstName && customer.lastName) candidates.unshift(`${customer.firstName} ${customer.lastName}`);
+  if (customer.first_name && customer.last_name) candidates.unshift(`${customer.first_name} ${customer.last_name}`);
+  if (user.firstName && user.lastName) candidates.unshift(`${user.firstName} ${user.lastName}`);
+  if (user.first_name && user.last_name) candidates.unshift(`${user.first_name} ${user.last_name}`);
+
+  return candidates.find((v) => v && String(v).trim()) || null;
+}
+
 function normalizeOrder(order, centreList = []) {
   const centreId = order.centreId || order.centre_id;
   const centreCodeFromOrder = order.centreCode || order.centre_code;
@@ -247,6 +279,8 @@ function normalizeOrder(order, centreList = []) {
     centreId: centreId || centre?.id,
     centreCode: centreCodeFromOrder || centre?.code || "",
     centre: order.centre || centre?.name || "Selected centre",
+    customerName: extractCustomerName(order) || "Customer",
+    customerMobile: order.customerMobile || order.customer_mobile || order.userMobile || order.user_mobile || order.customer?.mobile || order.user?.mobile || order.mobile || "",
     document: order.documentName || order.document_name || order.document || "Uploaded Document",
     pages: Number(order.pages || 1),
     copies: Number(order.copies || 1),
@@ -1143,6 +1177,7 @@ export default function App() {
               path={ROUTES.home}
               element={
                 <HomePage
+                  currentUser={currentUser}
                   navigate={navigate}
                   centres={centres}
                   startLogin={startLogin}
@@ -1236,7 +1271,7 @@ export default function App() {
               )
             }
           />
-          <Route path={ROUTES.desktopAgent} element={<DesktopAgentPage />} />
+          <Route path={ROUTES.desktopAgent} element={<DesktopAgentPage currentUser={currentUser} />} />
           <Route path={ROUTES.centre} element={<CentreCodePage centreCode={centreCode} setCentreCode={setCentreCode} handleCentreCode={handleCentreCode} centres={centres} selectCentreAndUpload={selectCentreAndUpload} lookupLoading={centreLookupLoading} lookupError={centreLookupError} />} />
           <Route path={ROUTES.upload} element={<UploadPage selectedCentre={selectedCentre} documentFile={documentFile} setDocumentFile={setDocumentFile} documentFiles={documentFiles} setDocumentFiles={setDocumentFiles} documentName={documentName} setDocumentName={setDocumentName} pages={pages} setPages={setPages} selectedPages={selectedPages} setSelectedPages={setSelectedPages} copies={copies} setCopies={setCopies} colorType={colorType} setColorType={setColorType} sideType={sideType} setSideType={setSideType} paperSize={paperSize} setPaperSize={setPaperSize} pagesPerSheet={pagesPerSheet} setPagesPerSheet={setPagesPerSheet} watermark={watermark} setWatermark={setWatermark} watermarkType={watermarkType} setWatermarkType={setWatermarkType} watermarkText={watermarkText} setWatermarkText={setWatermarkText} watermarkPosition={watermarkPosition} setWatermarkPosition={setWatermarkPosition} watermarkOpacity={watermarkOpacity} setWatermarkOpacity={setWatermarkOpacity} watermarkFontSize={watermarkFontSize} setWatermarkFontSize={setWatermarkFontSize} watermarkRotation={watermarkRotation} setWatermarkRotation={setWatermarkRotation} pricePerPage={pricePerPage} estimatedSelectedPageCount={estimatedSelectedPageCount} totalAmount={totalAmount} backendPrice={backendPrice} preparePayment={preparePayment} paymentLoading={paymentLoading} paymentError={paymentError} navigate={navigate} />} />
           <Route

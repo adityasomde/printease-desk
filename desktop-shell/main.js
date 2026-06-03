@@ -7,7 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { diagnoseWindowsPrintHelper } from "./printer/windowsPrinter.js";
 import { diagnosePrinters, listPrinters, stopPrinting, testPrint } from "./printer/printExecutor.js";
 import { confirmPairing, sendHeartbeat, startPairing } from "./agent/heartbeat.js";
-import { createJobPoller, processNextJob } from "./agent/jobPoller.js";
+import { processNextJob } from "./agent/jobPoller.js";
 import { syncPrinters } from "./agent/statusReporter.js";
 import { getApiBaseUrl, getBackendUrl } from "./config/backend.js";
 import { loadConfig, saveConfig, setConfigDirectory } from "./local/config.js";
@@ -31,8 +31,9 @@ protocol.registerSchemesAsPrivileged([
 const DEV_FRONTEND_URL = process.env.PRINTEASE_FRONTEND_URL || "http://127.0.0.1:5175";
 const USE_DEV_FRONTEND = process.env.PRINTEASE_USE_DEV_FRONTEND === "1";
 const VERSION = "0.1.18";
-const HEARTBEAT_INTERVAL_MS = 15000;
+const HEARTBEAT_INTERVAL_MS = 25000;
 const PRINTER_SYNC_INTERVAL_MS = 30000;
+const JOB_POLL_INTERVAL_MS = 5000;
 const DESKTOP_PROTOCOL_ORIGIN = "app://printease";
 const DESKTOP_AUTH_FILE = "desktop-auth.json";
 const DESKTOP_AGENT_FILE = "desktop-agent.json";
@@ -46,6 +47,8 @@ let ipcHandlersRegistered = false;
 let latestPrinterResult = null;
 let heartbeatTimer = null;
 let printerSyncTimer = null;
+let jobPollTimer = null;
+let isPollingJobs = false;
 let agentSession = {
   deviceId: "",
   deviceName: "",
@@ -61,8 +64,10 @@ let agentSession = {
   selectedPrinterName: "",
   lastPrinterSyncAt: "",
   lastPrinterSyncError: "",
+  lastJobPollAt: "",
+  lastJobPollError: "",
+  lastJobPollMessage: "",
 };
-let jobPoller = null;
 
 function getProductionIndexPath() {
   if (app.isPackaged) {
@@ -410,8 +415,9 @@ async function setStoredDesktopAgent(_event, payload = {}) {
       selectedPrinterName: agentSession.selectedPrinterName,
     });
 
+    const runtime = await startAgentRuntime("agent-stored");
     emitAgentSession();
-    return { success: true, session: sanitizeAgentSession() };
+    return { success: true, runtime, session: sanitizeAgentSession() };
   } catch (error) {
     return {
       success: false,
@@ -455,6 +461,7 @@ async function restoreStoredDesktopAgent() {
 async function clearStoredDesktopAgent() {
   try {
     await fs.promises.rm(getDesktopAgentPath(), { force: true });
+    stopAgentRuntime("agent-cleared");
     agentSession.agentId = "";
     agentSession.hubId = "";
     agentSession.accessToken = "";
@@ -462,6 +469,8 @@ async function clearStoredDesktopAgent() {
     agentSession.pairingCode = "";
     agentSession.pairingSessionId = "";
     agentSession.expiresAt = "";
+    agentSession.lastJobPollError = "";
+    agentSession.lastJobPollMessage = "";
     emitAgentSession();
     return { success: true, session: sanitizeAgentSession() };
   } catch (error) {
@@ -619,8 +628,16 @@ async function syncPrintersToCloud(printerResult, event = "printers:sync") {
   if (syncResult.success) {
     agentSession.lastPrinterSyncAt = new Date().toISOString();
     agentSession.lastPrinterSyncError = "";
+    console.log("[DESKTOP AGENT BACKGROUND] printer sync success", {
+      event,
+      printerCount: printerResult.printers?.length || 0,
+    });
   } else {
     agentSession.lastPrinterSyncError = syncResult.message || "Cloud printer sync failed.";
+    console.warn("[DESKTOP AGENT BACKGROUND] printer sync fail", {
+      event,
+      message: agentSession.lastPrinterSyncError,
+    });
   }
 
   console.log("[DESKTOP PRINTER CLOUD SYNC]", JSON.stringify({
@@ -706,9 +723,13 @@ function sanitizeAgentSession() {
     selectedPrinterName: agentSession.selectedPrinterName,
     lastPrinterSyncAt: agentSession.lastPrinterSyncAt,
     lastPrinterSyncError: agentSession.lastPrinterSyncError,
+    lastJobPollAt: agentSession.lastJobPollAt,
+    lastJobPollError: agentSession.lastJobPollError,
+    lastJobPollMessage: agentSession.lastJobPollMessage,
     heartbeatRunning: Boolean(heartbeatTimer),
     printerSyncRunning: Boolean(printerSyncTimer),
-    polling: Boolean(jobPoller?.isRunning),
+    polling: Boolean(jobPollTimer),
+    autoPrintRunning: Boolean(heartbeatTimer && printerSyncTimer && jobPollTimer),
   };
 }
 
@@ -745,7 +766,7 @@ function resolveLocalPrinterName() {
   const printers = Array.isArray(latestPrinterResult.printers) ? latestPrinterResult.printers : [];
   const preferred = printers.find((printer) => printer.isDefault) || latestPrinterResult.defaultPrinter;
 
-  return preferred?.printerName || "";
+  return preferred?.printerName || printers[0]?.printerName || "";
 }
 
 async function selectDesktopPrinter(_event, payload = {}) {
@@ -793,6 +814,7 @@ async function selectDesktopPrinter(_event, payload = {}) {
   if (isAgentPaired()) {
     heartbeat = await sendAgentHeartbeat();
     printerSync = await syncPrintersToCloud(latestPrinterResult, "printers:selected");
+    startJobPollLoop("printer-selected", { printerName: agentSession.selectedPrinterName });
   } else {
     agentSession.lastPrinterSyncError = "Printer selected locally but not synced to hub. Pair desktop first.";
   }
@@ -908,8 +930,16 @@ async function sendAgentHeartbeat() {
   if (result.success) {
     agentSession.lastHeartbeatAt = new Date().toISOString();
     agentSession.lastHeartbeatError = "";
+    console.log("[DESKTOP AGENT BACKGROUND] heartbeat success", {
+      agentId: agentSession.agentId || null,
+      selectedPrinterName: agentSession.selectedPrinterName || null,
+    });
   } else {
     agentSession.lastHeartbeatError = result.message || "Heartbeat failed.";
+    console.warn("[DESKTOP AGENT BACKGROUND] heartbeat fail", {
+      status: result.status || null,
+      message: agentSession.lastHeartbeatError,
+    });
     if (result.status === 401 || result.status === 403) {
       await clearStoredDesktopAgent();
       agentSession.lastHeartbeatError = "Stored desktop agent credential was rejected. Register or pair this desktop again.";
@@ -933,6 +963,7 @@ function startHeartbeatLoop() {
   }
 
   if (heartbeatTimer) {
+    console.log("[DESKTOP AGENT BACKGROUND] already running heartbeat");
     return {
       success: true,
       message: "Heartbeat loop is already running.",
@@ -967,6 +998,7 @@ function startPrinterSyncLoop() {
   }
 
   if (printerSyncTimer) {
+    console.log("[DESKTOP AGENT BACKGROUND] already running printer sync");
     return {
       success: true,
       message: "Printer sync loop is already running.",
@@ -991,18 +1023,201 @@ function startPrinterSyncLoop() {
   };
 }
 
+function stopAgentRuntime(reason = "stopped") {
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
+
+  if (printerSyncTimer) {
+    clearInterval(printerSyncTimer);
+    printerSyncTimer = null;
+  }
+
+  if (jobPollTimer) {
+    clearInterval(jobPollTimer);
+    jobPollTimer = null;
+  }
+
+  isPollingJobs = false;
+  console.log("[DESKTOP AGENT BACKGROUND] stopped", reason);
+  emitAgentSession();
+  return {
+    success: true,
+    message: "Background desktop agent stopped.",
+    reason,
+    session: sanitizeAgentSession(),
+  };
+}
+
+async function pollJobsNow(reason = "manual", payload = {}) {
+  const pairingError = requirePairedAgent();
+  if (pairingError) return pairingError;
+
+  if (isPollingJobs) {
+    console.log("[DESKTOP AGENT BACKGROUND] poll skipped because previous poll still running", { reason });
+    return {
+      success: true,
+      skipped: true,
+      message: "Job poll already running.",
+      session: sanitizeAgentSession(),
+    };
+  }
+
+  if (!payload.printerName && !resolveLocalPrinterName()) {
+    await syncLatestPrinterStatus(`${reason}:resolve-printer`).catch(() => null);
+  }
+
+  const printerName = payload.printerName || resolveLocalPrinterName();
+  const knownPrinters = Array.isArray(latestPrinterResult?.printers) ? latestPrinterResult.printers : [];
+  if (!printerName && knownPrinters.length === 0) {
+    agentSession.lastJobPollAt = new Date().toISOString();
+    agentSession.lastJobPollError = "No local printer selected/available.";
+    agentSession.lastJobPollMessage = "Auto-print is online but waiting for a local printer.";
+    console.warn("[DESKTOP AGENT BACKGROUND] no local printer selected/available", { reason });
+    emitAgentSession();
+    return {
+      success: true,
+      skipped: true,
+      message: agentSession.lastJobPollError,
+      session: sanitizeAgentSession(),
+    };
+  }
+
+  isPollingJobs = true;
+
+  try {
+    const result = await processNextJob({
+      agentToken: agentSession.accessToken,
+      printerName,
+    });
+
+    agentSession.lastJobPollAt = new Date().toISOString();
+
+    if (result.success) {
+      agentSession.lastJobPollError = "";
+      agentSession.lastJobPollMessage = result.job
+        ? `Printed job ${result.job.jobId || result.job.orderId || ""}`.trim()
+        : result.message || "Job poll success.";
+      console.log("[DESKTOP AGENT BACKGROUND] job poll success/job printed", {
+        reason,
+        printerName,
+        jobId: result.job?.jobId || null,
+        orderId: result.job?.orderId || null,
+      });
+    } else if (result.status === 401 || result.status === 403) {
+      agentSession.lastJobPollError = "Stored desktop agent credential was rejected. Register or pair this desktop again.";
+      console.warn("[DESKTOP AGENT BACKGROUND] stopped auth rejected", {
+        reason,
+        status: result.status,
+        message: result.message,
+      });
+      await clearStoredDesktopAgent();
+    } else if (result.job) {
+      agentSession.lastJobPollError = result.message || "Print job failed.";
+      agentSession.lastJobPollMessage = `Job failed ${result.job.jobId || result.job.orderId || ""}`.trim();
+      console.warn("[DESKTOP AGENT BACKGROUND] job poll success/job failed", {
+        reason,
+        printerName,
+        jobId: result.job?.jobId || null,
+        orderId: result.job?.orderId || null,
+        message: result.message,
+      });
+    } else {
+      agentSession.lastJobPollError = "";
+      agentSession.lastJobPollMessage = result.message || "No jobs.";
+      console.log("[DESKTOP AGENT BACKGROUND] job poll success/no jobs", {
+        reason,
+        printerName: printerName || null,
+      });
+    }
+
+    emitAgentSession();
+    return {
+      ...result,
+      selectedPrinterName: printerName,
+      session: sanitizeAgentSession(),
+    };
+  } catch (error) {
+    agentSession.lastJobPollAt = new Date().toISOString();
+    agentSession.lastJobPollError = error.message || "Could not poll print jobs.";
+    console.warn("[DESKTOP AGENT BACKGROUND] job poll fail", {
+      reason,
+      printerName: printerName || null,
+      message: agentSession.lastJobPollError,
+    });
+    emitAgentSession();
+    return {
+      success: false,
+      message: agentSession.lastJobPollError,
+      session: sanitizeAgentSession(),
+    };
+  } finally {
+    isPollingJobs = false;
+  }
+}
+
+function startJobPollLoop(reason = "manual-start", payload = {}) {
+  const pairingError = requirePairedAgent();
+  if (pairingError) return pairingError;
+
+  if (jobPollTimer) {
+    console.log("[DESKTOP AGENT BACKGROUND] already running job polling", { reason });
+    return {
+      success: true,
+      message: "Job polling is already running.",
+      session: sanitizeAgentSession(),
+    };
+  }
+
+  const intervalMs = Math.max(3000, Number(payload.intervalMs) || JOB_POLL_INTERVAL_MS);
+  jobPollTimer = setInterval(() => {
+    pollJobsNow("job-poll-loop").catch((error) => {
+      agentSession.lastJobPollError = error.message || "Job poll failed.";
+      emitAgentSession();
+      console.warn("[DESKTOP AGENT BACKGROUND] job poll fail", agentSession.lastJobPollError);
+    });
+  }, intervalMs);
+  jobPollTimer.unref?.();
+
+  pollJobsNow(reason, payload).catch((error) => {
+    agentSession.lastJobPollError = error.message || "Initial job poll failed.";
+    emitAgentSession();
+  });
+
+  console.log("[DESKTOP AGENT BACKGROUND] job polling started", {
+    reason,
+    intervalMs,
+    selectedPrinterName: payload.printerName || resolveLocalPrinterName() || null,
+  });
+  emitAgentSession();
+  return {
+    success: true,
+    message: "Job polling started.",
+    intervalMs,
+    session: sanitizeAgentSession(),
+  };
+}
+
 async function startAgentRuntime(reason) {
+  console.log("[DESKTOP AGENT BACKGROUND]", reason, {
+    paired: isAgentPaired(),
+    selectedPrinterName: agentSession.selectedPrinterName || null,
+  });
   const heartbeat = await sendAgentHeartbeat();
   const printerResult = await refreshLocalPrinterResult(reason + ":printer-sync");
   const loop = startHeartbeatLoop();
   const printerLoop = startPrinterSyncLoop();
+  const jobLoop = startJobPollLoop(reason + ":job-poll");
 
   return {
-    success: Boolean(heartbeat.success && loop.success && printerLoop.success),
+    success: Boolean(heartbeat.success && loop.success && printerLoop.success && jobLoop.success),
     heartbeat,
     printerResult,
     loop,
     printerLoop,
+    jobLoop,
+    session: sanitizeAgentSession(),
   };
 }
 
@@ -1018,58 +1233,37 @@ async function syncAgentPrinters() {
 
   const heartbeat = await sendAgentHeartbeat();
   const printerSync = printerResult.cloudSync || await syncPrintersToCloud(printerResult, "agent:manual-printer-sync");
+  const runtime = startJobPollLoop("manual-printer-sync");
 
   return {
-    success: Boolean(heartbeat.success && printerSync.success),
+    success: Boolean(heartbeat.success && printerSync.success && runtime.success),
     heartbeat,
     printerSync,
+    runtime,
     localPrinters: printerResult.printers,
     session: sanitizeAgentSession(),
   };
 }
 
 async function pollAgentOnce(_event, payload = {}) {
-  const pairingError = requirePairedAgent();
-  if (pairingError) return pairingError;
-
-  return processNextJob({
-    agentToken: agentSession.accessToken,
-    printerName: payload.printerName || resolveLocalPrinterName(),
-  });
+  return pollJobsNow("manual-poll", payload);
 }
 
 function startAgentPolling(_event, payload = {}) {
-  const pairingError = requirePairedAgent();
-  if (pairingError) return pairingError;
-
-  if (!jobPoller) {
-    jobPoller = createJobPoller({
-      agentToken: agentSession.accessToken,
-      printerName: payload.printerName || agentSession.selectedPrinterName,
-      intervalMs: payload.intervalMs,
-    });
-  }
-
-  const result = jobPoller.start({
-    agentToken: agentSession.accessToken,
-    printerName: payload.printerName || resolveLocalPrinterName(),
-    intervalMs: payload.intervalMs,
-  });
-
-  return {
-    ...result,
-    session: sanitizeAgentSession(),
-  };
+  return startJobPollLoop("manual-start", payload);
 }
 
 function stopAgentPolling() {
-  const result = jobPoller?.stop() || {
-    success: true,
-    message: "Job polling is not running.",
-  };
+  if (jobPollTimer) {
+    clearInterval(jobPollTimer);
+    jobPollTimer = null;
+    console.log("[DESKTOP AGENT BACKGROUND] job polling stopped manual-stop");
+  }
 
+  emitAgentSession();
   return {
-    ...result,
+    success: true,
+    message: "Job polling stopped.",
     session: sanitizeAgentSession(),
   };
 }
@@ -1276,9 +1470,16 @@ app.whenReady().then(async () => {
   await session.defaultSession.clearCache();
   registerDesktopProtocol();
   setConfigDirectory(app.getPath("userData"));
-  await ensureDeviceIdentity();
-  await restoreStoredDesktopAgent();
-  await migrateFileLocalStorageAuth();
+	  await ensureDeviceIdentity();
+	  const restoredAgent = await restoreStoredDesktopAgent();
+	  if (restoredAgent?.restored) {
+	    startAgentRuntime("startup-stored-agent").catch((error) => {
+	      agentSession.lastJobPollError = error.message || "Could not start background desktop agent.";
+	      emitAgentSession();
+	      console.warn("[DESKTOP AGENT BACKGROUND] startup failed", agentSession.lastJobPollError);
+	    });
+	  }
+	  await migrateFileLocalStorageAuth();
   registerIpcHandlers();
   createMainWindow();
   initializeUpdater({ mainWindow });
@@ -1292,9 +1493,7 @@ app.whenReady().then(async () => {
 });
 
 app.on("before-quit", () => {
-  if (heartbeatTimer) clearInterval(heartbeatTimer);
-  if (printerSyncTimer) clearInterval(printerSyncTimer);
-  jobPoller?.stop?.();
+  stopAgentRuntime("app-before-quit");
 });
 
 app.on("window-all-closed", () => {

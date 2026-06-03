@@ -34,10 +34,10 @@ export default function CentreCodePage({
         {lookupError && <p className="mt-3 text-sm font-medium text-red-600">{lookupError}</p>}
         {lookupLoading && <p className="mt-3 text-sm text-slate-500">Checking centre code...</p>}
 
-        <div className="mt-6 rounded-2xl border border-dashed p-5 text-center">
+        <div className="mt-6 rounded-2xl border border-dashed bg-slate-50 p-5 text-center text-slate-500">
           <QrCode className="mx-auto" size={70} />
-          <p className="mt-3 font-semibold">QR Scanner Placeholder</p>
-          <p className="text-sm text-slate-500">Later connect camera QR scanner library.</p>
+          <p className="mt-3 font-semibold text-slate-700">QR scanner coming soon</p>
+          <p className="text-sm">For now, enter the centre code or select a centre from the list.</p>
         </div>
       </Card>
 

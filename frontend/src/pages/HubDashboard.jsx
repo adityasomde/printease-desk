@@ -10,6 +10,27 @@ function normalizeStatus(status) {
   return String(status || "").toLowerCase().replace(/\s+/g, "_");
 }
 
+function displayStatus(status) {
+  const normalized = normalizeStatus(status);
+  const labels = {
+    payment_pending: "Payment Pending",
+    payment_verified: "Payment Verified",
+    accepted_by_centre: "Accepted",
+    queued_for_printing: "Queued",
+    sent_to_agent: "Sent to Agent",
+    downloading: "Downloading",
+    printing: "Printing",
+    ready_for_pickup: "Ready for Pickup",
+    collected: "Completed",
+    printing_failed: "Printing Failed",
+    refund_requested: "Refund Requested",
+    failed: "Failed",
+    completed: "Completed",
+  };
+
+  return labels[normalized] || status || "Unknown";
+}
+
 function isPaymentVerified(order) {
   const value = String(order?.paymentStatus || order?.payment_status || "").toLowerCase();
   return value === "verified" || value === "collected" || value === "paid" || value.includes("verif");
@@ -77,10 +98,13 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
   const [documentModalOrder, setDocumentModalOrder] = useState(null);
   const [orderDocuments, setOrderDocuments] = useState([]);
   const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [documentPreview, setDocumentPreview] = useState(null);
+  const [documentActionId, setDocumentActionId] = useState("");
   const [selectedAgentId, setSelectedAgentId] = useState("");
   const [selectedPrinterName, setSelectedPrinterName] = useState("");
   const [collectingOrderId, setCollectingOrderId] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
+  const [orderSearch, setOrderSearch] = useState("");
   const ordersForHub = hubOrders || [];
 
   const totalPages = ordersForHub.reduce((sum, item) => sum + item.pages * item.copies, 0);
@@ -108,6 +132,32 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
   const jobByOrderId = useMemo(() => {
     return new Map(printJobs.map((job) => [job.orderId, job]));
   }, [printJobs]);
+  const filteredOrders = useMemo(() => {
+    const query = orderSearch.trim().toLowerCase();
+    if (!query) return ordersForHub;
+
+    return ordersForHub.filter((item) => {
+      const job = jobByOrderId.get(item.backendId);
+      const searchable = [
+        item.id,
+        item.backendId,
+        item.customerName,
+        item.customerMobile,
+        item.document,
+        item.paymentStatus,
+        item.status,
+        item.pickupCode,
+        item.amount,
+        job?.status,
+        job?.printerName,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return searchable.includes(query);
+    });
+  }, [jobByOrderId, orderSearch, ordersForHub]);
 
   async function refreshAgentStatus() {
     setAgentLoading(true);
@@ -237,6 +287,7 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
     const orderId = order.backendId || order.id;
     setDocumentModalOrder(order);
     setOrderDocuments([]);
+    setDocumentPreview(null);
     setDocumentsLoading(true);
     setAgentError("");
 
@@ -250,12 +301,26 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
     }
   }
 
-  async function downloadDocument(documentId) {
+  async function openSignedDocument(document, mode = "download") {
+    const documentId = document.documentId || document.id;
+    setDocumentActionId(`${mode}:${documentId}`);
     try {
       const data = await createDocumentSignedDownload(documentId);
-      if (data.signedUrl) window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+      if (!data.signedUrl) throw new Error("Signed document link was not returned.");
+
+      if (mode === "view") {
+        setDocumentPreview({
+          url: data.signedUrl,
+          name: document.fileName || "Document preview",
+        });
+        return;
+      }
+
+      window.open(data.signedUrl, "_blank", "noopener,noreferrer");
     } catch (error) {
       setAgentError(error.message || "Could not create signed download link.");
+    } finally {
+      setDocumentActionId("");
     }
   }
 
@@ -273,9 +338,9 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
 
       <div className="grid gap-4 md:grid-cols-4">
         <Metric title="Total Orders" value={ordersForHub.length} icon={<FileText />} />
-        <Metric title="Pending" value={pendingOrders} icon={<Printer />} />
+        <Metric title="Active Orders" value={pendingOrders} icon={<Printer />} />
         <Metric title="Pages Printed" value={totalPages} icon={<BarChart3 />} />
-        <Metric title="Money Collected" value={`₹${totalRevenue}`} icon={<IndianRupee />} />
+        <Metric title="Collected Amount" value={`₹${totalRevenue}`} icon={<IndianRupee />} />
       </div>
 
       <Card>
@@ -285,6 +350,9 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
               <Wifi size={20} />
               <h3 className="text-xl font-bold">Printer Agent</h3>
             </div>
+            <p className="mt-2 text-sm text-slate-600">
+              Desktop agent prints paid/collected jobs automatically when connected.
+            </p>
             <div className="mt-4 grid gap-3 text-sm text-slate-600 sm:grid-cols-2 lg:grid-cols-4">
               <div>
                 <p className="font-semibold text-slate-900">Online devices</p>
@@ -361,90 +429,116 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
         </div>
       </Card>
 
-      <Card>
-        <h3 className="text-xl font-bold">Incoming / Active Orders</h3>
+      <Card className="relative left-1/2 w-[calc(100vw-1rem)] -translate-x-1/2 px-3 sm:w-[calc(100vw-2rem)] sm:px-4 lg:w-[min(1500px,calc(100vw-3rem))] lg:px-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h3 className="text-xl font-bold">Incoming / Active Orders</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Paid or cash-collected orders can be sent to the desktop agent. Ask customer for the last 4 digits/order code.
+            </p>
+          </div>
+          <div className="w-full lg:max-w-sm">
+            <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Search orders</label>
+            <input
+              value={orderSearch}
+              onChange={(event) => setOrderSearch(event.target.value)}
+              placeholder="Name, mobile, order, document, status"
+              className="mt-2 w-full rounded-2xl border px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-slate-300"
+            />
+            {orderSearch && <p className="mt-2 text-xs text-slate-500">{filteredOrders.length} of {ordersForHub.length} orders shown</p>}
+          </div>
+        </div>
         <div className="mt-6 overflow-x-auto">
-          <table className="w-full min-w-[980px] text-left text-sm">
+          <table className="w-full min-w-[900px] text-left text-sm lg:text-base table-fixed">
             <thead>
-              <tr className="border-b text-slate-500">
-                <th className="py-3">Order ID</th>
-                <th>Document</th>
-                <th>Pages</th>
-                <th>Amount</th>
-                <th>Payment</th>
-                <th>Status</th>
-                <th>Files</th>
-                <th>Update</th>
-                <th>Agent</th>
+              <tr className="text-slate-500">
+                <th className="w-20 px-1 py-6">Order ID</th>
+                <th className="w-32 px-1 py-6">Customer</th>
+                <th className="w-36 px-1 py-6">Document</th>
+                <th className="w-16 px-1 py-6">Pages</th>
+                <th className="w-16 px-1 py-6">Amount</th>
+                <th className="w-24 px-1 py-6">Payment</th>
+                <th className="w-28 px-1 py-6">Status</th>
+                <th className="w-16 px-1 py-6">Files</th>
+                <th className="w-32 px-1 py-6">Update</th>
+                <th className="w-36 px-1 py-6">Agent</th>
               </tr>
             </thead>
-            <tbody>
-              {ordersForHub.map((item) => {
+            <tbody className="divide-y">
+              {filteredOrders.map((item) => {
                 const job = jobByOrderId.get(item.backendId);
                 const orderId = item.backendId || item.id;
                 const sendEnabled = canSendToAgent(item);
 
                 return (
-                  <tr key={item.id} className="border-b">
-                    <td className="py-3 font-semibold">{item.id}</td>
-                    <td>{item.document}</td>
-                    <td>{item.pages} × {item.copies}</td>
-                    <td>₹{item.amount}</td>
-                    <td>
+                  <tr key={item.id} className="align-top odd:bg-white even:bg-slate-50">
+                    <td className="px-1 py-6 font-semibold">
+                      <p className="truncate max-w-[8rem]" title={item.id}>{item.id}</p>
+                    </td>
+                    <td className="px-1 py-6">
+                      <p className="text-lg font-semibold text-slate-900 truncate max-w-[10rem]" title={item.customerName}>{item.customerName || "Customer"}</p>
+                      {item.customerMobile && <p className="text-xs text-slate-500">{item.customerMobile}</p>}
+                    </td>
+                    <td className="px-1 py-6">
+                      <p className="truncate" title={item.document}>{item.document}</p>
+                    </td>
+                    <td className="px-1 py-6 whitespace-nowrap text-lg font-medium">{item.pages} × {item.copies}</td>
+                    <td className="px-1 py-6 whitespace-nowrap text-lg font-semibold">₹{item.amount}</td>
+                    <td className="w-28 max-w-[7rem] px-1 py-6">
                       <StatusBadge color="green">{item.paymentStatus}</StatusBadge>
                       {isPaymentPending(item) && (
-                        <p className="mt-1 text-xs text-slate-500">Document stored securely. Printer agent will receive it only after payment is collected or verified.</p>
+                        <p className="mt-1 text-xs text-slate-500">Awaiting payment.</p>
                       )}
                       {isPaymentVerified(item) && (
-                        <p className="mt-1 text-xs text-emerald-700">Payment completed. Print job can be queued for the desktop agent even if no cloud printer is currently synced.</p>
+                        <p className="mt-1 text-xs text-emerald-700">Ready to queue.</p>
                       )}
                     </td>
-                    <td>
-                      <StatusBadge>{item.status}</StatusBadge>
+                    <td className="px-1 py-6">
+                      <StatusBadge>{displayStatus(item.status)}</StatusBadge>
                       {job?.failureReasonText && <p className="mt-1 text-xs font-semibold text-rose-600">{job.failureReasonText}</p>}
                     </td>
-                    <td>
+                    <td className="px-1 py-6">
                       <button
                         type="button"
                         onClick={() => openDocuments(item)}
-                        className="inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2 font-semibold"
+                        className="inline-flex items-center justify-center gap-1.5 rounded-xl border px-2 py-1.5 font-semibold"
                       >
-                        <FileText size={15} /> Documents
+                        <FileText size={14} /> Docs
                       </button>
                     </td>
-                    <td>
-                      <select value={item.status} onChange={(e) => updateOrderStatus(item.id, e.target.value)} className="rounded-xl border px-3 py-2">
-                        {hubStatusOptions.map((status) => <option key={status}>{status}</option>)}
+                    <td className="px-1 py-6">
+                      <select value={item.status} onChange={(e) => updateOrderStatus(item.id, e.target.value)} className="w-full rounded-xl border px-2 py-1.5 text-sm lg:text-sm">
+                        {hubStatusOptions.map((status) => <option key={status} value={status}>{displayStatus(status)}</option>)}
                       </select>
                     </td>
-                    <td>
+                    <td className="px-1 py-6">
                       <div className="flex flex-col gap-2">
-                        {job && <StatusBadge>{job.status}</StatusBadge>}
-                        {job && normalizeStatus(job.status) !== "failed" && <p className="text-xs text-slate-500">Queued for Printing</p>}
+                        {job && <StatusBadge>{displayStatus(job.status)}</StatusBadge>}
+                        {job && normalizeStatus(job.status) !== "failed" && <p className="text-xs text-slate-500">{displayStatus(job.status)} in desktop queue</p>}
                         {isPaymentPending(item) && (
                           <button
                             onClick={() => markCashCollected(item)}
                             disabled={collectingOrderId === orderId}
-                            className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-200 px-3 py-2 font-semibold text-emerald-700 disabled:opacity-50"
+                            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-emerald-200 px-2 py-1.5 font-semibold text-emerald-700 disabled:opacity-50"
                           >
-                            <IndianRupee size={15} /> {collectingOrderId === orderId ? "Saving" : "Mark Cash Collected"}
+                            <IndianRupee size={14} /> {collectingOrderId === orderId ? "Saving" : "Cash Collected"}
                           </button>
                         )}
                         {sendEnabled && routeableAgents.length > 0 && (
                           <button
                             onClick={() => openSendModal(item)}
                             disabled={sendingOrderId === orderId}
-                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-700 px-3 py-2 font-semibold text-white disabled:bg-slate-300"
+                            className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-700 px-2 py-1.5 font-semibold text-white disabled:bg-slate-300"
                           >
-                            <Send size={15} /> {sendingOrderId === orderId ? "Sending" : "Send to Agent"}
+                            <Send size={14} /> {sendingOrderId === orderId ? "Sending" : "Send"}
                           </button>
                         )}
                         {sendEnabled && routeableAgents.length === 0 && (
                           <button
                             onClick={() => navigate("hubPrinters")}
-                            className="rounded-xl border border-amber-200 px-3 py-2 text-left text-xs font-semibold text-amber-800"
+                            className="rounded-xl border border-amber-200 px-2 py-1.5 text-left text-xs font-semibold text-amber-800"
                           >
-                            Payment completed. No online desktop agent is currently paired. The job will queue and wait for PrintEase Desktop to connect.
+                            Open agent to queue.
                           </button>
                         )}
                       </div>
@@ -452,6 +546,13 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
                   </tr>
                 );
               })}
+              {filteredOrders.length === 0 && (
+                <tr>
+                  <td colSpan={10} className="py-10 text-center text-sm text-slate-500">
+                    No orders match this search.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -549,7 +650,10 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
                 <h3 className="text-xl font-bold">Order Documents</h3>
                 <p className="mt-1 text-sm text-slate-600">{documentModalOrder.id}</p>
               </div>
-              <button type="button" onClick={() => setDocumentModalOrder(null)} className="rounded-full border p-2" aria-label="Close documents modal">
+              <button type="button" onClick={() => {
+                setDocumentModalOrder(null);
+                setDocumentPreview(null);
+              }} className="rounded-full border p-2" aria-label="Close documents modal">
                 <X size={18} />
               </button>
             </div>
@@ -573,17 +677,17 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={() => downloadDocument(document.documentId)}
+                        onClick={() => openSignedDocument(document, "download")}
                         className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white"
                       >
-                        <Download size={15} /> Download original
+                        <Download size={15} /> {documentActionId === `download:${document.documentId}` ? "Opening" : "Download original"}
                       </button>
                       <button
                         type="button"
-                        onClick={() => downloadDocument(document.documentId)}
+                        onClick={() => openSignedDocument(document, "view")}
                         className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold"
                       >
-                        <Eye size={15} /> View
+                        <Eye size={15} /> {documentActionId === `view:${document.documentId}` ? "Loading" : "View"}
                       </button>
                       <span className="inline-flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
                         <ShieldCheck size={14} /> Hash shown
@@ -592,6 +696,17 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
                   </div>
                 </div>
               ))}
+              {documentPreview && (
+                <div className="rounded-2xl border bg-slate-50 p-3">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <p className="truncate text-sm font-semibold text-slate-900">{documentPreview.name}</p>
+                    <button type="button" onClick={() => setDocumentPreview(null)} className="rounded-xl border bg-white px-3 py-2 text-xs font-semibold">
+                      Close preview
+                    </button>
+                  </div>
+                  <iframe title={documentPreview.name} src={documentPreview.url} className="h-[70vh] w-full rounded-xl border bg-white" />
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -62,8 +62,71 @@ function localPrinterMessage(count) {
   return `Detected ${count} local printer${count === 1 ? "" : "s"}.`;
 }
 
-export default function DesktopAgentPage() {
+function normalizeRole(value) {
+  return String(value || "").trim().toLowerCase().replace(/[_\s]+/g, "-");
+}
+
+function getUserRoleInfo(user) {
+  const roleValues = [
+    user?.role,
+    user?.userRole,
+    user?.accountType,
+    user?.type,
+    user?.profile?.role,
+    user?.profile?.accountType,
+  ].filter(Boolean);
+
+  const normalizedRoles = roleValues.map(normalizeRole);
+  const hubRoleValues = new Set([
+    "hub",
+    "centre",
+    "center",
+    "shop",
+    "print-hub",
+    "print-centre",
+    "print-center",
+    "printer",
+    "owner",
+    "admin",
+  ]);
+  const hasHubRole = normalizedRoles.some((role) => hubRoleValues.has(role));
+  const hasHubIdentity = Boolean(
+    user?.centreId ||
+      user?.centerId ||
+      user?.hubId ||
+      user?.shopId ||
+      user?.centre?.id ||
+      user?.hub?.id ||
+      user?.shop?.id
+  );
+
+  return {
+    roleValues,
+    normalizedRoles,
+    hasHubRole,
+    hasHubIdentity,
+    isHubAccount: Boolean(hasHubRole || hasHubIdentity),
+    reason: hasHubRole
+      ? "Matched hub-like role"
+      : hasHubIdentity
+        ? "Matched hub/centre/shop id"
+        : "No hub-like role or hub identity found",
+  };
+}
+
+function getStoredUser() {
+  if (typeof window === "undefined") return null;
+
+  try {
+    return JSON.parse(window.localStorage.getItem("printease_user") || "null");
+  } catch {
+    return null;
+  }
+}
+
+export default function DesktopAgentPage({ currentUser = null }) {
   const [desktopAvailable, setDesktopAvailable] = useState(() => isDesktop());
+  const [storedUser, setStoredUser] = useState(() => getStoredUser());
   const [status, setStatus] = useState(null);
   const [printers, setPrinters] = useState([]);
   const [selectedPrinterName, setSelectedPrinterName] = useState("");
@@ -83,11 +146,17 @@ export default function DesktopAgentPage() {
   const [approvalPolling, setApprovalPolling] = useState(false);
   const [approvalMessage, setApprovalMessage] = useState("");
   const [manualPairingVisible, setManualPairingVisible] = useState(false);
+  const [advancedDiagnosticsVisible, setAdvancedDiagnosticsVisible] = useState(false);
   const approvalTimerRef = useRef(null);
   const approvalSessionIdRef = useRef("");
 
   const defaultPrinter = useMemo(() => printers.find((printer) => printer.isDefault) || printers[0] || null, [printers]);
   const localPrinterNames = printers.map((printer) => printer.displayName || printer.printerName).filter(Boolean).join(", ");
+  const activeUser = currentUser || storedUser;
+  const roleInfo = useMemo(() => getUserRoleInfo(activeUser), [activeUser]);
+  const isLoggedIn = Boolean(activeUser);
+  const isHubAccount = roleInfo.isHubAccount;
+  const hiddenReason = !isLoggedIn ? "No logged-in user found" : roleInfo.reason;
 
   function applyPrinterResult(result) {
     const normalized = normalizePrinterResult(result);
@@ -108,6 +177,7 @@ export default function DesktopAgentPage() {
 
   useEffect(() => {
     setDesktopAvailable(isDesktop());
+    setStoredUser(getStoredUser());
     const unsubscribePrinters = onPrintersUpdated((result) => {
       setDesktopAvailable(true);
       applyPrinterResult(result);
@@ -273,6 +343,7 @@ export default function DesktopAgentPage() {
   }
 
   async function runPrinterDiagnostics() {
+    setAdvancedDiagnosticsVisible(true);
     setError("");
     setErrorDetail("");
     setHelpCommands([]);
@@ -290,6 +361,7 @@ export default function DesktopAgentPage() {
   }
 
   async function checkWindowsPrintHelper() {
+    setAdvancedDiagnosticsVisible(true);
     setError("");
     setErrorDetail("");
     setHelpCommands([]);
@@ -522,7 +594,7 @@ export default function DesktopAgentPage() {
       }
 
       if (stored?.session) setAgentSession(stored.session);
-      setAgentMessage("Desktop registered for this hub. It will reconnect automatically after restart.");
+      setAgentMessage("Desktop registered and auto-print is running.");
     } catch (registrationError) {
       setError(registrationError.message || "Could not register desktop agent for this hub.");
     } finally {
@@ -567,13 +639,16 @@ export default function DesktopAgentPage() {
               <h2 className="text-3xl font-bold">Desktop Agent</h2>
               <p className="mt-1 font-semibold text-emerald-700">Desktop mode detected</p>
               <p className="mt-1 text-sm font-semibold text-emerald-700">Desktop bridge connected</p>
+              <p className="mt-2 max-w-2xl text-sm text-slate-600">
+                Keep this app open on the shop PC. It will sync printers and automatically print assigned paid/collected jobs.
+              </p>
               <p className="mt-2 text-sm text-slate-600">Platform: {status?.platform || window.printeaseDesktop?.platform || "unknown"}</p>
               <p className="text-sm text-slate-600">Backend: {status?.backendUrl || "https://printease-backend-byex.onrender.com"}</p>
               <p className={`mt-2 text-sm font-semibold ${printers.length > 0 ? "text-emerald-700" : "text-amber-700"}`}>
                 Local printers: {printers.length > 0 ? localPrinterNames : "checking"}
               </p>
               <p className={`mt-1 text-sm font-semibold ${selectedPrinterName ? "text-emerald-700" : "text-amber-700"}`}>
-                Selected printer: {selectedPrinterName || "Not selected"}
+                Selected printer for auto-print: {selectedPrinterName || "Not selected"}
               </p>
               {backendHealth && (
                 <p className={`mt-1 text-sm font-semibold ${backendHealth.success ? "text-emerald-700" : "text-rose-700"}`}>
@@ -634,11 +709,18 @@ export default function DesktopAgentPage() {
               )}
               {agentSession?.expiresAt && <p>Expires: {new Date(agentSession.expiresAt).toLocaleString()}</p>}
               <p>Polling: {agentSession?.polling ? "Running" : "Stopped"}</p>
+              <p className={`font-semibold ${agentSession?.autoPrintRunning ? "text-emerald-700" : agentSession?.lastJobPollError ? "text-amber-700" : "text-slate-600"}`}>
+                Auto-print: {agentSession?.autoPrintRunning ? "Running" : agentSession?.lastJobPollError ? "Error" : "Stopped"}
+              </p>
+              <p>Auto-print runs in the background after this desktop is registered.</p>
               <p>Heartbeat loop: {agentSession?.heartbeatRunning ? "Running" : "Stopped"}</p>
               {agentSession?.lastHeartbeatAt && <p>Last heartbeat: {new Date(agentSession.lastHeartbeatAt).toLocaleString()}</p>}
               {agentSession?.lastHeartbeatError && <p className="font-semibold text-amber-700">Heartbeat warning: {agentSession.lastHeartbeatError}</p>}
               {agentSession?.lastPrinterSyncAt && <p>Last printer sync: {new Date(agentSession.lastPrinterSyncAt).toLocaleString()}</p>}
               {agentSession?.lastPrinterSyncError && <p className="font-semibold text-amber-700">Printer sync warning: {agentSession.lastPrinterSyncError}</p>}
+              {agentSession?.lastJobPollAt && <p>Last poll: {new Date(agentSession.lastJobPollAt).toLocaleString()}</p>}
+              {agentSession?.lastJobPollMessage && <p>Last poll result: {agentSession.lastJobPollMessage}</p>}
+              {agentSession?.lastJobPollError && <p className="font-semibold text-amber-700">Auto-print warning: {agentSession.lastJobPollError}</p>}
             </div>
           </div>
 
@@ -648,7 +730,7 @@ export default function DesktopAgentPage() {
                 Checking saved desktop agent...
               </p>
             )}
-            {agentStatusLoaded && !agentSession?.paired && (
+            {agentStatusLoaded && !agentSession?.paired && isLoggedIn && isHubAccount && (
               <button
                 type="button"
                 disabled={agentBusy}
@@ -658,6 +740,11 @@ export default function DesktopAgentPage() {
                 {agentBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck size={16} />}
                 Register This Desktop
               </button>
+            )}
+            {agentStatusLoaded && !agentSession?.paired && (!isLoggedIn || !isHubAccount) && (
+              <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-700">
+                Login as hub account to register this desktop.
+              </p>
             )}
             <button
               type="button"
@@ -679,10 +766,13 @@ export default function DesktopAgentPage() {
               onClick={() => setManualPairingVisible((visible) => !visible)}
               className="rounded-xl border px-4 py-2 font-semibold"
             >
-              Use manual pairing code
+              Manual pairing fallback
             </button>
             {manualPairingVisible && (
               <div className="grid gap-2 rounded-2xl border bg-slate-50 p-3">
+                <p className="text-sm text-slate-600">
+                  Use this only if account-based registration is not working.
+                </p>
                 <button
                   type="button"
                   disabled={agentBusy}
@@ -701,6 +791,14 @@ export default function DesktopAgentPage() {
                 </button>
               </div>
             )}
+            <button
+              type="button"
+              disabled={agentBusy || !agentSession?.paired}
+              onClick={() => runAgentAction(() => startJobPolling({ printerName: selectedPrinterName || undefined }))}
+              className="rounded-xl bg-emerald-700 px-4 py-2 font-semibold text-white disabled:bg-slate-300"
+            >
+              Restart Auto Print
+            </button>
             <button
               type="button"
               disabled={agentBusy || !agentSession?.paired}
@@ -731,7 +829,7 @@ export default function DesktopAgentPage() {
               onClick={() => runAgentAction(() => pollPrintJobs({ printerName: selectedPrinterName }))}
               className="rounded-xl border px-4 py-2 font-semibold disabled:opacity-50"
             >
-              Poll Once
+              Poll Now
             </button>
             <div className="flex gap-2">
               <button
@@ -843,7 +941,35 @@ export default function DesktopAgentPage() {
           </div>
         )}
 
-        {printerDiagnostics?.probes?.length > 0 && (
+        <div className="mt-5 rounded-2xl border bg-slate-50 p-4">
+          <button
+            type="button"
+            onClick={() => setAdvancedDiagnosticsVisible((visible) => !visible)}
+            className="text-sm font-semibold text-slate-800"
+          >
+            Advanced diagnostics
+          </button>
+          <p className="mt-2 text-xs text-slate-500">Use these tools only for troubleshooting.</p>
+
+          {advancedDiagnosticsVisible && (
+            <div className="mt-4 grid gap-3">
+              {backendHealth?.success === false && (
+                <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-700">
+                  Backend unreachable. Saved agent was not cleared. Retrying is safe.
+                </p>
+              )}
+              <div className="rounded-xl bg-white p-3 text-xs text-slate-700">
+                <p className="font-semibold text-slate-900">Account detection</p>
+                <p>Detected role: {roleInfo.normalizedRoles.join(", ") || "none"}</p>
+                <p>Detected account type: {roleInfo.roleValues.join(", ") || "none"}</p>
+                <p>isHubAccount: {String(isHubAccount)}</p>
+                <p>Reason button hidden: {isHubAccount ? "Button is available for this account." : hiddenReason}</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {advancedDiagnosticsVisible && printerDiagnostics?.probes?.length > 0 && (
           <div className="mt-5 rounded-2xl border bg-slate-50 p-4 text-sm">
             <p className="font-semibold text-slate-900">Desktop printer diagnostics</p>
             <div className="mt-3 grid gap-3">
@@ -859,7 +985,7 @@ export default function DesktopAgentPage() {
           </div>
         )}
 
-        {windowsHelperDiagnostics && (
+        {advancedDiagnosticsVisible && windowsHelperDiagnostics && (
           <div className="mt-5 rounded-2xl border bg-slate-50 p-4 text-sm">
             <p className="font-semibold text-slate-900">Windows print helper</p>
             <div className="mt-3 grid gap-2 text-slate-700">

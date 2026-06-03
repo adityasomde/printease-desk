@@ -229,21 +229,21 @@ export function collectManualPayment(orderId, method = "cash", transactionNote =
 export function createRazorpayOrder(printOrderId) {
   return apiRequest("/api/payments/razorpay/order", {
     method: "POST",
-    body: JSON.stringify({ printOrderId }),
+    body: JSON.stringify({ orderId: printOrderId }),
   });
 }
 
-export function verifyRazorpayPayment(payload) {
+export function verifyRazorpayPayment(payload = {}) {
   return apiRequest("/api/payments/razorpay/verify", {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
-export function createRazorpayPaymentLink(printOrderId) {
-  return apiRequest("/api/payments/razorpay/payment-link", {
+export function createRazorpayUpiQr(printOrderId) {
+  return apiRequest("/api/payments/razorpay/upi-qr", {
     method: "POST",
-    body: JSON.stringify({ printOrderId }),
+    body: JSON.stringify({ orderId: printOrderId }),
   });
 }
 

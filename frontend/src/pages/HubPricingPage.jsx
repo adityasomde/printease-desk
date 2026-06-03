@@ -22,14 +22,15 @@ export default function HubPricingPage({ currentHub, updateCentrePrice, updateCe
 
       <Card>
         <h2 className="text-2xl font-bold">Payment Method</h2>
-        <p className="mt-2 text-sm text-slate-600">Initial MVP can use centre UPI details. Production should use verified payment gateway.</p>
+        <p className="mt-2 text-sm text-slate-600">Customers see these details for manual payment. Only the hub dashboard can confirm collection.</p>
         <div className="mt-6 space-y-4">
           <Input label="UPI ID" icon={<CreditCard size={18} />} value={currentHub.upiId} setValue={(value) => updateCentrePayment("upiId", value)} placeholder="example@upi" />
+          <Input label="UPI QR Image URL" icon={<CreditCard size={18} />} value={currentHub.upiQrImageUrl || ""} setValue={(value) => updateCentrePayment("upiQrImageUrl", value)} placeholder="https://.../qr.png" />
           <div className="rounded-2xl bg-slate-50 p-4">
             <div className="flex items-start gap-3">
               <ShieldCheck className="mt-1 text-green-600" />
               <p className="text-sm text-slate-600">
-                Important: do not allow centre or user to manually mark payment as successful. Backend must verify payment using gateway webhook/signature.
+                Security: customers cannot mark payment successful. Keep QR images public-only and never paste payment gateway secrets, API keys, or private tokens here.
               </p>
             </div>
           </div>

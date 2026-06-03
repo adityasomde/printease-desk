@@ -24,6 +24,14 @@ export default function UploadPage({
   setPaperSize,
   pagesPerSheet,
   setPagesPerSheet,
+  orientation,
+  setOrientation,
+  printDpi,
+  setPrintDpi,
+  scaleMode,
+  setScaleMode,
+  marginMode,
+  setMarginMode,
   watermark,
   setWatermark,
   watermarkType,
@@ -84,8 +92,8 @@ export default function UploadPage({
           <label className="cursor-pointer rounded-2xl border border-dashed bg-slate-50 p-6 text-center hover:bg-slate-100 md:col-span-2">
             <input type="file" accept="application/pdf" multiple onChange={handleFileChange} className="hidden" />
             {documentFile ? <FileText className="mx-auto mb-3" size={36} /> : <Upload className="mx-auto mb-3" size={36} />}
-            <p className="font-semibold">{selectedFileLabel || "Choose PDFs"}</p>
-            <p className="text-sm text-slate-500">{selectedFileCount ? `${Math.ceil(selectedFileSize / 1024)} KB selected` : "Maximum file size 10 MB per file"}</p>
+            <p className="font-semibold">{selectedFileLabel || "Choose one or more PDFs"}</p>
+            <p className="text-sm text-slate-500">{selectedFileCount ? `${Math.ceil(selectedFileSize / 1024)} KB selected` : "Select multiple PDF files from your file manager"}</p>
           </label>
 
           {selectedFileCount > 1 && (
@@ -102,28 +110,88 @@ export default function UploadPage({
             </div>
           )}
 
-          <input value={documentName} onChange={(e) => setDocumentName(e.target.value)} placeholder="Document name e.g. Assignment.pdf" className="rounded-2xl border px-4 py-3 outline-none focus:ring-2 focus:ring-slate-300 md:col-span-2" />
-          <input type="number" min="1" value={pages} onChange={(e) => setPages(Number(e.target.value))} placeholder="Estimated pages" className="rounded-2xl border px-4 py-3 outline-none focus:ring-2 focus:ring-slate-300" />
-          <input value={selectedPages} onChange={(e) => setSelectedPages(e.target.value)} placeholder="Page range e.g. all or 1,3-4" className="rounded-2xl border px-4 py-3 outline-none focus:ring-2 focus:ring-slate-300" />
-          <input type="number" min="1" value={copies} onChange={(e) => setCopies(Number(e.target.value))} placeholder="Copies" className="rounded-2xl border px-4 py-3 outline-none focus:ring-2 focus:ring-slate-300" />
-          <select value={colorType} onChange={(e) => setColorType(e.target.value)} className="rounded-2xl border px-4 py-3">
-            <option value="bw">Black & White</option>
-            <option value="color">Color</option>
-          </select>
-          <select value={sideType} onChange={(e) => setSideType(e.target.value)} className="rounded-2xl border px-4 py-3">
-            <option value="single">Single Side</option>
-            <option value="double">Double Side</option>
-          </select>
-          <select value={paperSize} onChange={(e) => setPaperSize(e.target.value)} className="rounded-2xl border px-4 py-3">
-            <option value="A4">A4</option>
-            <option value="Letter">Letter</option>
-            <option value="Legal">Legal</option>
-          </select>
-          <select value={pagesPerSheet} onChange={(e) => setPagesPerSheet(Number(e.target.value))} className="rounded-2xl border px-4 py-3">
-            <option value={1}>1 page per sheet</option>
-            <option value={2}>2 pages per sheet</option>
-            <option value={4}>4 pages per sheet</option>
-          </select>
+          <label className="grid gap-2 text-sm font-semibold text-slate-600 md:col-span-2">
+            Order document name
+            <input value={documentName} onChange={(e) => setDocumentName(e.target.value)} placeholder="Assignment.pdf" className="rounded-2xl border px-4 py-3 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-slate-600">
+            Estimated pages
+            <input type="number" min="1" value={pages} onChange={(e) => setPages(Number(e.target.value))} className="rounded-2xl border px-4 py-3 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-slate-600">
+            Page range
+            <input value={selectedPages} onChange={(e) => setSelectedPages(e.target.value)} placeholder="All, or 1,3-4" className="rounded-2xl border px-4 py-3 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-slate-600">
+            Copies
+            <input type="number" min="1" value={copies} onChange={(e) => setCopies(Number(e.target.value))} className="rounded-2xl border px-4 py-3 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-slate-600">
+            Color mode
+            <select value={colorType} onChange={(e) => setColorType(e.target.value)} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
+              <option value="bw">Black & White</option>
+              <option value="color">Color</option>
+            </select>
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-slate-600">
+            Sides
+            <select value={sideType} onChange={(e) => setSideType(e.target.value)} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
+              <option value="single">Single side</option>
+              <option value="double">Double side</option>
+            </select>
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-slate-600">
+            Paper size
+            <select value={paperSize} onChange={(e) => setPaperSize(e.target.value)} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
+              <option value="A4">A4</option>
+              <option value="A3">A3</option>
+              <option value="Letter">Letter</option>
+              <option value="Legal">Legal</option>
+            </select>
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-slate-600">
+            Orientation
+            <select value={orientation} onChange={(e) => setOrientation(e.target.value)} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
+              <option value="auto">Auto</option>
+              <option value="portrait">Portrait</option>
+              <option value="landscape">Landscape</option>
+            </select>
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-slate-600">
+            Pages per sheet
+            <select value={pagesPerSheet} onChange={(e) => setPagesPerSheet(Number(e.target.value))} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
+              <option value={1}>1 page per sheet</option>
+              <option value={2}>2 pages per sheet</option>
+              <option value={4}>4 pages per sheet</option>
+              <option value={6}>6 pages per sheet</option>
+              <option value={9}>9 pages per sheet</option>
+              <option value={16}>16 pages per sheet</option>
+            </select>
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-slate-600">
+            Print quality
+            <select value={printDpi} onChange={(e) => setPrintDpi(Number(e.target.value))} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
+              <option value={203}>Draft - 203 DPI</option>
+              <option value={300}>Standard - 300 DPI</option>
+              <option value={600}>High - 600 DPI</option>
+            </select>
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-slate-600">
+            Scale
+            <select value={scaleMode} onChange={(e) => setScaleMode(e.target.value)} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
+              <option value="original">Original size</option>
+              <option value="fit_to_page">Fit to page</option>
+              <option value="fit_to_page_width">Fit to page width</option>
+            </select>
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-slate-600">
+            Margins
+            <select value={marginMode} onChange={(e) => setMarginMode(e.target.value)} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
+              <option value="default">Default</option>
+              <option value="minimum">Minimum</option>
+              <option value="none">None</option>
+            </select>
+          </label>
           <label className="flex items-center gap-3 rounded-2xl border px-4 py-3 md:col-span-2">
             <input type="checkbox" checked={watermark} onChange={(e) => setWatermark(e.target.checked)} />
             Add watermark to printable PDF
@@ -172,7 +240,11 @@ export default function UploadPage({
           <Row label="Sheets" value={backendPrice?.sheetCount || "-"} />
           <Row label="Print Type" value={colorType === "bw" ? "B/W" : "Color"} />
           <Row label="Side" value={sideType} />
+          <Row label="Orientation" value={orientation} />
           <Row label="Pages/Sheet" value={pagesPerSheet} />
+          <Row label="Quality" value={`${printDpi} DPI`} />
+          <Row label="Scale" value={scaleMode.replaceAll("_", " ")} />
+          <Row label="Margins" value={marginMode} />
           <Row label="Watermark" value={watermark ? "Yes" : "No"} />
           <Row label={backendPrice ? "Backend Rate" : "Estimated Rate"} value={`₹${backendPrice?.pricePerPage ?? pricePerPage ?? 0}`} />
           {backendPrice?.files?.map((file) => (

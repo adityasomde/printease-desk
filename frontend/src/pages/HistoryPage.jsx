@@ -4,7 +4,12 @@ import Card from "../components/Card";
 import StatusBadge from "../components/StatusBadge";
 import { createDocumentSignedDownload, getOrderDocuments } from "../services/api";
 
-export default function HistoryPage({ orders, currentUser, lastUpdatedAt }) {
+function isPaymentPending(order) {
+  const value = String(order?.paymentStatus || "").toLowerCase();
+  return value === "pending" || value === "unpaid" || !value;
+}
+
+export default function HistoryPage({ orders, currentUser, lastUpdatedAt, onOpenPayment }) {
   const [documentModalOrder, setDocumentModalOrder] = useState(null);
   const [orderDocuments, setOrderDocuments] = useState([]);
   const [documentsLoading, setDocumentsLoading] = useState(false);
@@ -70,13 +75,20 @@ export default function HistoryPage({ orders, currentUser, lastUpdatedAt }) {
                 <td><StatusBadge color="green">{item.paymentStatus}</StatusBadge></td>
                 <td><StatusBadge>{item.status}</StatusBadge></td>
                 <td>
-                  {currentUser ? (
-                    <button type="button" onClick={() => openDocuments(item)} className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 font-semibold">
-                      <FileText size={15} /> Documents
-                    </button>
-                  ) : (
-                    <span className="text-xs text-slate-500">Login required</span>
-                  )}
+                  <div className="flex flex-wrap gap-2">
+                    {currentUser ? (
+                      <button type="button" onClick={() => openDocuments(item)} className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 font-semibold">
+                        <FileText size={15} /> Documents
+                      </button>
+                    ) : (
+                      <span className="text-xs text-slate-500">Login required</span>
+                    )}
+                    {isPaymentPending(item) && onOpenPayment && (
+                      <button type="button" onClick={() => onOpenPayment(item)} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 font-semibold text-white">
+                        Open Payment
+                      </button>
+                    )}
+                  </div>
                 </td>
                 <td>{item.date}</td>
               </tr>

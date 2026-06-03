@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { BarChart3, Download, Eye, FileText, IndianRupee, Link2, Printer, RefreshCw, Send, ShieldCheck, Wifi, X } from "lucide-react";
+import { BarChart3, Download, Eye, FileText, IndianRupee, Link2, PauseCircle, Printer, RefreshCw, Send, ShieldCheck, Wifi, X, XCircle } from "lucide-react";
 import Card from "../components/Card";
 import Metric from "../components/Metric";
 import StatusBadge from "../components/StatusBadge";
@@ -23,6 +23,8 @@ function displayStatus(status) {
     ready_for_pickup: "Ready for Pickup",
     collected: "Completed",
     printing_failed: "Printing Failed",
+    paused: "Paused",
+    cancelled: "Cancelled",
     refund_requested: "Refund Requested",
     failed: "Failed",
     completed: "Completed",
@@ -42,7 +44,7 @@ function isPaymentPending(order) {
 }
 
 const CLOSED_STATUSES = new Set(["collected", "refund_requested", "printing_failed", "cancelled"]);
-const AGENT_LOCKED_STATUSES = new Set(["sent_to_agent", "queued_for_printing", "printing", "ready_for_pickup", "collected", "printing_failed"]);
+const AGENT_LOCKED_STATUSES = new Set(["sent_to_agent", "queued_for_printing", "printing", "paused", "ready_for_pickup", "collected", "printing_failed", "cancelled"]);
 
 const ROUTEABLE_PRINTER_STATUSES = new Set(["idle", "available", "enabled", "accepting"]);
 const BLOCKED_PRINTER_STATUSES = new Set(["paused", "disabled", "stopped", "offline", "unable", "disconnected", "not_accepting"]);
@@ -83,6 +85,14 @@ function canSendToAgent(order) {
   return isPaymentVerified(order) && !AGENT_LOCKED_STATUSES.has(normalizeStatus(order.status));
 }
 
+function canPauseOrder(order) {
+  return !["paused", ...CLOSED_STATUSES].includes(normalizeStatus(order.status));
+}
+
+function canCancelOrder(order) {
+  return !["printing", "ready_for_pickup", ...CLOSED_STATUSES].includes(normalizeStatus(order.status));
+}
+
 
 export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus, refreshOrders, navigate }) {
   const [agents, setAgents] = useState([]);
@@ -103,6 +113,7 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
   const [selectedAgentId, setSelectedAgentId] = useState("");
   const [selectedPrinterName, setSelectedPrinterName] = useState("");
   const [collectingOrderId, setCollectingOrderId] = useState("");
+  const [statusActionId, setStatusActionId] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
   const [orderSearch, setOrderSearch] = useState("");
   const ordersForHub = hubOrders || [];
@@ -183,8 +194,20 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
       const interval = setInterval(() => {
         refreshAgentStatus();
         refreshOrders?.();
-      }, 10000);
-      return () => clearInterval(interval);
+      }, 3000);
+      const refreshOnFocus = () => {
+        if (document.visibilityState === "visible") {
+          refreshAgentStatus();
+          refreshOrders?.();
+        }
+      };
+      window.addEventListener("focus", refreshOnFocus);
+      document.addEventListener("visibilitychange", refreshOnFocus);
+      return () => {
+        clearInterval(interval);
+        window.removeEventListener("focus", refreshOnFocus);
+        document.removeEventListener("visibilitychange", refreshOnFocus);
+      };
     }
   }, [currentHub?.id]);
 
@@ -252,6 +275,23 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
       setAgentError(error.message || "Could not mark cash collected.");
     } finally {
       setCollectingOrderId("");
+    }
+  }
+
+  async function quickUpdateOrderStatus(order, nextStatus) {
+    const orderId = order.backendId || order.id;
+    setStatusActionId(`${orderId}:${nextStatus}`);
+    setAgentError("");
+    setPairingMessage("");
+
+    try {
+      await updateOrderStatus(order.id, nextStatus);
+      await Promise.all([refreshAgentStatus(), refreshOrders?.()]);
+      setPairingMessage(`Order marked ${displayStatus(nextStatus)}.`);
+    } catch (error) {
+      setAgentError(error.message || `Could not mark order ${displayStatus(nextStatus)}.`);
+    } finally {
+      setStatusActionId("");
     }
   }
 
@@ -454,11 +494,10 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
               <tr className="border-b text-xs uppercase tracking-wide text-slate-500">
                 <th className="w-24 px-2 py-3">Order</th>
                 <th className="w-36 px-2 py-3">Customer</th>
-                <th className="w-40 px-2 py-3">Document</th>
+                <th className="w-52 px-2 py-3">Document</th>
                 <th className="w-16 px-2 py-3">Pages</th>
                 <th className="w-16 px-2 py-3">Amount</th>
                 <th className="w-24 px-2 py-3">Payment</th>
-                <th className="w-20 px-2 py-3">Files</th>
                 <th className="w-32 px-2 py-3">Update</th>
                 <th className="w-36 px-2 py-3">Agent</th>
               </tr>
@@ -480,6 +519,13 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
                     </td>
                     <td className="px-2 py-4">
                       <p className="truncate" title={item.document}>{item.document}</p>
+                      <button
+                        type="button"
+                        onClick={() => openDocuments(item)}
+                        className="mt-2 inline-flex items-center justify-center gap-1.5 rounded-xl border px-2 py-1.5 text-xs font-semibold"
+                      >
+                        <FileText size={13} /> View / Download
+                      </button>
                     </td>
                     <td className="px-2 py-4 whitespace-nowrap font-medium">{item.pages} × {item.copies}</td>
                     <td className="px-2 py-4 whitespace-nowrap font-semibold">₹{item.amount}</td>
@@ -493,18 +539,41 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
                       )}
                     </td>
                     <td className="px-2 py-4">
-                      <button
-                        type="button"
-                        onClick={() => openDocuments(item)}
-                        className="inline-flex items-center justify-center gap-1.5 rounded-xl border px-2 py-1.5 font-semibold"
-                      >
-                        <FileText size={14} /> Docs
-                      </button>
-                    </td>
-                    <td className="px-2 py-4">
                       <select value={item.status} onChange={(e) => updateOrderStatus(item.id, e.target.value)} className="w-full rounded-xl border px-2 py-1.5 text-sm lg:text-sm">
                         {hubStatusOptions.map((status) => <option key={status} value={status}>{displayStatus(status)}</option>)}
                       </select>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {canPauseOrder(item) && (
+                          <button
+                            type="button"
+                            onClick={() => quickUpdateOrderStatus(item, "Paused")}
+                            disabled={statusActionId === `${orderId}:Paused`}
+                            className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-semibold text-slate-700 disabled:opacity-50"
+                          >
+                            <PauseCircle size={13} /> {statusActionId === `${orderId}:Paused` ? "Saving" : "Pause"}
+                          </button>
+                        )}
+                        {normalizeStatus(item.status) === "paused" && (
+                          <button
+                            type="button"
+                            onClick={() => quickUpdateOrderStatus(item, isPaymentVerified(item) ? "Payment Verified" : "Payment Pending")}
+                            disabled={statusActionId.startsWith(`${orderId}:`)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 px-2 py-1 text-xs font-semibold text-emerald-700 disabled:opacity-50"
+                          >
+                            Resume
+                          </button>
+                        )}
+                        {canCancelOrder(item) && (
+                          <button
+                            type="button"
+                            onClick={() => quickUpdateOrderStatus(item, "Cancelled")}
+                            disabled={statusActionId === `${orderId}:Cancelled`}
+                            className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-2 py-1 text-xs font-semibold text-rose-700 disabled:opacity-50"
+                          >
+                            <XCircle size={13} /> {statusActionId === `${orderId}:Cancelled` ? "Saving" : "Cancel"}
+                          </button>
+                        )}
+                      </div>
                     </td>
                     <td className="px-2 py-4">
                       <div className="flex flex-col gap-2">
@@ -544,7 +613,7 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
               })}
               {filteredOrders.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="py-10 text-center text-sm text-slate-500">
+                  <td colSpan={8} className="py-10 text-center text-sm text-slate-500">
                     No orders match this search.
                   </td>
                 </tr>

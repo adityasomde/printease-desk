@@ -70,8 +70,10 @@ export const hubStatusOptions = [
   "Queued for Printing",
   "Sent to Agent",
   "Printing",
+  "Paused",
   "Ready for Pickup",
   "Collected",
   "Printing Failed",
+  "Cancelled",
   "Refund Requested",
 ];

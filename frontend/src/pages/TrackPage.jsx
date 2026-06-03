@@ -1,4 +1,4 @@
-import { CheckCircle, CreditCard } from "lucide-react";
+import { CheckCircle, Clock, CreditCard, QrCode } from "lucide-react";
 import Card from "../components/Card";
 import Row from "../components/Row";
 
@@ -41,12 +41,26 @@ function isPaymentPending(order) {
   return value === "pending" || value === "unpaid" || !value;
 }
 
-export default function TrackPage({ order, lastUpdatedAt, pendingPayment, upiQr, onPayOnline, onCreateUpiQr, onSimulateVerifiedPayment, paymentLoading, paymentError }) {
+export default function TrackPage({
+  order,
+  lastUpdatedAt,
+  pendingPayment,
+  upiQr,
+  centreUpiId,
+  centreUpiQrImageUrl,
+  onPayOnline,
+  onCreateUpiQr,
+  onSimulateVerifiedPayment,
+  paymentLoading,
+  paymentError,
+}) {
   if (!order) return <Card>No active order found.</Card>;
 
   const currentStatus = normalizeStatus(order.status);
   const activeIndex = orderStatuses.indexOf(currentStatus);
   const paymentPending = isPaymentPending(order);
+  const razorpayQrImageUrl = upiQr?.source === "centre" ? "" : upiQr?.imageUrl || upiQr?.image_url || "";
+  const centreQrImageUrl = centreUpiQrImageUrl || (upiQr?.source === "centre" ? upiQr?.imageUrl || upiQr?.image_url : "");
 
   return (
     <Card className="mx-auto max-w-2xl">
@@ -64,7 +78,14 @@ export default function TrackPage({ order, lastUpdatedAt, pendingPayment, upiQr,
 
       {paymentPending && (
         <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          <p className="font-semibold">Document stored securely. Printer agent will receive it only after payment is collected or verified.</p>
+          <div className="flex items-start gap-3">
+            <Clock className="mt-0.5" size={20} />
+            <div>
+              <p className="font-semibold">Payment request pending</p>
+              <p className="mt-1">Pay via centre UPI, cash at the counter, or Razorpay. The print hub owner can manually confirm collection before printing starts.</p>
+              {pendingPayment?.createdAt && <p className="mt-2 text-xs">Request opened: {new Date(pendingPayment.createdAt).toLocaleString()}</p>}
+            </div>
+          </div>
 
           <div className="mt-4 flex flex-wrap gap-3">
             <button
@@ -82,7 +103,7 @@ export default function TrackPage({ order, lastUpdatedAt, pendingPayment, upiQr,
               disabled={paymentLoading}
               className="inline-flex items-center gap-2 rounded-xl border bg-white px-4 py-2 font-semibold text-slate-900 disabled:opacity-50"
             >
-              Generate UPI QR
+              <QrCode size={16} /> Generate UPI QR
             </button>
 
             {onSimulateVerifiedPayment && pendingPayment?.id && (
@@ -97,12 +118,23 @@ export default function TrackPage({ order, lastUpdatedAt, pendingPayment, upiQr,
             )}
           </div>
 
-          {upiQr?.imageUrl || upiQr?.image_url ? (
+          <div className="mt-4 rounded-2xl border bg-white p-4">
+            <p className="font-semibold">Centre UPI</p>
+            <p className="mt-1 break-all text-slate-700">{centreUpiId || "UPI ID not added by this centre."}</p>
+            {centreQrImageUrl && (
+              <div className="mt-4 text-center">
+                <img src={centreQrImageUrl} alt="Centre UPI QR" className="mx-auto h-48 w-48 object-contain" />
+                <p className="mt-2 text-xs text-slate-500">Scan and pay, then ask the hub to confirm payment collected.</p>
+              </div>
+            )}
+          </div>
+
+          {razorpayQrImageUrl && (
             <div className="mt-4 rounded-2xl border bg-white p-4 text-center">
-              <img src={upiQr?.imageUrl || upiQr?.image_url} alt="Razorpay UPI QR" className="mx-auto h-48 w-48 object-contain" />
-              <p className="mt-2 text-xs text-slate-500">Scan this QR to pay. Status updates after Razorpay confirms payment or hub marks payment collected.</p>
+              <img src={razorpayQrImageUrl} alt="Razorpay UPI QR" className="mx-auto h-48 w-48 object-contain" />
+              <p className="mt-2 text-xs text-slate-500">Scan this QR to pay. Status updates after Razorpay confirms payment.</p>
             </div>
-          ) : null}
+          )}
 
           {paymentError && <p className="mt-3 font-semibold text-rose-700">{paymentError}</p>}
         </div>

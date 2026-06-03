@@ -9,6 +9,7 @@ export default function CentrePriceCard({ centre, onUpload }) {
           <h4 className="text-lg font-bold">{centre.name}</h4>
           <p className="text-sm text-slate-600">Centre Code: {centre.code}</p>
           <p className="text-xs text-slate-500">UPI: {centre.upiId}</p>
+          {centre.upiQrImageUrl && <p className="text-xs text-slate-500">UPI QR available</p>}
         </div>
         <span className={`rounded-full px-3 py-1 text-xs font-semibold ${centre.status === "Available" ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
           {centre.status}

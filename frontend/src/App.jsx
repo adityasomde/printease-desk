@@ -107,6 +107,10 @@ function buildPrintOptions({
   sideType,
   paperSize,
   pagesPerSheet,
+  orientation = "auto",
+  printDpi = 300,
+  scaleMode = "original",
+  marginMode = "default",
   watermark,
   watermarkType = "order_code",
   watermarkText = "",
@@ -129,17 +133,20 @@ function buildPrintOptions({
       range: hasCustomRange ? range : "",
     },
     copies: Number(copies) || 1,
-    orientation: "auto",
+    orientation,
     colorMode: colorType === "color" ? "color" : "black_white",
     paperSize: paperSize || "A4",
     sides: sideType === "double" ? "two_sided_long_edge" : "one_sided",
     scale: {
-      mode: "original",
+      mode: scaleMode || "original",
       percent: null,
     },
     pagesPerSheet: Number(pagesPerSheet) || 1,
     margins: {
-      mode: "default",
+      mode: marginMode || "default",
+    },
+    quality: {
+      dpi: Number(printDpi) || 300,
     },
     format: "original",
     headersFooters: false,
@@ -168,6 +175,7 @@ function normalizeCentre(centre) {
     mobile: centre.mobile || "",
     status: formatStatus(centre.status),
     upiId: centre.upiId || "",
+    upiQrImageUrl: centre.upiQrImageUrl || centre.upi_qr_image_url || "",
     bwSingle: pricing.bwSingle ?? centre.bwSingle ?? 1,
     bwDouble: pricing.bwDouble ?? centre.bwDouble ?? 1.5,
     colorSingle: pricing.colorSingle ?? centre.colorSingle ?? 2,
@@ -367,6 +375,10 @@ export default function App() {
   const [sideType, setSideType] = useState("single");
   const [paperSize, setPaperSize] = useState("A4");
   const [pagesPerSheet, setPagesPerSheet] = useState(1);
+  const [orientation, setOrientation] = useState("auto");
+  const [printDpi, setPrintDpi] = useState(300);
+  const [scaleMode, setScaleMode] = useState("original");
+  const [marginMode, setMarginMode] = useState("default");
   const [watermark, setWatermark] = useState(false);
   const [watermarkType, setWatermarkType] = useState("order_code");
   const [watermarkText, setWatermarkText] = useState("");
@@ -379,7 +391,7 @@ export default function App() {
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentError, setPaymentError] = useState("");
   const [pendingPayment, setPendingPayment] = useState(null);
-  const [paymentMethod, setPaymentMethod] = useState("razorpay");
+  const [paymentMethod, setPaymentMethod] = useState("manual");
   const [upiQr, setUpiQr] = useState(null);
   const demoPaymentEnabled = import.meta.env.VITE_DEMO_PAYMENT_ENABLED === "true";
 
@@ -826,6 +838,10 @@ export default function App() {
         sideType,
         paperSize,
         pagesPerSheet,
+        orientation,
+        printDpi,
+        scaleMode,
+        marginMode,
         watermark,
         watermarkType,
         watermarkText,
@@ -849,6 +865,10 @@ export default function App() {
             sideType,
             paperSize,
             pagesPerSheet,
+            orientation,
+            printDpi,
+            scaleMode,
+            marginMode,
             watermarkEnabled: watermark,
             printOptions,
           })),
@@ -862,6 +882,10 @@ export default function App() {
           sideType,
           paperSize,
           pagesPerSheet,
+          orientation,
+          printDpi,
+          scaleMode,
+          marginMode,
           watermarkEnabled: watermark,
           printOptions,
         }),
@@ -892,6 +916,21 @@ export default function App() {
     setPaymentLoading(true);
     setPaymentError("");
 
+    if (paymentMethod === "manual") {
+      setPendingPayment({
+        id: `manual-${order.backendId}`,
+        orderId: order.backendId,
+        amount: order.amount,
+        method: "MANUAL_UPI_OR_CASH",
+        status: "pending",
+        createdAt: new Date().toISOString(),
+      });
+      setUpiQr(selectedCentre?.upiQrImageUrl ? { imageUrl: selectedCentre.upiQrImageUrl, source: "centre" } : null);
+      setPaymentLoading(false);
+      navigate("track");
+      return;
+    }
+
     try {
       let paymentData = null;
 
@@ -913,7 +952,7 @@ export default function App() {
       if (paymentMethod === "razorpay" && paymentData.razorpay?.orderId) {
         await loadRazorpayCheckout();
 
-        const options = {
+        const razorpay = new window.Razorpay({
           key: paymentData.razorpay.keyId,
           amount: paymentData.razorpay.amount,
           currency: paymentData.razorpay.currency,
@@ -953,22 +992,44 @@ export default function App() {
           modal: {
             ondismiss: function () {
               setPaymentError("Payment was not completed. You can retry from tracking page or pay at the shop.");
+              setPaymentLoading(false);
             },
           },
-        };
+        });
 
-        const razorpay = new window.Razorpay(options);
         razorpay.open();
       } else if (paymentMethod === "upi_qr") {
         navigate("track");
       }
     } catch (error) {
-      setPaymentError(error.message || "Could not initialize payment.");
+      setPaymentError(error.message || "Could not initialize payment. Manual payment is still available.");
     } finally {
       if (paymentMethod !== "razorpay") {
         setPaymentLoading(false);
       }
     }
+  }
+
+  function openPaymentRequest(existingOrder) {
+    if (!existingOrder) return;
+    const nextCentre = centres.find((centre) => (
+      centre.id === existingOrder.centreId ||
+      centre.code === existingOrder.centreCode ||
+      centre.name === existingOrder.centre
+    ));
+    setOrder(existingOrder);
+    if (nextCentre) setSelectedCentre(nextCentre);
+    setPendingPayment({
+      id: `manual-${existingOrder.backendId || existingOrder.id}`,
+      orderId: existingOrder.backendId || existingOrder.id,
+      amount: existingOrder.amount,
+      method: "MANUAL_UPI_OR_CASH",
+      status: "pending",
+      createdAt: new Date().toISOString(),
+    });
+    setUpiQr(nextCentre?.upiQrImageUrl ? { imageUrl: nextCentre.upiQrImageUrl } : null);
+    setPaymentError("");
+    navigate("track");
   }
 
   async function startRazorpayForExistingOrder(existingOrder = order) {
@@ -1001,6 +1062,7 @@ export default function App() {
         handler: async function (response) {
           try {
             setPaymentLoading(true);
+            setPaymentError("");
             const verifiedData = await apiRequest("/api/payments/razorpay/verify", {
               method: "POST",
               body: JSON.stringify({
@@ -1018,10 +1080,16 @@ export default function App() {
             setPendingPayment(null);
             setUpiQr(null);
           } catch (error) {
-             setPaymentError(error.message || "Payment verification failed.");
+            setPaymentError(error.message || "Payment verification failed.");
           } finally {
-             setPaymentLoading(false);
+            setPaymentLoading(false);
           }
+        },
+        modal: {
+          ondismiss: function () {
+            setPaymentError("Payment was not completed. You can retry or pay manually at the shop.");
+            setPaymentLoading(false);
+          },
         },
       });
 
@@ -1110,16 +1178,27 @@ export default function App() {
     const shouldPollTrack = page === "track" && order?.backendId;
     if (!shouldPollHistory && !shouldPollTrack) return;
 
-    const intervalMs = shouldPollHistory ? 25000 : 10000;
-    const interval = setInterval(async () => {
+    async function refreshVisibleOrders() {
       const nextOrders = await loadOrdersForSession(currentUser, centres);
       if (shouldPollTrack && order?.backendId) {
         const nextOrder = nextOrders.find((item) => item.backendId === order.backendId || item.id === order.id);
         if (nextOrder) setOrder(nextOrder);
       }
-    }, intervalMs);
+    }
 
-    return () => clearInterval(interval);
+    const intervalMs = shouldPollHistory ? 7000 : 3000;
+    const interval = setInterval(refreshVisibleOrders, intervalMs);
+    const refreshOnFocus = () => {
+      if (document.visibilityState === "visible") refreshVisibleOrders();
+    };
+    window.addEventListener("focus", refreshOnFocus);
+    document.addEventListener("visibilitychange", refreshOnFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", refreshOnFocus);
+      document.removeEventListener("visibilitychange", refreshOnFocus);
+    };
   }, [page, currentUser?.id, order?.backendId]);
 
   async function updateCentrePrice(field, value) {
@@ -1275,12 +1354,12 @@ export default function App() {
           />
           <Route path={ROUTES.desktopAgent} element={<DesktopAgentPage currentUser={currentUser} />} />
           <Route path={ROUTES.centre} element={<CentreCodePage centreCode={centreCode} setCentreCode={setCentreCode} handleCentreCode={handleCentreCode} centres={centres} selectCentreAndUpload={selectCentreAndUpload} lookupLoading={centreLookupLoading} lookupError={centreLookupError} />} />
-          <Route path={ROUTES.upload} element={<UploadPage selectedCentre={selectedCentre} documentFile={documentFile} setDocumentFile={setDocumentFile} documentFiles={documentFiles} setDocumentFiles={setDocumentFiles} documentName={documentName} setDocumentName={setDocumentName} pages={pages} setPages={setPages} selectedPages={selectedPages} setSelectedPages={setSelectedPages} copies={copies} setCopies={setCopies} colorType={colorType} setColorType={setColorType} sideType={sideType} setSideType={setSideType} paperSize={paperSize} setPaperSize={setPaperSize} pagesPerSheet={pagesPerSheet} setPagesPerSheet={setPagesPerSheet} watermark={watermark} setWatermark={setWatermark} watermarkType={watermarkType} setWatermarkType={setWatermarkType} watermarkText={watermarkText} setWatermarkText={setWatermarkText} watermarkPosition={watermarkPosition} setWatermarkPosition={setWatermarkPosition} watermarkOpacity={watermarkOpacity} setWatermarkOpacity={setWatermarkOpacity} watermarkFontSize={watermarkFontSize} setWatermarkFontSize={setWatermarkFontSize} watermarkRotation={watermarkRotation} setWatermarkRotation={setWatermarkRotation} pricePerPage={pricePerPage} estimatedSelectedPageCount={estimatedSelectedPageCount} totalAmount={totalAmount} backendPrice={backendPrice} preparePayment={preparePayment} paymentLoading={paymentLoading} paymentError={paymentError} navigate={navigate} />} />
+          <Route path={ROUTES.upload} element={<UploadPage selectedCentre={selectedCentre} documentFile={documentFile} setDocumentFile={setDocumentFile} documentFiles={documentFiles} setDocumentFiles={setDocumentFiles} documentName={documentName} setDocumentName={setDocumentName} pages={pages} setPages={setPages} selectedPages={selectedPages} setSelectedPages={setSelectedPages} copies={copies} setCopies={setCopies} colorType={colorType} setColorType={setColorType} sideType={sideType} setSideType={setSideType} paperSize={paperSize} setPaperSize={setPaperSize} pagesPerSheet={pagesPerSheet} setPagesPerSheet={setPagesPerSheet} orientation={orientation} setOrientation={setOrientation} printDpi={printDpi} setPrintDpi={setPrintDpi} scaleMode={scaleMode} setScaleMode={setScaleMode} marginMode={marginMode} setMarginMode={setMarginMode} watermark={watermark} setWatermark={setWatermark} watermarkType={watermarkType} setWatermarkType={setWatermarkType} watermarkText={watermarkText} setWatermarkText={setWatermarkText} watermarkPosition={watermarkPosition} setWatermarkPosition={setWatermarkPosition} watermarkOpacity={watermarkOpacity} setWatermarkOpacity={setWatermarkOpacity} watermarkFontSize={watermarkFontSize} setWatermarkFontSize={setWatermarkFontSize} watermarkRotation={watermarkRotation} setWatermarkRotation={setWatermarkRotation} pricePerPage={pricePerPage} estimatedSelectedPageCount={estimatedSelectedPageCount} totalAmount={totalAmount} backendPrice={backendPrice} preparePayment={preparePayment} paymentLoading={paymentLoading} paymentError={paymentError} navigate={navigate} />} />
           <Route
             path={ROUTES.payment}
             element={
               selectedCentre && order ? (
-                <PaymentPage selectedCentre={selectedCentre} documentName={documentName} pages={pages} copies={copies} backendPrice={backendPrice} order={order} handlePayment={handlePayment} createUpiQr={createUpiQrForExistingOrder} paymentLoading={paymentLoading} paymentError={paymentError} />
+                <PaymentPage selectedCentre={selectedCentre} documentName={documentName} pages={pages} copies={copies} backendPrice={backendPrice} order={order} paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod} handlePayment={handlePayment} paymentLoading={paymentLoading} paymentError={paymentError} />
               ) : (
                 <RouteNotice title="Payment Not Ready" message="Please select a centre and upload a document first." actionLabel="Select Centre" onAction={() => navigate("centre")} />
               )
@@ -1294,6 +1373,8 @@ export default function App() {
                 lastUpdatedAt={lastOrdersUpdatedAt}
                 pendingPayment={pendingPayment}
                 upiQr={upiQr}
+                centreUpiId={selectedCentre?.upiId}
+                centreUpiQrImageUrl={selectedCentre?.upiQrImageUrl}
                 onPayOnline={startRazorpayForExistingOrder}
                 onCreateUpiQr={createUpiQrForExistingOrder}
                 onSimulateVerifiedPayment={demoPaymentEnabled ? handleVerifyDemoPayment : null}
@@ -1302,7 +1383,7 @@ export default function App() {
               />
             }
           />
-            <Route path={ROUTES.history} element={<HistoryPage orders={orders} currentUser={currentUser} lastUpdatedAt={lastOrdersUpdatedAt} />} />
+            <Route path={ROUTES.history} element={<HistoryPage orders={orders} currentUser={currentUser} lastUpdatedAt={lastOrdersUpdatedAt} onOpenPayment={openPaymentRequest} />} />
             <Route path="*" element={<Navigate to={ROUTES.home} replace />} />
           </Routes>
         </RouteErrorBoundary>

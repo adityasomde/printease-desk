@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Activity, Printer, FileText, CheckCircle, Users, IndianRupee, Calendar, CalendarDays, UserPlus } from "lucide-react";
+import { Activity, Printer, FileText, CheckCircle, Users, IndianRupee, Calendar, CalendarDays, UserPlus, Eye, Clock } from "lucide-react";
 import { apiRequest } from "../services/api";
 
 function StatCard({ title, value, icon: Icon, color, delay }) {
@@ -30,6 +30,8 @@ export default function PlatformStatsPage() {
     totalRevenue: 0,
     totalPrinters: 0,
     totalVisits: 0,
+    totalPageViews: 0,
+    totalSecondsSpent: 0,
     liveUsers: 0,
     visitsToday: 0,
     visitsThisMonth: 0,
@@ -154,6 +156,20 @@ export default function PlatformStatsPage() {
           icon={UserPlus}
           color="bg-pink-500"
           delay={900}
+        />
+        <StatCard
+          title="Total Page Views"
+          value={stats.totalPageViews}
+          icon={Eye}
+          color="bg-teal-500"
+          delay={1000}
+        />
+        <StatCard
+          title="Total Time Spent (Hours)"
+          value={(stats.totalSecondsSpent / 3600).toFixed(1)}
+          icon={Clock}
+          color="bg-violet-500"
+          delay={1100}
         />
       </div>
     </div>

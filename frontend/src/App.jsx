@@ -41,7 +41,7 @@ const ROUTES = {
   payment: "/payment",
   track: "/track",
   history: "/history",
-  platformStats: "/_system/global-metrics",
+  platformStats: "/platform-metrics-dashboard",
 };
 
 function getPageFromPath(pathname) {

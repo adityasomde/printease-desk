@@ -88,8 +88,8 @@ export default function UploadPage({
           </p>
         )}
 
-        <div className="mt-6 grid gap-4 md:grid-cols-2">
-          <label className="cursor-pointer rounded-2xl border border-dashed bg-slate-50 p-6 text-center hover:bg-slate-100 md:col-span-2">
+        <div className="mt-6 grid gap-4 grid-cols-2 md:grid-cols-2">
+          <label className="cursor-pointer rounded-2xl border border-dashed bg-slate-50 p-6 text-center hover:bg-slate-100 col-span-2 md:col-span-2">
             <input type="file" accept="application/pdf" multiple onChange={handleFileChange} className="hidden" />
             {documentFile ? <FileText className="mx-auto mb-3" size={36} /> : <Upload className="mx-auto mb-3" size={36} />}
             <p className="font-semibold">{selectedFileLabel || "Choose one or more PDFs"}</p>
@@ -97,7 +97,7 @@ export default function UploadPage({
           </label>
 
           {selectedFileCount > 1 && (
-            <div className="rounded-2xl border bg-white p-4 text-sm md:col-span-2">
+            <div className="rounded-2xl border bg-white p-4 text-sm col-span-2 md:col-span-2">
               <p className="font-semibold">Files in this order</p>
               <div className="mt-3 grid gap-2">
                 {documentFiles.map((file) => (
@@ -110,7 +110,7 @@ export default function UploadPage({
             </div>
           )}
 
-          <label className="grid gap-2 text-sm font-semibold text-slate-600 md:col-span-2">
+          <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-2 md:col-span-2">
             Order document name
             <input value={documentName} onChange={(e) => setDocumentName(e.target.value)} placeholder="Assignment.pdf" className="rounded-2xl border px-4 py-3 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
           </label>
@@ -192,12 +192,12 @@ export default function UploadPage({
               <option value="none">None</option>
             </select>
           </label>
-          <label className="flex items-center gap-3 rounded-2xl border px-4 py-3 md:col-span-2">
+          <label className="flex items-center gap-3 rounded-2xl border px-4 py-3 col-span-2 md:col-span-2">
             <input type="checkbox" checked={watermark} onChange={(e) => setWatermark(e.target.checked)} />
             Add watermark to printable PDF
           </label>
           {watermark && (
-            <div className="grid gap-3 rounded-2xl border bg-slate-50 p-4 md:col-span-2 md:grid-cols-2">
+            <div className="grid gap-3 rounded-2xl border bg-slate-50 p-4 col-span-2 md:col-span-2 md:grid-cols-2">
               <select value={watermarkType} onChange={(e) => setWatermarkType(e.target.value)} className="rounded-2xl border px-4 py-3">
                 <option value="order_code">Order code</option>
                 <option value="pickup_code">Pickup code</option>
@@ -230,43 +230,77 @@ export default function UploadPage({
         </div>
       </Card>
 
-      <Card>
-        <h3 className="text-xl font-bold">Price Summary</h3>
-        <div className="mt-4 space-y-3 text-sm">
-          <Row label="Original Pages" value={backendPrice?.originalPageCount || pages} />
-          <Row label="Selected Pages" value={backendPrice?.selectedPageCount || selectedPages || "All"} />
-          <Row label="Copies" value={copies} />
-          <Row label="Printable Pages" value={backendPrice?.printablePageCount || Number(estimatedSelectedPageCount || pages || 0) * Number(copies || 0)} />
-          <Row label="Sheets" value={backendPrice?.sheetCount || "-"} />
-          <Row label="Print Type" value={colorType === "bw" ? "B/W" : "Color"} />
-          <Row label="Side" value={sideType} />
-          <Row label="Orientation" value={orientation} />
-          <Row label="Pages/Sheet" value={pagesPerSheet} />
-          <Row label="Quality" value={`${printDpi} DPI`} />
-          <Row label="Scale" value={scaleMode.replaceAll("_", " ")} />
-          <Row label="Margins" value={marginMode} />
-          <Row label="Watermark" value={watermark ? "Yes" : "No"} />
-          <Row label={backendPrice ? "Backend Rate" : "Estimated Rate"} value={`₹${backendPrice?.pricePerPage ?? pricePerPage ?? 0}`} />
-          {backendPrice?.files?.map((file) => (
-            <Row key={file.documentId || file.fileName} label={file.fileName || "File"} value={`₹${file.totalAmount}`} />
-          ))}
-          <hr />
-          <div className="flex items-center justify-between text-lg font-bold">
-            <span>{backendPrice ? "Backend Total" : "Estimated Total"}</span>
-            <span className="flex items-center"><IndianRupee size={18} />{backendPrice?.totalAmount ?? totalAmount}</span>
+      <div className="fixed bottom-[68px] left-0 right-0 z-40 border-t bg-white p-4 pb-3 shadow-[0_-8px_15px_rgba(0,0,0,0.08)] md:static md:bottom-auto md:z-auto md:block md:border-t-0 md:bg-transparent md:p-0 md:shadow-none">
+        <Card className="rounded-none border-0 p-0 shadow-none md:rounded-2xl md:border md:p-6 md:shadow-sm">
+          
+          <div className="mb-3 flex items-center justify-between md:mb-0 md:block">
+            <h3 className="hidden text-xl font-bold md:block">Price Summary</h3>
+            
+            <div className="flex w-full items-center justify-between font-bold md:hidden">
+              <span className="text-sm text-slate-500">{backendPrice ? "Total" : "Est. Total"}</span>
+              <span className="flex items-center text-xl text-emerald-600"><IndianRupee size={20} />{backendPrice?.totalAmount ?? totalAmount}</span>
+            </div>
           </div>
-        </div>
 
-        {!selectedCentre && (
-          <button onClick={() => navigate("centre")} className="mt-6 w-full rounded-2xl border bg-white px-4 py-3 font-semibold hover:bg-slate-50">
-            Select Centre First
-          </button>
-        )}
+          <details className="group mb-3 md:hidden">
+            <summary className="flex cursor-pointer items-center text-xs font-semibold text-slate-500 outline-none">
+              <span>View Price Details</span>
+              <span className="ml-1 transition-transform group-open:rotate-180">▼</span>
+            </summary>
+            <div className="mt-3 max-h-[30vh] space-y-2 overflow-y-auto pb-2 text-xs">
+              <Row label="Original Pages" value={backendPrice?.originalPageCount || pages} />
+              <Row label="Selected Pages" value={backendPrice?.selectedPageCount || selectedPages || "All"} />
+              <Row label="Copies" value={copies} />
+              <Row label="Printable Pages" value={backendPrice?.printablePageCount || Number(estimatedSelectedPageCount || pages || 0) * Number(copies || 0)} />
+              <Row label="Sheets" value={backendPrice?.sheetCount || "-"} />
+              <Row label="Print Type" value={colorType === "bw" ? "B/W" : "Color"} />
+              <Row label="Side" value={sideType} />
+              <Row label="Pages/Sheet" value={pagesPerSheet} />
+              <Row label={backendPrice ? "Backend Rate" : "Estimated Rate"} value={`₹${backendPrice?.pricePerPage ?? pricePerPage ?? 0}`} />
+              {backendPrice?.files?.map((file) => (
+                <Row key={file.documentId || file.fileName} label={file.fileName || "File"} value={`₹${file.totalAmount}`} />
+              ))}
+            </div>
+          </details>
 
-        <button onClick={preparePayment} disabled={!selectedCentre || !selectedFileCount || paymentLoading} className="mt-3 w-full rounded-2xl bg-slate-900 px-4 py-3 font-semibold text-white disabled:opacity-40">
-          {paymentLoading ? "Calculating final price..." : "Continue to Payment"}
-        </button>
-      </Card>
+          <div className="hidden space-y-3 text-sm md:block md:mt-4">
+            <Row label="Original Pages" value={backendPrice?.originalPageCount || pages} />
+            <Row label="Selected Pages" value={backendPrice?.selectedPageCount || selectedPages || "All"} />
+            <Row label="Copies" value={copies} />
+            <Row label="Printable Pages" value={backendPrice?.printablePageCount || Number(estimatedSelectedPageCount || pages || 0) * Number(copies || 0)} />
+            <Row label="Sheets" value={backendPrice?.sheetCount || "-"} />
+            <Row label="Print Type" value={colorType === "bw" ? "B/W" : "Color"} />
+            <Row label="Side" value={sideType} />
+            <Row label="Orientation" value={orientation} />
+            <Row label="Pages/Sheet" value={pagesPerSheet} />
+            <Row label="Quality" value={`${printDpi} DPI`} />
+            <Row label="Scale" value={scaleMode.replaceAll("_", " ")} />
+            <Row label="Margins" value={marginMode} />
+            <Row label="Watermark" value={watermark ? "Yes" : "No"} />
+            <Row label={backendPrice ? "Backend Rate" : "Estimated Rate"} value={`₹${backendPrice?.pricePerPage ?? pricePerPage ?? 0}`} />
+            {backendPrice?.files?.map((file) => (
+              <Row key={file.documentId || file.fileName} label={file.fileName || "File"} value={`₹${file.totalAmount}`} />
+            ))}
+            <hr />
+            <div className="flex items-center justify-between text-lg font-bold">
+              <span>{backendPrice ? "Backend Total" : "Estimated Total"}</span>
+              <span className="flex items-center"><IndianRupee size={18} />{backendPrice?.totalAmount ?? totalAmount}</span>
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            {!selectedCentre && (
+              <button onClick={() => navigate("centre")} className="w-1/3 rounded-2xl border bg-white px-3 py-3 text-sm font-semibold hover:bg-slate-50 md:mt-6 md:w-full md:px-4 md:text-base">
+                Select Centre
+              </button>
+            )}
+
+            <button onClick={preparePayment} disabled={!selectedCentre || !selectedFileCount || paymentLoading} className="w-full flex-1 rounded-2xl bg-slate-900 px-4 py-3 font-semibold text-white disabled:opacity-40 md:mt-3">
+              {paymentLoading ? "Calculating..." : "Continue to Payment"}
+            </button>
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }

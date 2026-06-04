@@ -1342,6 +1342,84 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle("backend:health", () => checkBackendHealth());
+  ipcMain.handle("desktop:open-external-url", async (_event, url) => {
+    if (!url || typeof url !== "string") {
+      return { success: false, message: "URL is required." };
+    }
+
+    try {
+      const parsedUrl = new URL(url);
+      if (parsedUrl.protocol !== "https:") {
+        return { success: false, message: "Only HTTPS links can be opened externally." };
+      }
+
+      await shell.openExternal(parsedUrl.toString());
+      return { success: true };
+    } catch (error) {
+      return { success: false, message: error?.message || "Could not open link." };
+    }
+  });
+  ipcMain.handle("desktop:download-url", async (_event, payload = {}) => {
+    const url = typeof payload === "string" ? payload : payload.url;
+
+    if (!url || typeof url !== "string") {
+      return { success: false, message: "Download URL is required." };
+    }
+
+    try {
+      const parsedUrl = new URL(url);
+      if (parsedUrl.protocol !== "https:") {
+        return { success: false, message: "Only HTTPS files can be downloaded." };
+      }
+
+      if (!mainWindow || mainWindow.isDestroyed()) {
+        return { success: false, message: "Desktop window is not ready for download." };
+      }
+
+      mainWindow.webContents.downloadURL(parsedUrl.toString());
+      return { success: true };
+    } catch (error) {
+      return { success: false, message: error?.message || "Could not start download." };
+    }
+  });
+  ipcMain.handle("desktop:print-html", async (_event, payload = {}) => {
+    const html = typeof payload.html === "string" ? payload.html : "";
+    const title = typeof payload.title === "string" ? payload.title.slice(0, 120) : "PrintEase";
+
+    if (!html || html.length > 250000) {
+      return { success: false, message: "Printable HTML is missing or too large." };
+    }
+
+    const printWindow = new BrowserWindow({
+      width: 900,
+      height: 1100,
+      show: false,
+      title,
+      parent: mainWindow || undefined,
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+      },
+    });
+
+    try {
+      await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+      await new Promise((resolve, reject) => {
+        printWindow.webContents.print({ silent: false, printBackground: true }, (success, failureReason) => {
+          if (success) resolve();
+          else reject(new Error(failureReason || "Print was cancelled or failed."));
+        });
+      });
+      return { success: true };
+    } catch (error) {
+      return { success: false, message: error?.message || "Could not print QR." };
+    } finally {
+      if (!printWindow.isDestroyed()) {
+        printWindow.close();
+      }
+    }
+  });
   ipcMain.handle("printers:list", () => refreshLocalPrinterResult("printers:list"));
   ipcMain.handle("printers:select", selectDesktopPrinter);
   ipcMain.handle("printers:diagnose", async () => {

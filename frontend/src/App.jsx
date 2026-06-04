@@ -1609,6 +1609,7 @@ export default function App() {
                   startRegister={startRegister}
                   startDirectUpload={startDirectUpload}
                   selectCentreAndUpload={selectCentreAndUpload}
+                  selectCentreByCode={selectCentreByCode}
                 />
               }
             />

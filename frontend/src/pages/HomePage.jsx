@@ -1,9 +1,21 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 
-import { User, Upload, Store, Plus, Building2, Search, Download, QrCode } from "lucide-react";
+import { User, Upload, Store, Plus, Building2, Search, Download, QrCode, X } from "lucide-react";
 import Card from "../components/Card";
 import CentrePriceCard from "../components/CentrePriceCard";
+
+function extractCentreCodeFromQr(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  try {
+    const url = new URL(raw);
+    return url.searchParams.get("centre") || url.searchParams.get("code") || url.searchParams.get("centreCode") || "";
+  } catch {
+    return raw;
+  }
+}
 
 export default function HomePage({
   currentUser,
@@ -13,9 +25,80 @@ export default function HomePage({
   startRegister,
   startDirectUpload,
   selectCentreAndUpload,
+  selectCentreByCode,
 }) {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [centreSearch, setCentreSearch] = useState("");
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const scanFrameRef = useRef(0);
+
+  function stopScanner() {
+    if (scanFrameRef.current) {
+      cancelAnimationFrame(scanFrameRef.current);
+      scanFrameRef.current = 0;
+    }
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+
+    setScannerOpen(false);
+  }
+
+  async function startScanner() {
+    if (!("BarcodeDetector" in window)) {
+      alert("QR camera scan is not supported in this browser. Use your phone camera or search by centre name/code.");
+      return;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      alert("Camera access is not available. Search by centre name/code instead.");
+      return;
+    }
+
+    try {
+      setScannerOpen(true);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+        audio: false,
+      });
+      streamRef.current = stream;
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+
+      const detector = new window.BarcodeDetector({ formats: ["qr_code"] });
+      const scan = async () => {
+        if (!videoRef.current || !streamRef.current) return;
+
+        try {
+          const codes = await detector.detect(videoRef.current);
+          const code = extractCentreCodeFromQr(codes[0]?.rawValue);
+          if (code) {
+            stopScanner();
+            await selectCentreByCode(code);
+            return;
+          }
+        } catch {
+          // Continue scanning
+        }
+
+        scanFrameRef.current = requestAnimationFrame(scan);
+      };
+
+      scanFrameRef.current = requestAnimationFrame(scan);
+    } catch (error) {
+      stopScanner();
+      alert(error.message || "Could not open camera. Search by centre name/code instead.");
+    }
+  }
+
+  useEffect(() => stopScanner, []);
 
   useEffect(() => {
     const handler = (e) => {
@@ -104,12 +187,14 @@ export default function HomePage({
 
             <div className="grid gap-3 sm:grid-cols-2">
               <button
-                onClick={() => navigate("centre")}
-                className="flex min-h-16 items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 font-bold text-white shadow-sm hover:bg-slate-800"
+                onClick={startScanner}
+                className="group relative overflow-hidden flex min-h-[160px] flex-col items-center justify-center gap-3 rounded-2xl border bg-white px-4 py-3 font-bold text-slate-950 shadow-sm hover:bg-slate-50"
               >
-                <QrCode size={20} />
-                <Search size={18} />
-                Scan / Select Centre
+                <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden opacity-30">
+                   <div className="absolute left-[10%] h-[3px] w-[80%] rounded-full bg-emerald-500 shadow-[0_0_12px_3px_rgba(16,185,129,0.7)] animate-scan" />
+                </div>
+                <QrCode size={40} className="z-10 text-slate-950" />
+                <span className="z-10 text-center text-sm">Scan / Select Centre</span>
               </button>
 
               <button
@@ -127,15 +212,12 @@ export default function HomePage({
           <Card>
             <h3 className="text-xl font-bold">Welcome back, {currentUser.name || "PrintEase user"}</h3>
             <p className="mt-2 text-sm text-slate-600">
-              Download our app or open your {currentUser.role === "hub" ? "hub dashboard" : "orders"}.
+              Download our app to get started.
             </p>
             <div className="mt-5 grid gap-3">
               <button onClick={handleDownloadApp} className="flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-4 font-semibold text-white transition hover:bg-slate-800">
                 <Download size={20} />
                 {isAndroid ? "Install Android App" : "Download Desktop App"}
-              </button>
-              <button onClick={() => navigate(currentUser.role === "hub" ? "hubDashboard" : "userDashboard")} className="rounded-2xl border bg-white px-5 py-4 font-semibold hover:bg-slate-50">
-                {currentUser.role === "hub" ? "Open Hub Dashboard" : "My Orders"}
               </button>
             </div>
           </Card>
@@ -185,7 +267,7 @@ export default function HomePage({
                 className="w-full rounded-2xl border bg-white py-3 pl-11 pr-4 text-sm outline-none focus:ring-2 focus:ring-slate-300"
               />
             </label>
-            <button onClick={() => navigate("centre")} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white">
+            <button onClick={startScanner} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white">
               <QrCode size={17} />
               Scan / Code
             </button>
@@ -203,6 +285,23 @@ export default function HomePage({
           )}
         </div>
       </Card>
+
+      {scannerOpen && (
+        <div className="fixed inset-0 z-[80] bg-slate-950/90 p-4 text-white">
+          <div className="mx-auto flex max-w-lg flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-bold">Scan centre QR</h3>
+                <p className="text-sm text-slate-300">Point camera at the PrintEase centre QR.</p>
+              </div>
+              <button onClick={stopScanner} className="rounded-full bg-white/10 p-2">
+                <X size={22} />
+              </button>
+            </div>
+            <video ref={videoRef} playsInline muted className="aspect-[3/4] w-full rounded-3xl border border-white/20 bg-black object-cover" />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

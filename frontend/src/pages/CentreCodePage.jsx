@@ -25,7 +25,6 @@ export default function CentreCodePage({
   lookupLoading,
   lookupError,
 }) {
-  const [centreSearch, setCentreSearch] = useState("");
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scannerMessage, setScannerMessage] = useState("");
   const videoRef = useRef(null);
@@ -33,7 +32,7 @@ export default function CentreCodePage({
   const scanFrameRef = useRef(0);
 
   const filteredCentres = useMemo(() => {
-    const query = centreSearch.trim().toLowerCase();
+    const query = String(centreCode || "").trim().toLowerCase();
     if (!query) return centres;
 
     return centres.filter((centre) =>
@@ -43,7 +42,7 @@ export default function CentreCodePage({
         .toLowerCase()
         .includes(query)
     );
-  }, [centreSearch, centres]);
+  }, [centreCode, centres]);
 
   function stopScanner() {
     if (scanFrameRef.current) {
@@ -115,90 +114,89 @@ export default function CentreCodePage({
   useEffect(() => stopScanner, []);
 
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
-      <Card>
-        <h2 className="text-2xl font-bold">Scan or Select Printing Centre</h2>
-        <p className="mt-2 text-slate-600">Scan the shop QR, enter the centre code, or search by shop name.</p>
+    <div className="space-y-8">
+      <Card className="text-center sm:text-left sm:p-8">
+        <h2 className="text-3xl font-bold text-slate-900">Find a Printing Centre</h2>
 
-        <div className="mt-6 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
-          <input
-            value={centreCode}
-            onChange={(e) => setCentreCode(e.target.value)}
-            placeholder="Enter centre code, like 2045"
-            className="w-full rounded-2xl border px-4 py-3 outline-none focus:ring-2 focus:ring-slate-300"
-          />
-          <button
-            onClick={handleCentreCode}
-            disabled={lookupLoading}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
-          >
-            <Search size={20} />
-            Find
-          </button>
-        </div>
-        {lookupError && <p className="mt-3 text-sm font-medium text-red-600">{lookupError}</p>}
-        {lookupLoading && <p className="mt-3 text-sm text-slate-500">Checking centre code...</p>}
-
-        <div className="mt-6 rounded-2xl border bg-slate-50 p-5 text-center">
-          <QrCode className="mx-auto text-slate-900" size={70} />
-          <p className="mt-3 font-semibold text-slate-800">Scan centre QR</p>
-          <p className="text-sm text-slate-500">Camera scan works on supported mobile browsers. Phone camera links open the same upload page.</p>
+        <div className="mt-6 grid gap-6 md:grid-cols-[45%_1fr]">
           <button
             type="button"
             onClick={startScanner}
-            className="mt-4 inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 font-semibold text-white"
+            className="group relative overflow-hidden flex h-full min-h-[185px] w-full flex-col items-center justify-center gap-3 rounded-3xl border-2 border-slate-200 bg-slate-50 p-6 text-slate-700 transition hover:bg-slate-100 hover:border-slate-300"
+            title="Scan QR Code"
           >
-            <Camera size={18} />
-            Open Scanner
+            <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden opacity-30">
+               <div className="absolute left-[10%] h-[3px] w-[80%] rounded-full bg-emerald-500 shadow-[0_0_12px_3px_rgba(16,185,129,0.7)] animate-scan" />
+            </div>
+            <QrCode size={54} className="z-10 text-slate-900" />
+            <span className="z-10 font-bold text-lg">Scan QR</span>
           </button>
-          {scannerMessage && <p className="mt-3 text-sm font-medium text-amber-700">{scannerMessage}</p>}
+
+          <div className="flex flex-col gap-4 justify-center">
+            <div className="relative w-full">
+              <Search className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={22} />
+              <input
+                value={centreCode}
+                onChange={(e) => setCentreCode(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    handleCentreCode();
+                  }
+                }}
+                placeholder="Search by name or code (e.g. 2045)"
+                className="w-full rounded-2xl border bg-slate-50 py-4 pl-14 pr-6 text-lg outline-none focus:bg-white focus:ring-2 focus:ring-slate-300 transition-all"
+              />
+            </div>
+            <button
+              onClick={handleCentreCode}
+              disabled={lookupLoading || !String(centreCode).trim()}
+              className="inline-flex w-full sm:w-fit items-center justify-center gap-2 rounded-2xl bg-slate-900 px-8 py-4 font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50"
+            >
+              Search Online
+            </button>
+          </div>
         </div>
 
-        {scannerOpen && (
-          <div className="fixed inset-0 z-[80] bg-slate-950/90 p-4 text-white">
-            <div className="mx-auto flex max-w-lg flex-col gap-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-xl font-bold">Scan centre QR</h3>
-                  <p className="text-sm text-slate-300">Point camera at the PrintEase centre QR.</p>
-                </div>
-                <button onClick={stopScanner} className="rounded-full bg-white/10 p-2">
-                  <X size={22} />
-                </button>
-              </div>
-              <video ref={videoRef} playsInline muted className="aspect-[3/4] w-full rounded-3xl border border-white/20 bg-black object-cover" />
-            </div>
-          </div>
-        )}
+        {lookupError && <p className="mt-4 text-sm font-medium text-red-600">{lookupError}</p>}
+        {lookupLoading && <p className="mt-4 text-sm text-slate-500">Checking centre code online...</p>}
+        {scannerMessage && <p className="mt-4 text-sm font-medium text-amber-700">{scannerMessage}</p>}
       </Card>
 
-      <Card>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h3 className="text-xl font-bold">Centre List With Prices</h3>
-            <p className="text-sm text-slate-600">Frequently used centres appear first.</p>
-          </div>
-          <label className="relative block sm:w-72">
-            <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input
-              value={centreSearch}
-              onChange={(event) => setCentreSearch(event.target.value)}
-              placeholder="Search name or code"
-              className="w-full rounded-2xl border bg-white py-3 pl-11 pr-4 text-sm outline-none focus:ring-2 focus:ring-slate-300"
-            />
-          </label>
+      <div>
+        <div className="mb-4">
+          <h3 className="text-xl font-bold">Centre List With Prices</h3>
+          <p className="text-sm text-slate-600">Frequently used centres appear first.</p>
         </div>
-        <div className="mt-4 space-y-3">
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {filteredCentres.map((centre) => (
             <CentrePriceCard key={centre.id} centre={centre} onUpload={() => selectCentreAndUpload(centre)} />
           ))}
-          {filteredCentres.length === 0 && (
-            <div className="rounded-2xl border border-dashed bg-slate-50 p-6 text-center text-sm text-slate-500">
-              No centre matches this search.
-            </div>
-          )}
         </div>
-      </Card>
+        {filteredCentres.length === 0 && (
+          <div className="mt-6 rounded-3xl border border-dashed bg-slate-50 p-12 text-center">
+            <Search className="mx-auto text-slate-400 mb-3" size={40} />
+            <p className="text-lg font-medium text-slate-700">No centre matches locally</p>
+            <p className="text-sm text-slate-500 mt-1">If you have an exact code, click "Search Online".</p>
+          </div>
+        )}
+      </div>
+
+      {scannerOpen && (
+        <div className="fixed inset-0 z-[80] bg-slate-950/90 p-4 text-white">
+          <div className="mx-auto flex max-w-lg flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-bold">Scan centre QR</h3>
+                <p className="text-sm text-slate-300">Point camera at the PrintEase centre QR.</p>
+              </div>
+              <button onClick={stopScanner} className="rounded-full bg-white/10 p-2">
+                <X size={22} />
+              </button>
+            </div>
+            <video ref={videoRef} playsInline muted className="aspect-[3/4] w-full rounded-3xl border border-white/20 bg-black object-cover" />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -162,7 +162,7 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
   const [orderSearch, setOrderSearch] = useState("");
   const [centreLinkCopied, setCentreLinkCopied] = useState(false);
-  const [autoPrintAfterCashByOrder, setAutoPrintAfterCashByOrder] = useState({});
+  const [globalAutoPrintAfterCash, setGlobalAutoPrintAfterCash] = useState(false);
   const ordersForHub = hubOrders || [];
   const centreUploadUrl =
     typeof window !== "undefined" && currentHub?.code
@@ -320,7 +320,7 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
 
   async function markCashCollected(order) {
     const orderId = order.backendId || order.id;
-    const autoPrintAfterCollection = autoPrintAfterCashByOrder[orderId] !== false;
+    const autoPrintAfterCollection = globalAutoPrintAfterCash;
     setCollectingOrderId(orderId);
     setAgentError("");
     setPairingMessage("");
@@ -745,7 +745,19 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
                 <th className="w-16 px-2 py-3">Amount</th>
                 <th className="w-24 px-2 py-3">Payment</th>
                 <th className="w-32 px-2 py-3">Update</th>
-                <th className="w-36 px-2 py-3">Agent</th>
+                <th className="w-48 px-2 py-3">
+                  <div className="flex items-center gap-2">
+                    <span>Agent</span>
+                    <label className="flex items-center gap-1 font-normal normal-case text-xs">
+                      <input
+                        type="checkbox"
+                        checked={globalAutoPrintAfterCash}
+                        onChange={(event) => setGlobalAutoPrintAfterCash(event.target.checked)}
+                      />
+                      Auto-print (Cash)
+                    </label>
+                  </div>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -753,7 +765,6 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
                 const job = jobByOrderId.get(item.backendId);
                 const orderId = item.backendId || item.id;
                 const sendEnabled = canSendToAgent(item);
-                const autoPrintAfterCash = autoPrintAfterCashByOrder[orderId] !== false;
                 const paymentPending = isPaymentPending(item);
                 const paymentVerified = isPaymentVerified(item);
                 const orderCancelled = isOrderCancelled(item);
@@ -842,27 +853,13 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
                           </p>
                         )}
                         {paymentPending && (
-                          <>
-                            <label className="flex items-start gap-2 rounded-xl border border-slate-200 bg-white px-2 py-2 text-xs font-semibold text-slate-700">
-                              <input
-                                type="checkbox"
-                                checked={autoPrintAfterCash}
-                                onChange={(event) => setAutoPrintAfterCashByOrder((prev) => ({
-                                  ...prev,
-                                  [orderId]: event.target.checked,
-                                }))}
-                                className="mt-0.5"
-                              />
-                              <span>Print automatically after cash collected</span>
-                            </label>
-                            <button
-                              onClick={() => markCashCollected(item)}
-                              disabled={collectingOrderId === orderId}
-                              className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-emerald-200 px-2 py-1.5 font-semibold text-emerald-700 disabled:opacity-50"
-                            >
-                              <IndianRupee size={14} /> {collectingOrderId === orderId ? "Saving" : "Cash Collected"}
-                            </button>
-                          </>
+                          <button
+                            onClick={() => markCashCollected(item)}
+                            disabled={collectingOrderId === orderId || normalizeStatus(item.paymentStatus) === "draft"}
+                            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-emerald-200 px-2 py-1.5 font-semibold text-emerald-700 disabled:opacity-50"
+                          >
+                            <IndianRupee size={14} /> {collectingOrderId === orderId ? "Saving" : "Cash Collected"}
+                          </button>
                         )}
                         {sendEnabled && routeableAgents.length > 0 && (
                           <button

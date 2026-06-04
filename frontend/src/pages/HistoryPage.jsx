@@ -83,7 +83,7 @@ export default function HistoryPage({ orders, currentUser, lastUpdatedAt, onOpen
                     ) : (
                       <span className="text-xs text-slate-500">Login required</span>
                     )}
-                    {isPaymentPending(item) && onOpenPayment && (
+                    {isPaymentPending(item) && String(item.status).toLowerCase() !== "cancelled" && onOpenPayment && (
                       <button type="button" onClick={() => onOpenPayment(item)} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 font-semibold text-white">
                         Open Payment
                       </button>

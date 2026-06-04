@@ -21,6 +21,9 @@ try {
     printer: printerBridge,
     getDesktopStatus: () => ipcRenderer.invoke("desktop:status"),
     checkBackendHealth: () => ipcRenderer.invoke("backend:health"),
+    openExternalUrl: (url) => ipcRenderer.invoke("desktop:open-external-url", url),
+    downloadUrl: (payload) => ipcRenderer.invoke("desktop:download-url", payload),
+    printHtml: (payload) => ipcRenderer.invoke("desktop:print-html", payload),
     listPrinters: () => ipcRenderer.invoke("printers:list"),
     selectPrinter: (payload) => ipcRenderer.invoke("printers:select", payload),
     onPrintersUpdated: (callback) => {

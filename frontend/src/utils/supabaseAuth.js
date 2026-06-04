@@ -3,7 +3,7 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 
 function requireSupabaseConfig() {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    throw new Error("Supabase Auth is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.");
+    throw new Error("Google login is not enabled yet.");
   }
 }
 

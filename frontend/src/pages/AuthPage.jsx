@@ -1,4 +1,4 @@
-import { Eye, EyeOff, Lock, Mail, Phone, QrCode, ShieldCheck, Sparkles, Store, User } from "lucide-react";
+import { Eye, EyeOff, Lock, Mail, QrCode, ShieldCheck, Sparkles, Store, User } from "lucide-react";
 import Card from "../components/Card";
 import Input from "../components/Input";
 
@@ -58,19 +58,19 @@ export default function AuthPage({
           </h2>
           <p className="mt-2 text-sm text-slate-600">
             {isProfile
-              ? "Choose your PrintEase ID, role, and optional contact details after secure Supabase login."
-              : "Login with Google or email. Your username is your PrintEase ID."}
+              ? "Choose your PrintEase ID, role, and optional contact details."
+              : "Login with your username or email. Your username is your PrintEase ID."}
           </p>
         </div>
 
         {!isProfile && (
           <button
             type="button"
-            disabled={authLoading}
+            disabled
             onClick={handleGoogleLogin}
-            className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl border bg-white px-4 py-3 font-semibold hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
+            className="mt-6 flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-2xl border bg-slate-50 px-4 py-3 font-semibold text-slate-400"
           >
-            <ShieldCheck size={18} /> Continue with Google
+            <ShieldCheck size={18} /> Continue with Google - Coming later
           </button>
         )}
 
@@ -187,11 +187,11 @@ export default function AuthPage({
             <div className="rounded-2xl border bg-white p-4">
               <p className="text-sm font-semibold text-slate-800">Contact details</p>
               <p className="mt-1 text-xs text-slate-500">
-                Email is used for password login. Phone is optional for shop/order contact.
+                Email is optional and unverified. Username is enough for password login.
               </p>
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <div className="mt-4 grid gap-4">
                 <Input
-                  label={isRegister ? "Email address" : "Email address (optional)"}
+                  label="Email address (optional)"
                   icon={<Mail size={18} />}
                   value={email}
                   setValue={setEmail}
@@ -200,18 +200,7 @@ export default function AuthPage({
                   name="email"
                   autoComplete="email"
                   disabled={authLoading || isProfile}
-                  helperText={isRegister ? "Required for Email + Password login." : "Google accounts can use the Google email already verified by Supabase."}
-                />
-                <Input
-                  label="Phone (optional)"
-                  icon={<Phone size={18} />}
-                  value={mobile}
-                  setValue={setMobile}
-                  placeholder="Optional contact number"
-                  name="phone"
-                  inputMode="tel"
-                  autoComplete="tel"
-                  disabled={authLoading}
+                  helperText="Optional contact email. It is not verified right now."
                 />
               </div>
             </div>
@@ -222,7 +211,7 @@ export default function AuthPage({
           <div className="flex items-start gap-3">
             <ShieldCheck className="mt-1 text-green-600" size={20} />
             <p className="text-sm text-slate-600">
-              Supabase verifies login. PrintEase backend loads the saved profile and role before protected pages open.
+              PrintEase verifies your password on the backend and loads your saved role before protected pages open.
             </p>
           </div>
         </div>

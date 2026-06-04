@@ -24,9 +24,6 @@ import {
   clearSupabaseUrlSession,
   getSupabaseUser,
   readSupabaseSessionFromUrl,
-  signInWithEmailPassword,
-  signUpWithEmailPassword,
-  startGoogleOAuth,
 } from "./utils/supabaseAuth";
 
 const ROUTES = {
@@ -817,6 +814,31 @@ export default function App() {
     return { profileRequired: false, user: nextUser };
   }
 
+  async function finishPasswordAuth(data, redirectOverride = null) {
+    if (!data?.token || !data?.user) {
+      throw new Error("Invalid login response.");
+    }
+
+    const centre = data.centre ? normalizeCentre(data.centre) : null;
+    const signedInRole = toFrontendRole(data.user.role);
+    const nextUser = toCurrentUser(data.user, centre);
+    const nextCentres = centre ? upsertCentre(centres, centre) : centres;
+
+    localStorage.setItem("printease_token", data.token);
+    localStorage.setItem("printease_user", JSON.stringify(nextUser));
+    localStorage.removeItem("printease_supabase_refresh_token");
+    await persistAuthSession(data.token, nextUser);
+    if (centre) setCentres((prev) => upsertCentre(prev, centre));
+    setCurrentUser(nextUser);
+    await loadOrdersForSession(nextUser, nextCentres);
+
+    const destination = redirectOverride || postAuthRedirect || (signedInRole === "hub" ? "hubDashboard" : "userDashboard");
+    setPostAuthRedirect(null);
+    if (destination === "payment") setPaymentError("");
+    navigate(destination, { replace: true });
+    return nextUser;
+  }
+
   async function completeProfile() {
     const trimmedName = name.trim();
     const trimmedEmail = email.trim();
@@ -870,9 +892,12 @@ export default function App() {
   }
 
   async function handleAuthSubmit() {
-    const trimmedEmail = email.trim();
+    const trimmedIdentifier = email.trim();
     const trimmedName = name.trim();
     const trimmedUsername = username.trim();
+    const trimmedMobile = mobile.trim();
+    const trimmedHubName = hubName.trim();
+    const trimmedHubCode = hubCode.trim();
 
     setAuthError("");
 
@@ -888,16 +913,6 @@ export default function App() {
       return;
     }
 
-    if (!trimmedEmail) {
-      setAuthError(authMode === "register" ? "Enter your email address." : "Enter your username or email.");
-      return;
-    }
-
-    if (authMode === "register" && !/^\S+@\S+\.\S+$/.test(trimmedEmail)) {
-      setAuthError("Enter a valid email address.");
-      return;
-    }
-
     if (authMode === "register" && !trimmedName) {
       setAuthError("Enter your name.");
       return;
@@ -905,6 +920,21 @@ export default function App() {
 
     if (authMode === "register" && (!trimmedUsername || !/^[a-z0-9]+$/.test(trimmedUsername))) {
       setAuthError("Username can use only lowercase letters and numbers.");
+      return;
+    }
+
+    if (authMode === "login" && !trimmedIdentifier) {
+      setAuthError("Enter your username or email.");
+      return;
+    }
+
+    if (authMode === "register" && trimmedIdentifier && !/^\S+@\S+\.\S+$/.test(trimmedIdentifier)) {
+      setAuthError("Enter a valid email address or leave it blank.");
+      return;
+    }
+
+    if (authMode === "register" && authRole === "hub" && (!trimmedHubName || !trimmedHubCode)) {
+      setAuthError("Enter print hub name and centre code.");
       return;
     }
 
@@ -922,24 +952,29 @@ export default function App() {
 
     try {
       if (authMode === "register") {
-        const session = await signUpWithEmailPassword(trimmedEmail, password, {
-          name: trimmedName,
-          display_name: trimmedName,
-          username: trimmedUsername,
-          role: authRole,
-        });
-        if (!session.access_token) {
-          setAuthError("Check your email to confirm signup, then login.");
-          return;
-        }
-        await finishBackendLogin(session);
-      } else {
-        const data = await apiRequest("/api/auth/password-login", {
+        const endpoint = authRole === "hub" ? "/api/auth/register-centre" : "/api/auth/register-user";
+        const data = await apiRequest(endpoint, {
           method: "POST",
-          body: JSON.stringify({ identifier: trimmedEmail, password }),
+          body: JSON.stringify({
+            name: trimmedName,
+            ownerName: trimmedName,
+            email: trimmedIdentifier || null,
+            username: trimmedUsername,
+            displayHandle: trimmedUsername,
+            mobile: trimmedMobile || null,
+            password,
+            hubName: trimmedHubName,
+            centreName: trimmedHubName,
+            centreCode: trimmedHubCode,
+          }),
         });
-        const session = data.session;
-        await finishBackendLogin(session);
+        await finishPasswordAuth(data);
+      } else {
+        const data = await apiRequest("/api/auth/login", {
+          method: "POST",
+          body: JSON.stringify({ identifier: trimmedIdentifier, password }),
+        });
+        await finishPasswordAuth(data);
       }
     } catch (error) {
       setAuthError(error.message || "Authentication failed. Please try again.");
@@ -950,11 +985,7 @@ export default function App() {
 
   async function handleGoogleLogin() {
     setAuthError("");
-    try {
-      startGoogleOAuth();
-    } catch (error) {
-      setAuthError(error.message || "Google login is not configured.");
-    }
+    setAuthError("Google login is coming later. Use username/email and password for now.");
   }
 
   function logout() {

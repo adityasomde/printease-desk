@@ -1206,8 +1206,6 @@ export default function App() {
 
       const nextOrder = normalizeOrder(orderData.order, centres);
       setOrder(nextOrder);
-      setOrders((prev) => upsertOrder(prev, nextOrder));
-      setLastOrdersUpdatedAt(new Date().toISOString());
       setBackendPrice(orderData.price || null);
       setDocumentFile(null);
       setDocumentFiles([]);
@@ -1230,14 +1228,29 @@ export default function App() {
     setPaymentError("");
 
     if (paymentMethod === "manual") {
-      setPendingPayment({
-        id: `manual-${order.backendId}`,
-        orderId: order.backendId,
-        amount: order.amount,
-        method: "MANUAL_UPI_OR_CASH",
-        status: "pending",
-        createdAt: new Date().toISOString(),
-      });
+      try {
+        const paymentData = await apiRequest("/api/payments/manual-request", {
+          method: "POST",
+          body: JSON.stringify({ orderId: order.backendId }),
+        });
+        const requestedOrder = normalizeOrder(paymentData.order || order, centres);
+        setOrder(requestedOrder);
+        setOrders((prev) => upsertOrder(prev, requestedOrder));
+        setLastOrdersUpdatedAt(new Date().toISOString());
+        setPendingPayment(paymentData.payment || {
+          id: `manual-${order.backendId}`,
+          orderId: order.backendId,
+          amount: order.amount,
+          method: "MANUAL_UPI_OR_CASH",
+          status: "pending",
+          createdAt: new Date().toISOString(),
+        });
+      } catch (error) {
+        setPaymentError(error.message || "Could not create pending payment request.");
+        setPaymentLoading(false);
+        return;
+      }
+
       setUpiQr(selectedCentre?.upiQrImageUrl ? { imageUrl: selectedCentre.upiQrImageUrl, source: "centre" } : null);
       setPaymentLoading(false);
       navigate("track");
@@ -1261,6 +1274,12 @@ export default function App() {
 
       setPendingPayment(paymentData.payment || null);
       setUpiQr(paymentData.qr || null);
+      if (paymentData.order) {
+        const requestedOrder = normalizeOrder(paymentData.order, centres);
+        setOrder(requestedOrder);
+        setOrders((prev) => upsertOrder(prev, requestedOrder));
+        setLastOrdersUpdatedAt(new Date().toISOString());
+      }
 
       if (paymentMethod === "razorpay" && paymentData.razorpay?.orderId) {
         await loadRazorpayCheckout();
@@ -1361,6 +1380,12 @@ export default function App() {
       });
 
       setPendingPayment(paymentData.payment || null);
+      if (paymentData.order) {
+        const requestedOrder = normalizeOrder(paymentData.order, centres);
+        setOrder(requestedOrder);
+        setOrders((prev) => upsertOrder(prev, requestedOrder));
+        setLastOrdersUpdatedAt(new Date().toISOString());
+      }
       await loadRazorpayCheckout();
 
       const razorpay = new window.Razorpay({
@@ -1430,6 +1455,12 @@ export default function App() {
 
       setPendingPayment(paymentData.payment || null);
       setUpiQr(paymentData.qr || null);
+      if (paymentData.order) {
+        const requestedOrder = normalizeOrder(paymentData.order, centres);
+        setOrder(requestedOrder);
+        setOrders((prev) => upsertOrder(prev, requestedOrder));
+        setLastOrdersUpdatedAt(new Date().toISOString());
+      }
     } catch (error) {
       setPaymentError(error.message || "Could not create UPI QR.");
     } finally {

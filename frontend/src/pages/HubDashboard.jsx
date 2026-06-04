@@ -38,7 +38,13 @@ function isPaymentVerified(order) {
   return value === "verified" || value === "collected" || value === "paid" || value.includes("verif");
 }
 
+function isOrderCancelled(order) {
+  return normalizeStatus(order?.status) === "cancelled";
+}
+
 function isPaymentPending(order) {
+  if (isOrderCancelled(order)) return false;
+
   const value = String(order?.paymentStatus || order?.payment_status || "").toLowerCase();
   return value === "pending" || value === "unpaid" || !value;
 }
@@ -48,6 +54,7 @@ const AGENT_LOCKED_STATUSES = new Set(["sent_to_agent", "queued_for_printing", "
 
 const ROUTEABLE_PRINTER_STATUSES = new Set(["idle", "available", "enabled", "accepting"]);
 const BLOCKED_PRINTER_STATUSES = new Set(["paused", "disabled", "stopped", "offline", "unable", "disconnected", "not_accepting"]);
+const PUBLIC_APP_URL = "https://printhubdesi.vercel.app";
 
 function getEffectivePrinterCondition(printer) {
   const condition = normalizeStatus(printer?.condition);
@@ -60,6 +67,44 @@ function isRouteablePrinter(printer) {
   if (printer?.accepting === false || BLOCKED_PRINTER_STATUSES.has(condition)) return false;
   return ROUTEABLE_PRINTER_STATUSES.has(condition);
 }
+
+function getPublicAppOrigin() {
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  if (!origin || origin === "null" || origin.startsWith("file://") || origin.startsWith("app://")) {
+    return PUBLIC_APP_URL;
+  }
+
+  return origin;
+}
+
+async function openExternalUrl(url) {
+  if (!url) return;
+
+  if (window.printeaseDesktop?.openExternalUrl) {
+    const result = await window.printeaseDesktop.openExternalUrl(url);
+    if (result?.success) return;
+  }
+
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
+async function downloadQrImage(url, fileName) {
+  if (!url) return;
+
+  if (window.printeaseDesktop?.downloadUrl) {
+    const result = await window.printeaseDesktop.downloadUrl({ url, fileName });
+    if (result?.success) return;
+  }
+
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.rel = "noopener noreferrer";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
 const EMPTY_ANALYTICS = {
   onlineAgents: 0,
   availablePrinters: 0,
@@ -117,10 +162,11 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
   const [orderSearch, setOrderSearch] = useState("");
   const [centreLinkCopied, setCentreLinkCopied] = useState(false);
+  const [autoPrintAfterCashByOrder, setAutoPrintAfterCashByOrder] = useState({});
   const ordersForHub = hubOrders || [];
   const centreUploadUrl =
     typeof window !== "undefined" && currentHub?.code
-      ? `${window.location.origin}/upload?centre=${encodeURIComponent(currentHub.code)}`
+      ? `${getPublicAppOrigin()}/upload?centre=${encodeURIComponent(currentHub.code)}`
       : "";
   const centreQrUrl = centreUploadUrl
     ? `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(centreUploadUrl)}`
@@ -274,12 +320,13 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
 
   async function markCashCollected(order) {
     const orderId = order.backendId || order.id;
+    const autoPrintAfterCollection = autoPrintAfterCashByOrder[orderId] !== false;
     setCollectingOrderId(orderId);
     setAgentError("");
     setPairingMessage("");
 
     try {
-      const data = await collectCashPayment(orderId);
+      const data = await collectCashPayment(orderId, { autoPrintAfterCollection });
       setPairingMessage(data.message || "Payment collected.");
       await Promise.all([refreshAgentStatus(), refreshOrders?.()]);
     } catch (error) {
@@ -367,7 +414,7 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
         return;
       }
 
-      window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+      await openExternalUrl(data.signedUrl);
     } catch (error) {
       setAgentError(error.message || "Could not create signed download link.");
     } finally {
@@ -387,14 +434,8 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
     }
   }
 
-  function printCentreQr() {
+  async function printCentreQr() {
     if (!largeCentreQrUrl) return;
-
-    const printWindow = window.open("", "_blank", "noopener,noreferrer,width=900,height=1100");
-    if (!printWindow) {
-      setAgentError("Allow popups to print the QR code.");
-      return;
-    }
 
     const safeCentreName = String(currentHub.name || "PrintEase Centre").replace(/[<>&"]/g, (character) => ({
       "<": "&lt;",
@@ -415,7 +456,7 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
       "\"": "&quot;",
     }[character]));
 
-    printWindow.document.write(`
+    const printableHtml = `
       <!doctype html>
       <html>
         <head>
@@ -489,7 +530,26 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
           </script>
         </body>
       </html>
-    `);
+    `;
+
+    if (window.printeaseDesktop?.printHtml) {
+      const result = await window.printeaseDesktop.printHtml({
+        title: `PrintEase Upload QR - ${currentHub.name || currentHub.code || "Centre"}`,
+        html: printableHtml,
+      });
+      if (!result?.success) {
+        setAgentError(result?.message || "Could not print QR code.");
+      }
+      return;
+    }
+
+    const printWindow = window.open("", "_blank", "noopener,noreferrer,width=900,height=1100");
+    if (!printWindow) {
+      setAgentError("Allow popups to print the QR code.");
+      return;
+    }
+
+    printWindow.document.write(printableHtml);
     printWindow.document.close();
   }
 
@@ -537,20 +597,20 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
               </button>
               <button
                 type="button"
-                onClick={() => window.open(centreUploadUrl, "_blank", "noopener,noreferrer")}
+                onClick={() => openExternalUrl(centreUploadUrl).catch(() => setAgentError("Could not open upload page."))}
                 className="inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold"
               >
                 <Link2 size={16} />
                 Open Upload Page
               </button>
-              <a
-                href={largeCentreQrUrl}
-                download={`PrintEase-${currentHub.code || "centre"}-upload-qr.png`}
+              <button
+                type="button"
+                onClick={() => downloadQrImage(largeCentreQrUrl, `PrintEase-${currentHub.code || "centre"}-upload-qr.png`).catch(() => setAgentError("Could not download QR code."))}
                 className="inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold"
               >
                 <Download size={16} />
                 Download QR
-              </a>
+              </button>
               <button
                 type="button"
                 onClick={printCentreQr}
@@ -693,6 +753,11 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
                 const job = jobByOrderId.get(item.backendId);
                 const orderId = item.backendId || item.id;
                 const sendEnabled = canSendToAgent(item);
+                const autoPrintAfterCash = autoPrintAfterCashByOrder[orderId] !== false;
+                const paymentPending = isPaymentPending(item);
+                const paymentVerified = isPaymentVerified(item);
+                const orderCancelled = isOrderCancelled(item);
+                const cancelledBeforePayment = orderCancelled && !paymentVerified;
 
                 return (
                   <tr key={item.id} className="align-top odd:bg-white even:bg-slate-50">
@@ -717,11 +782,16 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
                     <td className="px-2 py-4 whitespace-nowrap font-semibold">₹{item.amount}</td>
                     <td className="w-24 max-w-[6rem] px-2 py-4">
                       <StatusBadge color="green">{item.paymentStatus}</StatusBadge>
-                      {isPaymentPending(item) && (
+                      {cancelledBeforePayment && (
+                        <p className="mt-1 text-xs font-semibold text-rose-600">Cancelled before payment.</p>
+                      )}
+                      {paymentPending && (
                         <p className="mt-1 text-xs text-slate-500">Awaiting payment.</p>
                       )}
-                      {isPaymentVerified(item) && (
-                        <p className="mt-1 text-xs text-emerald-700">Ready to queue.</p>
+                      {paymentVerified && (
+                        <p className="mt-1 text-xs text-emerald-700">
+                          {orderCancelled ? "Payment collected; order cancelled." : "Ready to queue."}
+                        </p>
                       )}
                     </td>
                     <td className="px-2 py-4">
@@ -766,14 +836,33 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
                         {job && <StatusBadge>{displayStatus(job.status)}</StatusBadge>}
                         {job && normalizeStatus(job.status) !== "failed" && <p className="text-xs text-slate-500">{displayStatus(job.status)} in desktop queue</p>}
                         {job?.failureReasonText && <p className="text-xs font-semibold text-rose-600">{job.failureReasonText}</p>}
-                        {isPaymentPending(item) && (
-                          <button
-                            onClick={() => markCashCollected(item)}
-                            disabled={collectingOrderId === orderId}
-                            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-emerald-200 px-2 py-1.5 font-semibold text-emerald-700 disabled:opacity-50"
-                          >
-                            <IndianRupee size={14} /> {collectingOrderId === orderId ? "Saving" : "Cash Collected"}
-                          </button>
+                        {cancelledBeforePayment && (
+                          <p className="rounded-xl border border-rose-200 bg-rose-50 px-2 py-2 text-xs font-semibold text-rose-700">
+                            Cancelled before payment. Cash collection is disabled.
+                          </p>
+                        )}
+                        {paymentPending && (
+                          <>
+                            <label className="flex items-start gap-2 rounded-xl border border-slate-200 bg-white px-2 py-2 text-xs font-semibold text-slate-700">
+                              <input
+                                type="checkbox"
+                                checked={autoPrintAfterCash}
+                                onChange={(event) => setAutoPrintAfterCashByOrder((prev) => ({
+                                  ...prev,
+                                  [orderId]: event.target.checked,
+                                }))}
+                                className="mt-0.5"
+                              />
+                              <span>Print automatically after cash collected</span>
+                            </label>
+                            <button
+                              onClick={() => markCashCollected(item)}
+                              disabled={collectingOrderId === orderId}
+                              className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-emerald-200 px-2 py-1.5 font-semibold text-emerald-700 disabled:opacity-50"
+                            >
+                              <IndianRupee size={14} /> {collectingOrderId === orderId ? "Saving" : "Cash Collected"}
+                            </button>
+                          </>
                         )}
                         {sendEnabled && routeableAgents.length > 0 && (
                           <button

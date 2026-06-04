@@ -1,4 +1,4 @@
-export default function Input({ label, icon, value, setValue, placeholder, type = "text", ...inputProps }) {
+export default function Input({ label, icon, value, setValue, placeholder, type = "text", helperText = "", trailing = null, ...inputProps }) {
   return (
     <label className="block">
       <span className="mb-2 block text-sm font-semibold text-slate-700">{label}</span>
@@ -12,7 +12,9 @@ export default function Input({ label, icon, value, setValue, placeholder, type 
           className="w-full bg-transparent outline-none disabled:cursor-not-allowed disabled:text-slate-500"
           {...inputProps}
         />
+        {trailing}
       </div>
+      {helperText && <span className="mt-2 block text-xs text-slate-500">{helperText}</span>}
     </label>
   );
 }

@@ -1,4 +1,4 @@
-import { Lock, Phone, QrCode, ShieldCheck, Store, User } from "lucide-react";
+import { Eye, EyeOff, Lock, Mail, Phone, QrCode, ShieldCheck, Sparkles, Store, User } from "lucide-react";
 import Card from "../components/Card";
 import Input from "../components/Input";
 
@@ -7,22 +7,44 @@ export default function AuthPage({
   setAuthRole,
   authMode,
   setAuthMode,
-  mobile,
-  setMobile,
+  email,
+  setEmail,
   password,
   setPassword,
+  showPassword,
+  setShowPassword,
+  username,
+  setUsername,
   name,
   setName,
+  mobile,
+  setMobile,
   hubName,
   setHubName,
   hubCode,
   setHubCode,
+  generateStrongPassword,
   handleAuthSubmit,
+  handleGoogleLogin,
   authError,
   authLoading,
 }) {
   const isHub = authRole === "hub";
   const isRegister = authMode === "register";
+  const isProfile = authMode === "profile";
+  const showSignupFields = isRegister || isProfile;
+  const showPasswordFields = isRegister;
+  const passwordType = showPassword ? "text" : "password";
+  const passwordToggle = (
+    <button
+      type="button"
+      onClick={() => setShowPassword(!showPassword)}
+      className="rounded-lg p-1 text-slate-500 hover:bg-slate-100"
+      aria-label={showPassword ? "Hide password" : "Show password"}
+    >
+      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+    </button>
+  );
 
   return (
     <Card className="mx-auto max-w-2xl">
@@ -30,36 +52,177 @@ export default function AuthPage({
         event.preventDefault();
         handleAuthSubmit();
       }}>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-2xl font-bold">
-              {isRegister ? "Register" : "Login"} as {isHub ? "Print Hub" : "User"}
-            </h2>
-            <p className="mt-2 text-sm text-slate-600">Use your registered mobile number and password.</p>
-          </div>
-          <div className="flex rounded-2xl bg-slate-100 p-1">
-            <button type="button" onClick={() => setAuthRole("user")} className={`rounded-xl px-4 py-2 text-sm font-semibold ${authRole === "user" ? "bg-white shadow" : ""}`}>
-              User
-            </button>
-            <button type="button" onClick={() => setAuthRole("hub")} className={`rounded-xl px-4 py-2 text-sm font-semibold ${authRole === "hub" ? "bg-white shadow" : ""}`}>
-              Print Hub
-            </button>
-          </div>
+        <div>
+          <h2 className="text-2xl font-bold">
+            {isProfile ? "Complete Profile" : isRegister ? "Create Account" : "Login"}
+          </h2>
+          <p className="mt-2 text-sm text-slate-600">
+            {isProfile
+              ? "Choose your PrintEase ID, role, and optional contact details after secure Supabase login."
+              : "Login with Google or email. Your username is your PrintEase ID."}
+          </p>
         </div>
 
-        <div className="mt-6 grid gap-4 md:grid-cols-2">
-          {isRegister && <Input label="Name" icon={<User size={18} />} value={name} setValue={setName} placeholder="Enter name" autoComplete="name" disabled={authLoading} />}
-          <Input label="Mobile Number" icon={<Phone size={18} />} value={mobile} setValue={setMobile} placeholder="10 digit mobile" inputMode="numeric" autoComplete="tel" disabled={authLoading} />
-          <Input label="Password" icon={<Lock size={18} />} value={password} setValue={setPassword} placeholder="Enter password" type="password" autoComplete={isRegister ? "new-password" : "current-password"} disabled={authLoading} />
-          {isHub && isRegister && <Input label="Print Hub Name" icon={<Store size={18} />} value={hubName} setValue={setHubName} placeholder="Example: Sai Printing Hub" disabled={authLoading} />}
-          {isHub && isRegister && <Input label="Centre Code" icon={<QrCode size={18} />} value={hubCode} setValue={setHubCode} placeholder="Example: 2045" disabled={authLoading} />}
-        </div>
+        {!isProfile && (
+          <button
+            type="button"
+            disabled={authLoading}
+            onClick={handleGoogleLogin}
+            className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl border bg-white px-4 py-3 font-semibold hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
+          >
+            <ShieldCheck size={18} /> Continue with Google
+          </button>
+        )}
+
+        {!isRegister && !isProfile && (
+          <div className="mt-6 grid gap-4">
+            <div>
+              <p className="mb-2 text-sm font-semibold text-slate-700">Login as</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <button type="button" onClick={() => setAuthRole("user")} className={`rounded-2xl border px-4 py-3 text-sm font-semibold ${authRole === "user" ? "border-slate-900 bg-slate-900 text-white" : "bg-white"}`}>
+                  User
+                </button>
+                <button type="button" onClick={() => setAuthRole("hub")} className={`rounded-2xl border px-4 py-3 text-sm font-semibold ${authRole === "hub" ? "border-slate-900 bg-slate-900 text-white" : "bg-white"}`}>
+                  Print Hub
+                </button>
+              </div>
+            </div>
+            <Input
+              label="Username or email"
+              icon={<Mail size={18} />}
+              value={email}
+              setValue={setEmail}
+              placeholder="username or you@example.com"
+              type="text"
+              name="username"
+              autoComplete="username"
+              disabled={authLoading}
+              helperText="Use your PrintEase username or email address."
+            />
+            <Input
+              label="Password"
+              icon={<Lock size={18} />}
+              value={password}
+              setValue={setPassword}
+              placeholder="Enter password"
+              type={passwordType}
+              name="password"
+              autoComplete="current-password"
+              disabled={authLoading}
+              trailing={passwordToggle}
+            />
+          </div>
+        )}
+
+        {showSignupFields && (
+          <div className="mt-6 grid gap-4">
+            <Input
+              label="Name"
+              icon={<User size={18} />}
+              value={name}
+              setValue={setName}
+              placeholder="Your name"
+              name="name"
+              autoComplete="name"
+              disabled={authLoading}
+            />
+            <Input
+              label="PrintEase username"
+              icon={<User size={18} />}
+              value={username}
+              setValue={setUsername}
+              placeholder="chaitanyamunde"
+              name="username"
+              autoComplete="username"
+              disabled={authLoading}
+              helperText="Lowercase letters and numbers only. This is your visible PrintEase ID."
+            />
+
+            {showPasswordFields && (
+              <>
+                <div className="flex flex-col gap-3 rounded-2xl border bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="font-semibold">Create password</p>
+                    <p className="text-sm text-slate-600">Generate a strong password locally, or enter one once.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={generateStrongPassword}
+                    disabled={authLoading}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    <Sparkles size={16} /> Generate strong password
+                  </button>
+                </div>
+                <Input
+                  label="Password"
+                  icon={<Lock size={18} />}
+                  value={password}
+                  setValue={setPassword}
+                  placeholder="Enter password"
+                  type={passwordType}
+                  name="password"
+                  autoComplete="new-password"
+                  disabled={authLoading}
+                  trailing={passwordToggle}
+                />
+              </>
+            )}
+
+            <div>
+              <p className="mb-2 text-sm font-semibold text-slate-700">Role</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <button type="button" onClick={() => setAuthRole("user")} className={`rounded-2xl border px-4 py-3 text-sm font-semibold ${authRole === "user" ? "border-slate-900 bg-slate-900 text-white" : "bg-white"}`}>
+                  User
+                </button>
+                <button type="button" onClick={() => setAuthRole("hub")} className={`rounded-2xl border px-4 py-3 text-sm font-semibold ${authRole === "hub" ? "border-slate-900 bg-slate-900 text-white" : "bg-white"}`}>
+                  Print Hub
+                </button>
+              </div>
+            </div>
+
+            {isHub && <Input label="Hub / Shop Name" icon={<Store size={18} />} value={hubName} setValue={setHubName} placeholder="Example: Sai Printing Hub" disabled={authLoading} />}
+            {isHub && <Input label="Centre Code" icon={<QrCode size={18} />} value={hubCode} setValue={setHubCode} placeholder="Example: 2045" disabled={authLoading} />}
+
+            <div className="rounded-2xl border bg-white p-4">
+              <p className="text-sm font-semibold text-slate-800">Contact details</p>
+              <p className="mt-1 text-xs text-slate-500">
+                Email is used for password login. Phone is optional for shop/order contact.
+              </p>
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <Input
+                  label={isRegister ? "Email address" : "Email address (optional)"}
+                  icon={<Mail size={18} />}
+                  value={email}
+                  setValue={setEmail}
+                  placeholder="you@example.com"
+                  type="email"
+                  name="email"
+                  autoComplete="email"
+                  disabled={authLoading || isProfile}
+                  helperText={isRegister ? "Required for Email + Password login." : "Google accounts can use the Google email already verified by Supabase."}
+                />
+                <Input
+                  label="Phone (optional)"
+                  icon={<Phone size={18} />}
+                  value={mobile}
+                  setValue={setMobile}
+                  placeholder="Optional contact number"
+                  name="phone"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  disabled={authLoading}
+                />
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="mt-6 rounded-2xl bg-slate-50 p-4">
           <div className="flex items-start gap-3">
             <ShieldCheck className="mt-1 text-green-600" size={20} />
             <p className="text-sm text-slate-600">
-              Accounts are checked by the backend before the dashboard opens.
+              Supabase verifies login. PrintEase backend loads the saved profile and role before protected pages open.
             </p>
           </div>
         </div>
@@ -71,11 +234,31 @@ export default function AuthPage({
         )}
 
         <button type="submit" disabled={authLoading} className="mt-6 w-full rounded-2xl bg-slate-900 px-4 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400">
-          {authLoading ? "Please wait..." : isRegister ? "Create Account" : "Login"}
+          {authLoading ? "Please wait..." : isProfile ? "Save Profile" : isRegister ? "Sign Up" : "Login"}
         </button>
-        <button type="button" disabled={authLoading} onClick={() => setAuthMode(isRegister ? "login" : "register")} className="mt-3 w-full rounded-2xl border bg-white px-4 py-3 text-sm font-semibold hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400">
-          {isRegister ? "Already have account? Login" : "New here? Register"}
-        </button>
+
+        {!isProfile && !isRegister && (
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <button type="button" disabled={authLoading} onClick={() => {
+              setAuthRole("user");
+              setAuthMode("register");
+            }} className="rounded-2xl border bg-white px-4 py-3 text-sm font-semibold hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400">
+              Register as User
+            </button>
+            <button type="button" disabled={authLoading} onClick={() => {
+              setAuthRole("hub");
+              setAuthMode("register");
+            }} className="rounded-2xl border bg-white px-4 py-3 text-sm font-semibold hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400">
+              Register as Print Hub
+            </button>
+          </div>
+        )}
+
+        {isRegister && (
+          <button type="button" disabled={authLoading} onClick={() => setAuthMode("login")} className="mt-3 w-full rounded-2xl border bg-white px-4 py-3 text-sm font-semibold hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400">
+            Already have an account? Login
+          </button>
+        )}
       </form>
     </Card>
   );

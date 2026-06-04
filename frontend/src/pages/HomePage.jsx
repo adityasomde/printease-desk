@@ -1,6 +1,7 @@
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 
-import { User, Upload, Store, Plus, Building2, Search } from "lucide-react";
+import { User, Upload, Store, Plus, Building2, Search, Download } from "lucide-react";
 import Card from "../components/Card";
 import CentrePriceCard from "../components/CentrePriceCard";
 
@@ -13,6 +14,55 @@ export default function HomePage({
   startDirectUpload,
   selectCentreAndUpload,
 }) {
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+
+  useEffect(() => {
+    const handler = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener("beforeinstallprompt", handler);
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
+
+  const handleDownloadApp = async () => {
+    const ua = navigator.userAgent || navigator.vendor || window.opera;
+    const isAndroid = /android/i.test(ua);
+    const isWindows = /Win/i.test(ua);
+    const isLinux = /Linux/i.test(ua) && !isAndroid;
+
+    if (isAndroid) {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === "accepted") {
+          setDeferredPrompt(null);
+        }
+      } else {
+        alert("To install the app, please use the 'Add to Home Screen' option in your browser menu.");
+      }
+    } else {
+      let downloadUrl = "";
+      if (isWindows) {
+        downloadUrl = "https://github.com/adityasomde/printease-desk/releases/download/desktop-v0.1.20/PrintEase-Desktop-Setup-0.1.20.exe";
+      } else if (isLinux) {
+        downloadUrl = "https://github.com/adityasomde/printease-desk/releases/download/desktop-v0.1.20/PrintEase-Desktop-0.1.20-x86_64.AppImage";
+      } else {
+        const choice = window.prompt("Which OS are you using? Type 'win' for Windows or 'linux' for Linux:", "win");
+        if (choice?.toLowerCase().includes("win")) {
+          downloadUrl = "https://github.com/adityasomde/printease-desk/releases/download/desktop-v0.1.20/PrintEase-Desktop-Setup-0.1.20.exe";
+        } else if (choice?.toLowerCase().includes("linux")) {
+          downloadUrl = "https://github.com/adityasomde/printease-desk/releases/download/desktop-v0.1.20/PrintEase-Desktop-0.1.20-x86_64.AppImage";
+        }
+      }
+      if (downloadUrl) {
+        window.location.href = downloadUrl;
+      }
+    }
+  };
+
+  const isAndroid = typeof navigator !== "undefined" ? /android/i.test(navigator.userAgent || navigator.vendor || window.opera) : false;
+
   return (
     <div className="space-y-8">
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(340px,420px)] lg:items-stretch">
@@ -63,11 +113,12 @@ export default function HomePage({
           <Card>
             <h3 className="text-xl font-bold">Welcome back, {currentUser.name || "PrintEase user"}</h3>
             <p className="mt-2 text-sm text-slate-600">
-              Continue with a new upload or open your {currentUser.role === "hub" ? "hub dashboard" : "orders"}.
+              Download our app or open your {currentUser.role === "hub" ? "hub dashboard" : "orders"}.
             </p>
             <div className="mt-5 grid gap-3">
-              <button onClick={startDirectUpload} className="rounded-2xl bg-slate-900 px-5 py-4 font-semibold text-white">
-                Upload Documents
+              <button onClick={handleDownloadApp} className="flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-4 font-semibold text-white transition hover:bg-slate-800">
+                <Download size={20} />
+                {isAndroid ? "Install Android App" : "Download Desktop App"}
               </button>
               <button onClick={() => navigate(currentUser.role === "hub" ? "hubDashboard" : "userDashboard")} className="rounded-2xl border bg-white px-5 py-4 font-semibold hover:bg-slate-50">
                 {currentUser.role === "hub" ? "Open Hub Dashboard" : "My Orders"}

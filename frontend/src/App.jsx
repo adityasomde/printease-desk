@@ -1,4 +1,4 @@
-import { Component, useEffect, useMemo, useState } from "react";
+import { Component, useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import Navbar from "./components/Navbar";
 import BackendStatus from "./components/BackendStatus";
@@ -20,6 +20,14 @@ import { calculateTotalAmount, countSelectedPages, getPricePerPage } from "./uti
 import { clearStoredAuth, getStoredAuth, isDesktop, onPrintersUpdated, saveStoredAuth } from "./utils/desktopBridge";
 import { apiRequest } from "./services/api";
 import { loadRazorpayCheckout } from "./utils/razorpay";
+import {
+  clearSupabaseUrlSession,
+  getSupabaseUser,
+  readSupabaseSessionFromUrl,
+  signInWithEmailPassword,
+  signUpWithEmailPassword,
+  startGoogleOAuth,
+} from "./utils/supabaseAuth";
 
 const ROUTES = {
   home: "/",
@@ -230,6 +238,44 @@ function toDisplayLabel(value) {
     .join(" ");
 }
 
+function normalizeUsername(value) {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function getUsernameBaseCandidates(name, email) {
+  const nameParts = String(name || "")
+    .trim()
+    .split(/\s+/)
+    .map(normalizeUsername)
+    .filter(Boolean);
+
+  if (nameParts.length) {
+    const firstName = nameParts[0];
+    const withSurname = normalizeUsername(nameParts.join(""));
+    return [...new Set([firstName, withSurname].filter(Boolean))];
+  }
+
+  const emailName = String(email || "").split("@")[0];
+  const fromEmail = normalizeUsername(emailName);
+  if (fromEmail) return [fromEmail];
+
+  return ["user"];
+}
+
+function getSupabaseDisplayName(user) {
+  const metadata = user?.user_metadata || {};
+  return metadata.full_name || metadata.name || metadata.display_name || "";
+}
+
+function generateStrongPasswordValue() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+  const symbols = "!@#$%&*?";
+  const bytes = new Uint32Array(18);
+  window.crypto.getRandomValues(bytes);
+  const body = Array.from(bytes, (value) => alphabet[value % alphabet.length]).join("");
+  return `${body.slice(0, 6)}${symbols[bytes[0] % symbols.length]}${body.slice(6, 12)}${bytes[1] % 10}${body.slice(12)}`;
+}
+
 function formatOrderDate(value) {
   if (!value || value === "Today") return value || "Today";
 
@@ -310,11 +356,12 @@ function upsertOrder(orderList, nextOrder) {
   return orderList.map((item, index) => (index === existingIndex ? nextOrder : item));
 }
 
-async function persistAuthSession(token, user) {
+async function persistAuthSession(token, user, authMeta = {}) {
   localStorage.setItem("printease_token", token);
   localStorage.setItem("printease_user", JSON.stringify(user));
+  if (authMeta.refreshToken) localStorage.setItem("printease_supabase_refresh_token", authMeta.refreshToken);
 
-  const result = await saveStoredAuth({ token, user });
+  const result = await saveStoredAuth({ token, user, refreshToken: authMeta.refreshToken || null });
   if (result?.success === false && isDesktop()) {
     console.warn("[PrintEase desktop auth save failed]", result.error || result.message);
   }
@@ -323,6 +370,7 @@ async function persistAuthSession(token, user) {
 function clearAuthSession() {
   localStorage.removeItem("printease_token");
   localStorage.removeItem("printease_user");
+  localStorage.removeItem("printease_supabase_refresh_token");
 
   clearStoredAuth().then((result) => {
     if (result?.success === false && isDesktop()) {
@@ -353,9 +401,15 @@ export default function App() {
     }
   });
   const [postAuthRedirect, setPostAuthRedirect] = useState(null);
+  const [email, setEmail] = useState("");
   const [mobile, setMobile] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [name, setName] = useState("");
+  const [username, setUsernameState] = useState("");
+  const [usernameEdited, setUsernameEdited] = useState(false);
+  const usernameSuggestionRequest = useRef(0);
   const [hubName, setHubName] = useState("");
   const [hubCode, setHubCode] = useState("");
   const [authError, setAuthError] = useState("");
@@ -435,6 +489,22 @@ export default function App() {
   }, [page, currentUser, location.pathname, location.search]);
 
   useEffect(() => {
+    const session = readSupabaseSessionFromUrl();
+    if (!session) return;
+
+    clearSupabaseUrlSession();
+    setAuthLoading(true);
+    setAuthError("");
+
+    finishBackendLogin(session)
+      .catch((error) => {
+        setAuthError(error.message || "Could not finish Google login.");
+        navigate("auth", { replace: true });
+      })
+      .finally(() => setAuthLoading(false));
+  }, []);
+
+  useEffect(() => {
     async function restoreSession() {
       let token = localStorage.getItem("printease_token");
 
@@ -507,6 +577,12 @@ export default function App() {
         const centresForOrders = freshCentres && freshCentres.length ? freshCentres : centres;
         await loadOrdersForSession(finalUser, centresForOrders);
       } catch (error) {
+        if (error.status === 428 || error.details?.profileRequired) {
+          setAuthMode("profile");
+          navigate("auth", { replace: true });
+          return;
+        }
+
         console.error("Session restore failed:", error?.message || error);
 
         clearAuthSession();
@@ -569,6 +645,66 @@ export default function App() {
     setProfileOpen(false);
   }
 
+  async function suggestUniqueUsername(nextName = name, nextEmail = email, force = false) {
+    const requestId = usernameSuggestionRequest.current + 1;
+    usernameSuggestionRequest.current = requestId;
+    const bases = getUsernameBaseCandidates(nextName, nextEmail);
+    const candidates = [];
+
+    for (const [baseIndex, base] of bases.entries()) {
+      candidates.push(base);
+      const maxSerial = baseIndex === 0 ? 9999 : 999;
+      for (let index = 0; index <= maxSerial; index += 1) {
+        candidates.push(`${base}${index}`);
+      }
+    }
+
+    for (const candidate of candidates) {
+      try {
+        const data = await apiRequest(`/api/auth/username-available?username=${encodeURIComponent(candidate)}`);
+        if (usernameSuggestionRequest.current !== requestId || (!force && usernameEdited)) return;
+        if (data.available) {
+          setUsernameState(data.username || candidate);
+          return;
+        }
+      } catch {
+        if (usernameSuggestionRequest.current === requestId && (force || !usernameEdited)) {
+          setUsernameState(candidates[0]);
+        }
+        return;
+      }
+    }
+
+    if (usernameSuggestionRequest.current === requestId && (force || !usernameEdited)) {
+      setUsernameState(candidates[0]);
+    }
+  }
+
+  function updateEmail(value) {
+    setEmail(value);
+    if (!usernameEdited) {
+      suggestUniqueUsername(name, value);
+    }
+  }
+
+  function updateName(value) {
+    setName(value);
+    if (!usernameEdited) {
+      suggestUniqueUsername(value, email);
+    }
+  }
+
+  function updateUsername(value) {
+    setUsernameEdited(true);
+    setUsernameState(normalizeUsername(value));
+  }
+
+  function generateStrongPassword() {
+    const nextPassword = generateStrongPasswordValue();
+    setPassword(nextPassword);
+    setShowPassword(true);
+  }
+
   function startLogin(role, redirect = null) {
     if (redirect) {
       setPostAuthRedirect(redirect);
@@ -585,6 +721,8 @@ export default function App() {
     setPostAuthRedirect(null);
     setAuthRole(role);
     setAuthMode("register");
+    setUsernameEdited(false);
+    suggestUniqueUsername(name, email, true);
     setAuthError("");
     navigate("auth");
   }
@@ -596,6 +734,10 @@ export default function App() {
 
   function changeAuthMode(mode) {
     setAuthMode(mode);
+    if (mode === "register" || mode === "profile") {
+      setUsernameEdited(false);
+      suggestUniqueUsername(name, email, true);
+    }
     setAuthError("");
   }
 
@@ -620,21 +762,139 @@ export default function App() {
     }
   }
 
-  async function handleAuthSubmit() {
-    const trimmedMobile = mobile.trim();
+  async function finishBackendLogin(session, redirectOverride = null) {
+    if (!session?.access_token) {
+      throw new Error("Supabase did not return a login session.");
+    }
+
+    localStorage.setItem("printease_token", session.access_token);
+    if (session.refresh_token) localStorage.setItem("printease_supabase_refresh_token", session.refresh_token);
+
+    let data = null;
+    try {
+      data = await apiRequest("/api/auth/me");
+    } catch (error) {
+      if (error.status === 428 || error.details?.profileRequired) {
+        const supabaseUser = session.user || await getSupabaseUser(session.access_token).catch(() => null);
+        const nextEmail = supabaseUser?.email || email;
+        const nextName = getSupabaseDisplayName(supabaseUser) || name;
+        if (nextEmail) setEmail(nextEmail);
+        if (nextName) setName(nextName);
+        if (!usernameEdited) suggestUniqueUsername(nextName, nextEmail);
+        setAuthMode("profile");
+        setPassword("");
+        setConfirmPassword("");
+        navigate("auth", { replace: true });
+        return { profileRequired: true };
+      }
+      throw error;
+    }
+
+    const signedInRole = toFrontendRole(data.user.role);
+    let signedInCentre = findCentreForUser(data.user, centres, data.centre);
+
+    if (signedInRole === "hub" && !signedInCentre) {
+      const freshCentres = await refreshCentres();
+      signedInCentre = findCentreForUser(data.user, freshCentres, data.centre);
+    }
+
+    if (signedInRole === "hub" && !signedInCentre) {
+      clearAuthSession();
+      setCurrentUser(null);
+      throw new Error("No print hub is linked to this account. Complete hub setup first.");
+    }
+
+    const nextUser = toCurrentUser(data.user, signedInCentre);
+    const nextCentres = signedInCentre ? upsertCentre(centres, signedInCentre) : centres;
+    await persistAuthSession(session.access_token, nextUser, { refreshToken: session.refresh_token });
+    if (signedInCentre) setCentres((prev) => upsertCentre(prev, signedInCentre));
+    setCurrentUser(nextUser);
+    await loadOrdersForSession(nextUser, nextCentres);
+    const destination = redirectOverride || postAuthRedirect || (signedInRole === "hub" ? "hubDashboard" : "userDashboard");
+    setPostAuthRedirect(null);
+    if (destination === "payment") setPaymentError("");
+    navigate(destination, { replace: true });
+    return { profileRequired: false, user: nextUser };
+  }
+
+  async function completeProfile() {
     const trimmedName = name.trim();
+    const trimmedEmail = email.trim();
+    const trimmedUsername = username.trim();
+    const trimmedMobile = mobile.trim();
     const trimmedHubName = hubName.trim();
     const trimmedHubCode = hubCode.trim();
 
-    setAuthError("");
-
-    if (!/^\d{10}$/.test(trimmedMobile)) {
-      setAuthError("Enter a valid 10 digit mobile number.");
+    if (!trimmedName) {
+      setAuthError("Enter your name.");
       return;
     }
 
-    if (!password) {
-      setAuthError("Enter your password.");
+    if (trimmedEmail && !/^\S+@\S+\.\S+$/.test(trimmedEmail)) {
+      setAuthError("Enter a valid email address.");
+      return;
+    }
+
+    if (!trimmedUsername || !/^[a-z0-9]+$/.test(trimmedUsername)) {
+      setAuthError("Username can use only lowercase letters and numbers.");
+      return;
+    }
+
+    if (authRole === "hub" && (!trimmedHubName || !trimmedHubCode)) {
+      setAuthError("Enter print hub name and centre code.");
+      return;
+    }
+
+    const data = await apiRequest("/api/auth/profile", {
+      method: "POST",
+      body: JSON.stringify({
+        name: trimmedName,
+        role: authRole,
+        username: trimmedUsername,
+        displayHandle: trimmedUsername,
+        mobile: trimmedMobile || null,
+        hubName: trimmedHubName,
+        centreCode: trimmedHubCode,
+      }),
+    });
+
+    const centre = data.centre ? normalizeCentre(data.centre) : null;
+    const nextUser = toCurrentUser(data.user, centre);
+    const token = localStorage.getItem("printease_token");
+    const refreshToken = localStorage.getItem("printease_supabase_refresh_token");
+    await persistAuthSession(token, nextUser, { refreshToken });
+    if (centre) setCentres((prev) => upsertCentre(prev, centre));
+    setCurrentUser(nextUser);
+    await loadOrdersForSession(nextUser, centre ? upsertCentre(centres, centre) : centres);
+    navigate(nextUser.role === "hub" ? "hubDashboard" : "userDashboard", { replace: true });
+  }
+
+  async function handleAuthSubmit() {
+    const trimmedEmail = email.trim();
+    const trimmedName = name.trim();
+    const trimmedUsername = username.trim();
+
+    setAuthError("");
+
+    if (authMode === "profile") {
+      setAuthLoading(true);
+      try {
+        await completeProfile();
+      } catch (error) {
+        setAuthError(error.message || "Could not save profile.");
+      } finally {
+        setAuthLoading(false);
+      }
+      return;
+    }
+
+    if (!trimmedEmail) {
+      setAuthError(authMode === "register" ? "Enter your email address." : "Enter your username or email.");
+      return;
+    }
+
+    if (authMode === "register" && !/^\S+@\S+\.\S+$/.test(trimmedEmail)) {
+      setAuthError("Enter a valid email address.");
       return;
     }
 
@@ -643,93 +903,57 @@ export default function App() {
       return;
     }
 
+    if (authMode === "register" && (!trimmedUsername || !/^[a-z0-9]+$/.test(trimmedUsername))) {
+      setAuthError("Username can use only lowercase letters and numbers.");
+      return;
+    }
+
+    if (!password) {
+      setAuthError("Enter your password.");
+      return;
+    }
+
+    if (password.length < 8) {
+      setAuthError("Password must be at least 8 characters.");
+      return;
+    }
+
     setAuthLoading(true);
 
     try {
-      if (authMode === "register" && authRole === "user") {
-        const data = await apiRequest("/api/auth/register-user", {
-          method: "POST",
-          body: JSON.stringify({ name: trimmedName, mobile: trimmedMobile, password }),
-        });
-
-        const nextUser = toCurrentUser(data.user);
-        await persistAuthSession(data.token, nextUser);
-        setCurrentUser(nextUser);
-        await loadOrdersForSession(nextUser);
-        navigate("userDashboard", { replace: true });
-        return;
-      }
-
       if (authMode === "register") {
-        if (!trimmedHubName) {
-          setAuthError("Enter print hub name.");
-          return;
-        }
-
-        if (!trimmedHubCode) {
-          setAuthError("Enter centre code.");
-          return;
-        }
-
-        const data = await apiRequest("/api/auth/register-hub", {
-          method: "POST",
-          body: JSON.stringify({
-            ownerName: trimmedName,
-            mobile: trimmedMobile,
-            password,
-            hubName: trimmedHubName,
-            centreCode: trimmedHubCode,
-          }),
+        const session = await signUpWithEmailPassword(trimmedEmail, password, {
+          name: trimmedName,
+          display_name: trimmedName,
+          username: trimmedUsername,
+          role: authRole,
         });
-
-        const centre = normalizeCentre(data.centre);
-        const nextUser = toCurrentUser(data.user, centre);
-        const nextCentres = upsertCentre(centres, centre);
-        await persistAuthSession(data.token, nextUser);
-        setCentres((prev) => upsertCentre(prev, centre));
-        setCurrentUser(nextUser);
-        await loadOrdersForSession(nextUser, nextCentres);
-        navigate("hubDashboard", { replace: true });
-        return;
+        if (!session.access_token) {
+          setAuthError("Check your email to confirm signup, then login.");
+          return;
+        }
+        await finishBackendLogin(session);
+      } else {
+        const data = await apiRequest("/api/auth/password-login", {
+          method: "POST",
+          body: JSON.stringify({ identifier: trimmedEmail, password }),
+        });
+        const session = data.session;
+        await finishBackendLogin(session);
       }
-
-      const data = await apiRequest("/api/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ mobile: trimmedMobile, password }),
-      });
-
-      const signedInRole = toFrontendRole(data.user.role);
-      if (signedInRole !== authRole) {
-        setAuthError(`This account is registered as ${signedInRole === "hub" ? "a print hub" : "a user"}. Switch the role and try again.`);
-        return;
-      }
-
-      let signedInCentre = findCentreForUser(data.user, centres, data.centre);
-
-      if (signedInRole === "hub" && !signedInCentre) {
-        const freshCentres = await refreshCentres();
-        signedInCentre = findCentreForUser(data.user, freshCentres);
-      }
-
-      if (signedInRole === "hub" && !signedInCentre) {
-        setAuthError("No print hub is linked to this account.");
-        return;
-      }
-
-      const nextUser = toCurrentUser(data.user, signedInCentre);
-      await persistAuthSession(data.token, nextUser);
-      const nextCentres = signedInCentre ? upsertCentre(centres, signedInCentre) : centres;
-      if (signedInCentre) setCentres((prev) => upsertCentre(prev, signedInCentre));
-      setCurrentUser(nextUser);
-      await loadOrdersForSession(nextUser, nextCentres);
-      const destination = postAuthRedirect || (signedInRole === "hub" ? "hubDashboard" : "userDashboard");
-      setPostAuthRedirect(null);
-      if (destination === "payment") setPaymentError("");
-      navigate(destination, { replace: true });
     } catch (error) {
       setAuthError(error.message || "Authentication failed. Please try again.");
     } finally {
       setAuthLoading(false);
+    }
+  }
+
+  async function handleGoogleLogin() {
+    setAuthError("");
+    try {
+      startGoogleOAuth();
+    } catch (error) {
+      setAuthError(error.message || "Google login is not configured.");
     }
   }
 
@@ -1277,17 +1501,25 @@ export default function App() {
                 setAuthRole={changeAuthRole}
                 authMode={authMode}
                 setAuthMode={changeAuthMode}
-                mobile={mobile}
-                setMobile={setMobile}
+                email={email}
+                setEmail={updateEmail}
                 password={password}
                 setPassword={setPassword}
+                showPassword={showPassword}
+                setShowPassword={setShowPassword}
+                username={username}
+                setUsername={updateUsername}
                 name={name}
-                setName={setName}
+                setName={updateName}
+                mobile={mobile}
+                setMobile={setMobile}
                 hubName={hubName}
                 setHubName={setHubName}
                 hubCode={hubCode}
                 setHubCode={setHubCode}
+                generateStrongPassword={generateStrongPassword}
                 handleAuthSubmit={handleAuthSubmit}
+                handleGoogleLogin={handleGoogleLogin}
                 authError={authError}
                 authLoading={authLoading}
               />

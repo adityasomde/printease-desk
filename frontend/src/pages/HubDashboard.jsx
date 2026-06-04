@@ -125,6 +125,9 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
   const centreQrUrl = centreUploadUrl
     ? `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(centreUploadUrl)}`
     : "";
+  const largeCentreQrUrl = centreUploadUrl
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=900x900&data=${encodeURIComponent(centreUploadUrl)}`
+    : "";
 
   const totalPages = ordersForHub.reduce((sum, item) => sum + item.pages * item.copies, 0);
   const totalRevenue = ordersForHub.filter(isPaymentVerified).reduce((sum, item) => sum + Number(item.amount || 0), 0);
@@ -384,6 +387,112 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
     }
   }
 
+  function printCentreQr() {
+    if (!largeCentreQrUrl) return;
+
+    const printWindow = window.open("", "_blank", "noopener,noreferrer,width=900,height=1100");
+    if (!printWindow) {
+      setAgentError("Allow popups to print the QR code.");
+      return;
+    }
+
+    const safeCentreName = String(currentHub.name || "PrintEase Centre").replace(/[<>&"]/g, (character) => ({
+      "<": "&lt;",
+      ">": "&gt;",
+      "&": "&amp;",
+      "\"": "&quot;",
+    }[character]));
+    const safeCentreCode = String(currentHub.code || "").replace(/[<>&"]/g, (character) => ({
+      "<": "&lt;",
+      ">": "&gt;",
+      "&": "&amp;",
+      "\"": "&quot;",
+    }[character]));
+    const safeUploadUrl = centreUploadUrl.replace(/[<>&"]/g, (character) => ({
+      "<": "&lt;",
+      ">": "&gt;",
+      "&": "&amp;",
+      "\"": "&quot;",
+    }[character]));
+
+    printWindow.document.write(`
+      <!doctype html>
+      <html>
+        <head>
+          <title>PrintEase Upload QR - ${safeCentreName}</title>
+          <style>
+            * { box-sizing: border-box; }
+            body {
+              margin: 0;
+              font-family: Arial, sans-serif;
+              color: #0f172a;
+              background: #ffffff;
+            }
+            main {
+              min-height: 100vh;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              gap: 18px;
+              padding: 36px;
+              text-align: center;
+            }
+            h1 {
+              margin: 0;
+              font-size: 34px;
+              line-height: 1.15;
+            }
+            p {
+              margin: 0;
+              font-size: 18px;
+              color: #475569;
+            }
+            img {
+              width: min(720px, 86vw);
+              height: min(720px, 86vw);
+              image-rendering: crisp-edges;
+            }
+            .code {
+              display: inline-block;
+              border: 2px solid #0f172a;
+              border-radius: 14px;
+              padding: 10px 18px;
+              font-size: 24px;
+              font-weight: 800;
+              letter-spacing: 0;
+            }
+            .link {
+              max-width: 760px;
+              overflow-wrap: anywhere;
+              font-size: 13px;
+              color: #64748b;
+            }
+            @media print {
+              main { padding: 18mm; }
+              button { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <main>
+            <h1>${safeCentreName}</h1>
+            <p>Scan to upload documents directly to this print centre.</p>
+            <div class="code">Centre Code: ${safeCentreCode}</div>
+            <img src="${largeCentreQrUrl}" alt="PrintEase upload QR" />
+            <p class="link">${safeUploadUrl}</p>
+          </main>
+          <script>
+            window.addEventListener("load", () => {
+              setTimeout(() => window.print(), 350);
+            });
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -433,6 +542,22 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
               >
                 <Link2 size={16} />
                 Open Upload Page
+              </button>
+              <a
+                href={largeCentreQrUrl}
+                download={`PrintEase-${currentHub.code || "centre"}-upload-qr.png`}
+                className="inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold"
+              >
+                <Download size={16} />
+                Download QR
+              </a>
+              <button
+                type="button"
+                onClick={printCentreQr}
+                className="inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold"
+              >
+                <Printer size={16} />
+                Print QR
               </button>
             </div>
           </div>

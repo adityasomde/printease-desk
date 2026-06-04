@@ -3,17 +3,7 @@ import { Camera, Search, QrCode, X } from "lucide-react";
 import Card from "../components/Card";
 import CentrePriceCard from "../components/CentrePriceCard";
 
-function extractCentreCodeFromQr(value) {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
-
-  try {
-    const url = new URL(raw);
-    return url.searchParams.get("centre") || url.searchParams.get("code") || url.searchParams.get("centreCode") || "";
-  } catch {
-    return raw;
-  }
-}
+import QRScanner from "../components/QRScanner";
 
 export default function CentreCodePage({
   centreCode,
@@ -26,10 +16,14 @@ export default function CentreCodePage({
   lookupError,
 }) {
   const [scannerOpen, setScannerOpen] = useState(false);
-  const [scannerMessage, setScannerMessage] = useState("");
-  const videoRef = useRef(null);
-  const streamRef = useRef(null);
-  const scanFrameRef = useRef(0);
+  const startScanner = () => setScannerOpen(true);
+  const stopScanner = () => setScannerOpen(false);
+
+  const handleScan = async (code) => {
+    setCentreCode(code);
+    stopScanner();
+    await selectCentreByCode(code);
+  };
 
   const filteredCentres = useMemo(() => {
     const query = String(centreCode || "").trim().toLowerCase();
@@ -44,74 +38,7 @@ export default function CentreCodePage({
     );
   }, [centreCode, centres]);
 
-  function stopScanner() {
-    if (scanFrameRef.current) {
-      cancelAnimationFrame(scanFrameRef.current);
-      scanFrameRef.current = 0;
-    }
 
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-
-    setScannerOpen(false);
-  }
-
-  async function startScanner() {
-    setScannerMessage("");
-
-    if (!("BarcodeDetector" in window)) {
-      setScannerMessage("QR camera scan is not supported in this browser. Use your phone camera or search by centre name/code.");
-      return;
-    }
-
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setScannerMessage("Camera access is not available. Search by centre name/code instead.");
-      return;
-    }
-
-    try {
-      setScannerOpen(true);
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
-        audio: false,
-      });
-      streamRef.current = stream;
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
-
-      const detector = new window.BarcodeDetector({ formats: ["qr_code"] });
-      const scan = async () => {
-        if (!videoRef.current || !streamRef.current) return;
-
-        try {
-          const codes = await detector.detect(videoRef.current);
-          const code = extractCentreCodeFromQr(codes[0]?.rawValue);
-          if (code) {
-            setCentreCode(code);
-            stopScanner();
-            await selectCentreByCode(code);
-            return;
-          }
-        } catch {
-          // Continue scanning while the camera is active.
-        }
-
-        scanFrameRef.current = requestAnimationFrame(scan);
-      };
-
-      scanFrameRef.current = requestAnimationFrame(scan);
-    } catch (error) {
-      stopScanner();
-      setScannerMessage(error.message || "Could not open camera. Search by centre name/code instead.");
-    }
-  }
-
-  useEffect(() => stopScanner, []);
 
   return (
     <div className="space-y-8">
@@ -159,7 +86,6 @@ export default function CentreCodePage({
 
         {lookupError && <p className="mt-4 text-sm font-medium text-red-600">{lookupError}</p>}
         {lookupLoading && <p className="mt-4 text-sm text-slate-500">Checking centre code online...</p>}
-        {scannerMessage && <p className="mt-4 text-sm font-medium text-amber-700">{scannerMessage}</p>}
       </Card>
 
       <div>
@@ -182,20 +108,7 @@ export default function CentreCodePage({
       </div>
 
       {scannerOpen && (
-        <div className="fixed inset-0 z-[80] bg-slate-950/90 p-4 text-white">
-          <div className="mx-auto flex max-w-lg flex-col gap-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-xl font-bold">Scan centre QR</h3>
-                <p className="text-sm text-slate-300">Point camera at the PrintEase centre QR.</p>
-              </div>
-              <button onClick={stopScanner} className="rounded-full bg-white/10 p-2">
-                <X size={22} />
-              </button>
-            </div>
-            <video ref={videoRef} playsInline muted className="aspect-[3/4] w-full rounded-3xl border border-white/20 bg-black object-cover" />
-          </div>
-        </div>
+        <QRScanner onScan={handleScan} onClose={stopScanner} />
       )}
     </div>
   );

@@ -36,12 +36,14 @@ export default function PlatformStatsPage() {
     registeredUsers: 0
   });
   const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState(new Date());
 
   useEffect(() => {
     const fetchStats = async () => {
       try {
         const data = await apiRequest("/api/stats/global");
         setStats(data);
+        setLastUpdated(new Date());
       } catch (error) {
         console.error("Failed to load global stats:", error);
       } finally {
@@ -66,12 +68,17 @@ export default function PlatformStatsPage() {
     <div className="mx-auto max-w-5xl space-y-8">
       <div className="flex flex-col items-center justify-between gap-4 rounded-3xl border bg-gradient-to-br from-slate-900 to-slate-800 p-8 text-white sm:flex-row sm:p-10">
         <div>
-          <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm font-medium backdrop-blur-md">
-            <span className="relative flex h-3 w-3">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500"></span>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm font-medium backdrop-blur-md">
+              <span className="relative flex h-3 w-3">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500"></span>
+              </span>
+              System Analytics
+            </div>
+            <span className="text-xs text-slate-400">
+              Last updated: {lastUpdated.toLocaleTimeString()} (auto-refreshes every 10s)
             </span>
-            System Analytics
           </div>
           <h1 className="mt-4 text-3xl font-extrabold sm:text-4xl">PrintEase Global Stats</h1>
           <p className="mt-2 text-slate-300">Live platform performance and usage metrics.</p>

@@ -14,7 +14,7 @@ import { loadConfig, saveConfig, setConfigDirectory } from "./local/config.js";
 import { checkForUpdates, getUpdateStatus, initializeUpdater, installUpdateNow } from "./updater.js";
 
 const require = createRequire(import.meta.url);
-const { app, BrowserWindow, ipcMain, net, protocol, safeStorage, session, shell } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, net, protocol, safeStorage, session, shell } = require("electron");
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -30,13 +30,14 @@ protocol.registerSchemesAsPrivileged([
 
 const DEV_FRONTEND_URL = process.env.PRINTEASE_FRONTEND_URL || "http://127.0.0.1:5175";
 const USE_DEV_FRONTEND = process.env.PRINTEASE_USE_DEV_FRONTEND === "1";
-const VERSION = "0.1.24";
+const VERSION = "0.1.25";
 const HEARTBEAT_INTERVAL_MS = 25000;
 const PRINTER_SYNC_INTERVAL_MS = 30000;
 const JOB_POLL_INTERVAL_MS = 5000;
 const DESKTOP_PROTOCOL_ORIGIN = "app://printease";
 const DESKTOP_AUTH_FILE = "desktop-auth.json";
 const DESKTOP_AGENT_FILE = "desktop-agent.json";
+const STARTUP_LOG_FILE = "startup.log";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -68,6 +69,62 @@ let agentSession = {
   lastJobPollError: "",
   lastJobPollMessage: "",
 };
+
+function serializeStartupError(error) {
+  if (!error) return "";
+  return error.stack || error.message || String(error);
+}
+
+function getStartupLogPath() {
+  try {
+    const userData = app.getPath("userData");
+    fs.mkdirSync(userData, { recursive: true });
+    return path.join(userData, STARTUP_LOG_FILE);
+  } catch {
+    return path.join(os.tmpdir(), `printease-desktop-${STARTUP_LOG_FILE}`);
+  }
+}
+
+function writeStartupLog(event, detail = {}) {
+  const entry = {
+    at: new Date().toISOString(),
+    event,
+    version: VERSION,
+    packaged: app.isPackaged,
+    platform: process.platform,
+    arch: process.arch,
+    ...detail,
+  };
+
+  try {
+    fs.appendFileSync(getStartupLogPath(), `${JSON.stringify(entry)}\n`, "utf8");
+  } catch {
+    // Last-resort startup diagnostics should never crash the app.
+  }
+}
+
+async function runStartupStep(name, task) {
+  writeStartupLog(`${name}:start`);
+  try {
+    const result = await task();
+    writeStartupLog(`${name}:ok`);
+    return result;
+  } catch (error) {
+    writeStartupLog(`${name}:failed`, { error: serializeStartupError(error) });
+    console.warn(`[DESKTOP STARTUP] ${name} failed`, error?.stack || error?.message || error);
+    return null;
+  }
+}
+
+process.on("uncaughtException", (error) => {
+  writeStartupLog("uncaughtException", { error: serializeStartupError(error) });
+  console.error("[DESKTOP UNCAUGHT EXCEPTION]", error);
+});
+
+process.on("unhandledRejection", (reason) => {
+  writeStartupLog("unhandledRejection", { error: serializeStartupError(reason) });
+  console.error("[DESKTOP UNHANDLED REJECTION]", reason);
+});
 
 function getProductionIndexPath() {
   if (app.isPackaged) {
@@ -1395,10 +1452,26 @@ function createMainWindow() {
 
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   mainWindow.webContents.on("preload-error", (_event, preloadPath, error) => {
+    writeStartupLog("preload-error", {
+      preloadPath,
+      error: serializeStartupError(error),
+    });
     console.error("[DESKTOP PRELOAD ERROR]", {
       preloadPath,
       error: error?.stack || error?.message || String(error),
     });
+  });
+  mainWindow.webContents.on("render-process-gone", (_event, details) => {
+    writeStartupLog("render-process-gone", details || {});
+    console.error("[DESKTOP RENDER PROCESS GONE]", details);
+  });
+  mainWindow.webContents.on("unresponsive", () => {
+    writeStartupLog("renderer-unresponsive");
+    console.warn("[DESKTOP RENDERER UNRESPONSIVE]");
+  });
+  mainWindow.on("closed", () => {
+    writeStartupLog("main-window-closed");
+    mainWindow = null;
   });
   mainWindow.webContents.on("console-message", (_event, _level, message) => {
     if (String(message).startsWith("[DESKTOP PRELOAD]")) {
@@ -1415,6 +1488,11 @@ function createMainWindow() {
     if (!isMainFrame) return;
 
     console.warn("[DESKTOP LOAD FAILED]", {
+      errorCode,
+      errorDescription,
+      url: validatedURL,
+    });
+    writeStartupLog("did-fail-load", {
       errorCode,
       errorDescription,
       url: validatedURL,
@@ -1443,6 +1521,9 @@ function createMainWindow() {
     }
   });
   mainWindow.webContents.on("did-finish-load", () => {
+    writeStartupLog("did-finish-load", {
+      url: mainWindow.webContents.getURL(),
+    });
     mainWindow.webContents
       .executeJavaScript(`({
         hasBridge: Boolean(window.printeaseDesktop),
@@ -1463,33 +1544,51 @@ function createMainWindow() {
     if (latestPrinterResult) emitPrinterResult(latestPrinterResult);
   });
 
-  loadFrontend(mainWindow);
+  loadFrontend(mainWindow).catch(async (error) => {
+    writeStartupLog("load-frontend:failed", { error: serializeStartupError(error) });
+    console.error("[DESKTOP LOAD FRONTEND FAILED]", error);
+    try {
+      await mainWindow?.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(getDevServerErrorHtml())}`);
+    } catch (fallbackError) {
+      writeStartupLog("load-frontend-fallback:failed", { error: serializeStartupError(fallbackError) });
+    }
+  });
 }
 
 app.whenReady().then(async () => {
-  await session.defaultSession.clearCache();
-  registerDesktopProtocol();
-  setConfigDirectory(app.getPath("userData"));
-	  await ensureDeviceIdentity();
-	  const restoredAgent = await restoreStoredDesktopAgent();
-	  if (restoredAgent?.restored) {
-	    startAgentRuntime("startup-stored-agent").catch((error) => {
-	      agentSession.lastJobPollError = error.message || "Could not start background desktop agent.";
-	      emitAgentSession();
-	      console.warn("[DESKTOP AGENT BACKGROUND] startup failed", agentSession.lastJobPollError);
-	    });
-	  }
-	  await migrateFileLocalStorageAuth();
-  registerIpcHandlers();
-  createMainWindow();
-  initializeUpdater({ mainWindow });
-  setTimeout(reportStartupPrinterDiagnostics, 1000);
+  writeStartupLog("app-ready");
+  await runStartupStep("clear-cache", () => session.defaultSession.clearCache());
+  await runStartupStep("register-desktop-protocol", () => registerDesktopProtocol());
+  await runStartupStep("set-config-directory", () => setConfigDirectory(app.getPath("userData")));
+  await runStartupStep("register-ipc-handlers", () => registerIpcHandlers());
+  await runStartupStep("create-main-window", () => createMainWindow());
+
+  runStartupStep("ensure-device-identity", () => ensureDeviceIdentity()).then(() => emitAgentSession());
+  runStartupStep("restore-stored-agent", () => restoreStoredDesktopAgent()).then((restoredAgent) => {
+    if (restoredAgent?.restored) {
+      startAgentRuntime("startup-stored-agent").catch((error) => {
+        agentSession.lastJobPollError = error.message || "Could not start background desktop agent.";
+        writeStartupLog("startup-stored-agent:failed", { error: serializeStartupError(error) });
+        emitAgentSession();
+        console.warn("[DESKTOP AGENT BACKGROUND] startup failed", agentSession.lastJobPollError);
+      });
+    }
+  });
+  runStartupStep("migrate-file-local-storage-auth", () => migrateFileLocalStorageAuth());
+  runStartupStep("initialize-updater", () => initializeUpdater({ mainWindow }));
+  setTimeout(() => runStartupStep("startup-printer-diagnostics", () => reportStartupPrinterDiagnostics()), 1000);
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createMainWindow();
     }
   });
+}).catch((error) => {
+  writeStartupLog("app-ready:fatal", { error: serializeStartupError(error) });
+  dialog.showErrorBox(
+    "PrintEase Desktop failed to start",
+    `PrintEase could not open.\n\n${error?.message || String(error)}\n\nLog file: ${getStartupLogPath()}`
+  );
 });
 
 app.on("before-quit", () => {

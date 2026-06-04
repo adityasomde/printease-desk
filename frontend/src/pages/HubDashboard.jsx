@@ -90,7 +90,7 @@ function canPauseOrder(order) {
 }
 
 function canCancelOrder(order) {
-  return !["printing", "ready_for_pickup", ...CLOSED_STATUSES].includes(normalizeStatus(order.status));
+  return !["ready_for_pickup", ...CLOSED_STATUSES].includes(normalizeStatus(order.status));
 }
 
 

@@ -45,7 +45,7 @@ export async function testPrint(printerName) {
   return printerModule.testPrint(printerName);
 }
 
-export async function printFile({ printerName, filePath, copies = 1 } = {}) {
+export async function printFile({ printerName, filePath, copies = 1, options = {} } = {}) {
   if (paused) {
     return {
       success: false,
@@ -56,7 +56,7 @@ export async function printFile({ printerName, filePath, copies = 1 } = {}) {
   const printerModule = getPrinterModule();
   if (!printerModule?.printFile) return unsupportedPlatform();
 
-  const result = await printerModule.printFile({ printerName, filePath, copies });
+  const result = await printerModule.printFile({ printerName, filePath, copies, options });
   if (result && typeof result.success === 'boolean') {
     return result;
   }

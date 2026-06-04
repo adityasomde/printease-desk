@@ -6,7 +6,7 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { backendRequest } from "./heartbeat.js";
-import { printFile } from "../printer/printExecutor.js";
+import { printFile, stopPrinting } from "../printer/printExecutor.js";
 
 export async function getNextJob({ agentToken } = {}) {
   if (!agentToken) {
@@ -44,6 +44,7 @@ export async function markJobStatus({ agentToken, jobId, status, reasonCode, rea
     printing: "printing",
     completed: "completed",
     failed: "failed",
+    cancelled: "cancelled",
   }[status];
 
   if (!statusEndpoint) {
@@ -72,13 +73,14 @@ export async function markJobStatus({ agentToken, jobId, status, reasonCode, rea
   }
 }
 
-function extensionForJob(job) {
-  if (job?.fileType === "application/pdf") return ".pdf";
+function extensionForPrintFile(file) {
+  if (file?.fileType === "application/pdf") return ".pdf";
   return ".bin";
 }
 
-function fileNameForJob(job) {
-  return String(job?.jobId || "job").replace(/[^a-z0-9._-]/gi, "_");
+function fileNameForPrintFile(job, file, index = 0) {
+  const base = file?.documentId || file?.fileName || `${job?.jobId || "job"}-${index + 1}`;
+  return String(base).replace(/[^a-z0-9._-]/gi, "_");
 }
 
 async function calculateSha256(filePath) {
@@ -86,15 +88,70 @@ async function calculateSha256(filePath) {
   return createHash("sha256").update(buffer).digest("hex");
 }
 
-export async function downloadJobFile(job) {
-  if (!job?.fileUrl) {
+function normalizeJobFiles(job) {
+  const files = Array.isArray(job?.files)
+    ? job.files.filter((file) => file?.fileUrl)
+    : [];
+
+  if (files.length) {
+    return files.map((file, index) => ({
+      ...file,
+      index,
+      fileSha256: file.fileSha256 || file.fileHash,
+      copies: file.copies || file.printOptions?.copies || job.copies || 1,
+      printOptions: file.printOptions || job.printOptions || {},
+    }));
+  }
+
+  return [{
+    index: 0,
+    fileUrl: job?.fileUrl,
+    fileSha256: job?.fileSha256 || job?.fileHash,
+    fileType: job?.fileType,
+    copies: job?.copies || 1,
+    printOptions: job?.printOptions || {},
+  }].filter((file) => file.fileUrl);
+}
+
+async function getRemoteJobStatus({ agentToken, jobId } = {}) {
+  if (!agentToken || !jobId) return null;
+
+  try {
+    const data = await backendRequest({
+      endpoint: "/desktop/print-jobs",
+      agentToken,
+    });
+    const jobs = Array.isArray(data.printJobs) ? data.printJobs : [];
+    return jobs.find((job) => job.jobId === jobId || job.id === jobId) || null;
+  } catch {
+    return null;
+  }
+}
+
+async function assertJobStillPrintable({ agentToken, jobId } = {}) {
+  const remoteJob = await getRemoteJobStatus({ agentToken, jobId });
+  const status = String(remoteJob?.status || "").toLowerCase();
+
+  if (["cancelled", "failed"].includes(status)) {
+    await stopPrinting().catch(() => {});
+    const error = new Error(status === "cancelled" ? "Print job was cancelled by the hub." : "Print job is no longer printable.");
+    error.reasonCode = status === "cancelled" ? "ORDER_CANCELLED" : "REMOTE_JOB_STOPPED";
+    error.cancelled = status === "cancelled";
+    throw error;
+  }
+}
+
+export async function downloadJobFile(job, file = null) {
+  const printFileItem = file || normalizeJobFiles(job)[0] || {};
+
+  if (!printFileItem.fileUrl) {
     return {
       success: false,
       message: "Print job does not include a signed file URL.",
     };
   }
 
-  const response = await fetch(job.fileUrl);
+  const response = await fetch(printFileItem.fileUrl);
   if (!response.ok || !response.body) {
     return {
       success: false,
@@ -103,12 +160,12 @@ export async function downloadJobFile(job) {
   }
 
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "printease-job-"));
-  const filePath = path.join(tempDir, `${fileNameForJob(job)}${extensionForJob(job)}`);
+  const filePath = path.join(tempDir, `${fileNameForPrintFile(job, printFileItem, printFileItem.index)}${extensionForPrintFile(printFileItem)}`);
 
   try {
     await pipeline(Readable.fromWeb(response.body), createWriteStream(filePath));
 
-    const expectedHash = job.fileSha256 || job.fileHash;
+    const expectedHash = printFileItem.fileSha256 || printFileItem.fileHash;
     if (expectedHash) {
       const actualHash = await calculateSha256(filePath);
       if (actualHash !== expectedHash) {
@@ -141,43 +198,71 @@ export async function processNextJob({ agentToken, printerName } = {}) {
 
   const job = nextJob.job;
   const selectedPrinterName = printerName || job.printerName;
-  let download = null;
+  const jobFiles = normalizeJobFiles(job);
+  const downloads = [];
 
   try {
+    if (!jobFiles.length) {
+      const error = new Error("Print job does not include printable files.");
+      error.reasonCode = "NO_PRINTABLE_FILES";
+      throw error;
+    }
+
     await markJobStatus({ agentToken, jobId: job.jobId, status: "accepted" });
     await markJobStatus({ agentToken, jobId: job.jobId, status: "downloading" });
 
-    download = await downloadJobFile(job);
-    if (!download.success) throw new Error(download.message);
+    for (const file of jobFiles) {
+      await assertJobStillPrintable({ agentToken, jobId: job.jobId });
+      const download = await downloadJobFile(job, file);
+      if (!download.success) throw new Error(download.message);
+      downloads.push({ ...download, file });
+    }
 
     await markJobStatus({ agentToken, jobId: job.jobId, status: "printing" });
 
-    const printResult = await printFile({
-      printerName: selectedPrinterName,
-      filePath: download.filePath,
-      copies: job.copies || 1,
-    });
+    const printedFiles = [];
+    for (const download of downloads) {
+      await assertJobStillPrintable({ agentToken, jobId: job.jobId });
+      const printResult = await printFile({
+        printerName: selectedPrinterName,
+        filePath: download.filePath,
+        copies: download.file.copies || job.copies || 1,
+        options: {
+          ...download.file.printOptions,
+          copies: download.file.copies || download.file.printOptions?.copies || job.copies || 1,
+        },
+      });
 
-    if (!printResult.success) {
-      const error = new Error(printResult.message || printResult.error || "Local print command failed.");
-      error.reasonCode = printResult.reasonCode || printResult.errorCode || "LOCAL_PRINT_FAILED";
-      throw error;
+      if (!printResult.success) {
+        const error = new Error(printResult.message || printResult.error || "Local print command failed.");
+        error.reasonCode = printResult.reasonCode || printResult.errorCode || "LOCAL_PRINT_FAILED";
+        throw error;
+      }
+
+      printedFiles.push({
+        documentId: download.file.documentId || null,
+        fileName: download.file.fileName || null,
+        printResult,
+      });
     }
+
+    await assertJobStillPrintable({ agentToken, jobId: job.jobId });
 
     await markJobStatus({ agentToken, jobId: job.jobId, status: "completed" });
 
     return {
       success: true,
-      message: "Print job completed.",
+      message: `Print job completed (${printedFiles.length} file${printedFiles.length === 1 ? "" : "s"}).`,
       job,
-      printResult,
+      printResult: printedFiles[printedFiles.length - 1]?.printResult || null,
+      printedFiles,
     };
   } catch (error) {
     const reasonCode = error.reasonCode || error.code || "LOCAL_PRINT_FAILED";
     await markJobStatus({
       agentToken,
       jobId: job.jobId,
-      status: "failed",
+      status: error.cancelled ? "cancelled" : "failed",
       reasonCode,
       reasonText: error.message || "Local print job failed.",
     }).catch(() => {});
@@ -188,7 +273,7 @@ export async function processNextJob({ agentToken, printerName } = {}) {
       job,
     };
   } finally {
-    if (download?.tempDir) {
+    for (const download of downloads) {
       await rm(download.tempDir, { recursive: true, force: true }).catch(() => {});
     }
   }

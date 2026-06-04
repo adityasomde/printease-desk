@@ -45,15 +45,15 @@ export default function HomePage({
     } else {
       let downloadUrl = "";
       if (isWindows) {
-        downloadUrl = "https://github.com/adityasomde/printease-desk/releases/download/desktop-v0.1.26/PrintEase-Desktop-Setup-0.1.26.exe";
+        downloadUrl = "https://github.com/adityasomde/printease-desk/releases/download/desktop-v0.1.27/PrintEase-Desktop-Setup-0.1.27.exe";
       } else if (isLinux) {
-        downloadUrl = "https://github.com/adityasomde/printease-desk/releases/download/desktop-v0.1.26/PrintEase-Desktop-0.1.26-x86_64.AppImage";
+        downloadUrl = "https://github.com/adityasomde/printease-desk/releases/download/desktop-v0.1.27/PrintEase-Desktop-0.1.27-x86_64.AppImage";
       } else {
         const choice = window.prompt("Which OS are you using? Type 'win' for Windows or 'linux' for Linux:", "win");
         if (choice?.toLowerCase().includes("win")) {
-          downloadUrl = "https://github.com/adityasomde/printease-desk/releases/download/desktop-v0.1.26/PrintEase-Desktop-Setup-0.1.26.exe";
+          downloadUrl = "https://github.com/adityasomde/printease-desk/releases/download/desktop-v0.1.27/PrintEase-Desktop-Setup-0.1.27.exe";
         } else if (choice?.toLowerCase().includes("linux")) {
-          downloadUrl = "https://github.com/adityasomde/printease-desk/releases/download/desktop-v0.1.26/PrintEase-Desktop-0.1.26-x86_64.AppImage";
+          downloadUrl = "https://github.com/adityasomde/printease-desk/releases/download/desktop-v0.1.27/PrintEase-Desktop-0.1.27-x86_64.AppImage";
         }
       }
       if (downloadUrl) {

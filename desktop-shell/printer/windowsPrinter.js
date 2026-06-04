@@ -2,9 +2,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
+import { createRequire } from "node:module";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
-import { app } from "electron";
+
+const require = createRequire(import.meta.url);
+const { app } = require("electron");
 
 const execFileAsync = promisify(execFile);
 const DEFAULT_TIMEOUT_MS = 30000;
@@ -348,8 +351,32 @@ startxref
 }
 
 export async function stopPrinting() {
-  return {
-    success: true,
-    message: "Windows print jobs are submitted to the OS print queue. Cancel jobs from Windows Settings > Printers & scanners.",
-  };
+  try {
+    await execFileAsync("taskkill", ["/IM", "SumatraPDF.exe", "/T", "/F"], {
+      timeout: 5000,
+      windowsHide: true,
+      maxBuffer: 1024 * 1024,
+    });
+
+    return {
+      success: true,
+      message: "Stopped active SumatraPDF print helper. Jobs already accepted by Windows may still need cancelling from the printer queue.",
+    };
+  } catch (error) {
+    const stderr = String(error.stderr || error.message || "");
+    const noProcess = stderr.toLowerCase().includes("not found") || stderr.toLowerCase().includes("not running");
+
+    if (noProcess) {
+      return {
+        success: true,
+        message: "No active SumatraPDF print helper was running.",
+      };
+    }
+
+    return {
+      success: false,
+      message: error.message || "Could not stop Windows print helper.",
+      reasonCode: "WINDOWS_STOP_PRINTING_FAILED",
+    };
+  }
 }

@@ -303,7 +303,7 @@ export async function testPrint(printerName) {
   }
 }
 
-export async function printFile({ printerName, filePath, copies = 1 } = {}) {
+export async function printFile({ printerName, filePath, copies = 1, options = {} } = {}) {
   const validation = await validatePrinter(printerName);
   if (!validation.success) return validation;
 
@@ -315,7 +315,8 @@ export async function printFile({ printerName, filePath, copies = 1 } = {}) {
     };
   }
 
-  const safeCopies = Math.max(1, Math.min(Number(copies) || 1, 99));
+  const optionCopies = options?.copies || options?.printOptions?.copies;
+  const safeCopies = Math.max(1, Math.min(Number(optionCopies || copies) || 1, 99));
 
   try {
     const { stdout, stderr } = await runCommand("lp", [

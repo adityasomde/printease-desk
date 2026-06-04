@@ -30,7 +30,7 @@ protocol.registerSchemesAsPrivileged([
 
 const DEV_FRONTEND_URL = process.env.PRINTEASE_FRONTEND_URL || "http://127.0.0.1:5175";
 const USE_DEV_FRONTEND = process.env.PRINTEASE_USE_DEV_FRONTEND === "1";
-const VERSION = "0.1.26";
+const VERSION = "0.1.27";
 const HEARTBEAT_INTERVAL_MS = 25000;
 const PRINTER_SYNC_INTERVAL_MS = 30000;
 const JOB_POLL_INTERVAL_MS = 5000;
@@ -1151,16 +1151,21 @@ async function pollJobsNow(reason = "manual", payload = {}) {
 
     agentSession.lastJobPollAt = new Date().toISOString();
 
-    if (result.success) {
+    if (result.success && result.job) {
       agentSession.lastJobPollError = "";
-      agentSession.lastJobPollMessage = result.job
-        ? `Printed job ${result.job.jobId || result.job.orderId || ""}`.trim()
-        : result.message || "Job poll success.";
+      agentSession.lastJobPollMessage = `Printed job ${result.job.jobId || result.job.orderId || ""}`.trim();
       console.log("[DESKTOP AGENT BACKGROUND] job poll success/job printed", {
         reason,
         printerName,
         jobId: result.job?.jobId || null,
         orderId: result.job?.orderId || null,
+      });
+    } else if (result.success) {
+      agentSession.lastJobPollError = "";
+      agentSession.lastJobPollMessage = result.message || "No jobs.";
+      console.log("[DESKTOP AGENT BACKGROUND] job poll success/no jobs", {
+        reason,
+        printerName: printerName || null,
       });
     } else if (result.status === 401 || result.status === 403) {
       agentSession.lastJobPollError = "Stored desktop agent credential was rejected. Register or pair this desktop again.";
@@ -1179,13 +1184,6 @@ async function pollJobsNow(reason = "manual", payload = {}) {
         jobId: result.job?.jobId || null,
         orderId: result.job?.orderId || null,
         message: result.message,
-      });
-    } else {
-      agentSession.lastJobPollError = "";
-      agentSession.lastJobPollMessage = result.message || "No jobs.";
-      console.log("[DESKTOP AGENT BACKGROUND] job poll success/no jobs", {
-        reason,
-        printerName: printerName || null,
       });
     }
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { BarChart3, Download, Eye, FileText, IndianRupee, Link2, PauseCircle, Printer, RefreshCw, Send, ShieldCheck, Wifi, X, XCircle } from "lucide-react";
+import { BarChart3, Copy, Download, Eye, FileText, IndianRupee, Link2, PauseCircle, Printer, QrCode, RefreshCw, Send, ShieldCheck, Wifi, X, XCircle } from "lucide-react";
 import Card from "../components/Card";
 import Metric from "../components/Metric";
 import StatusBadge from "../components/StatusBadge";
@@ -116,7 +116,15 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
   const [statusActionId, setStatusActionId] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
   const [orderSearch, setOrderSearch] = useState("");
+  const [centreLinkCopied, setCentreLinkCopied] = useState(false);
   const ordersForHub = hubOrders || [];
+  const centreUploadUrl =
+    typeof window !== "undefined" && currentHub?.code
+      ? `${window.location.origin}/upload?centre=${encodeURIComponent(currentHub.code)}`
+      : "";
+  const centreQrUrl = centreUploadUrl
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(centreUploadUrl)}`
+    : "";
 
   const totalPages = ordersForHub.reduce((sum, item) => sum + item.pages * item.copies, 0);
   const totalRevenue = ordersForHub.filter(isPaymentVerified).reduce((sum, item) => sum + Number(item.amount || 0), 0);
@@ -364,6 +372,18 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
     }
   }
 
+  async function copyCentreUploadLink() {
+    if (!centreUploadUrl) return;
+
+    try {
+      await navigator.clipboard.writeText(centreUploadUrl);
+      setCentreLinkCopied(true);
+      setTimeout(() => setCentreLinkCopied(false), 1800);
+    } catch {
+      setAgentError("Could not copy centre upload link.");
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -382,6 +402,47 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
         <Metric title="Pages Printed" value={totalPages} icon={<BarChart3 />} />
         <Metric title="Collected Amount" value={`₹${totalRevenue}`} icon={<IndianRupee />} />
       </div>
+
+      <Card>
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+          <div>
+            <div className="flex items-center gap-2">
+              <QrCode size={22} />
+              <h3 className="text-xl font-bold">Customer Upload QR</h3>
+            </div>
+            <p className="mt-2 text-sm text-slate-600">
+              Customers scan this QR to open the upload page with <b>{currentHub.name}</b> selected automatically.
+            </p>
+            <div className="mt-4 rounded-2xl bg-slate-50 p-3 text-xs text-slate-600">
+              <span className="font-semibold text-slate-900">Link: </span>
+              <span className="break-all">{centreUploadUrl}</span>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={copyCentreUploadLink}
+                className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+              >
+                <Copy size={16} />
+                {centreLinkCopied ? "Copied" : "Copy Link"}
+              </button>
+              <button
+                type="button"
+                onClick={() => window.open(centreUploadUrl, "_blank", "noopener,noreferrer")}
+                className="inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold"
+              >
+                <Link2 size={16} />
+                Open Upload Page
+              </button>
+            </div>
+          </div>
+          {centreQrUrl && (
+            <div className="mx-auto rounded-3xl border bg-white p-3 shadow-sm lg:mx-0">
+              <img src={centreQrUrl} alt={`Upload QR for ${currentHub.name}`} className="h-44 w-44 rounded-2xl" />
+            </div>
+          )}
+        </div>
+      </Card>
 
       <Card>
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">

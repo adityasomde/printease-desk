@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { motion } from "framer-motion";
 
-import { User, Upload, Store, Plus, Building2, Search, Download } from "lucide-react";
+import { User, Upload, Store, Plus, Building2, Search, Download, QrCode } from "lucide-react";
 import Card from "../components/Card";
 import CentrePriceCard from "../components/CentrePriceCard";
 
@@ -15,6 +15,7 @@ export default function HomePage({
   selectCentreAndUpload,
 }) {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [centreSearch, setCentreSearch] = useState("");
 
   useEffect(() => {
     const handler = (e) => {
@@ -44,15 +45,15 @@ export default function HomePage({
     } else {
       let downloadUrl = "";
       if (isWindows) {
-        downloadUrl = "https://github.com/adityasomde/printease-desk/releases/download/desktop-v0.1.20/PrintEase-Desktop-Setup-0.1.20.exe";
+        downloadUrl = "https://github.com/adityasomde/printease-desk/releases/download/desktop-v0.1.23/PrintEase-Desktop-Setup-0.1.23.exe";
       } else if (isLinux) {
-        downloadUrl = "https://github.com/adityasomde/printease-desk/releases/download/desktop-v0.1.20/PrintEase-Desktop-0.1.20-x86_64.AppImage";
+        downloadUrl = "https://github.com/adityasomde/printease-desk/releases/download/desktop-v0.1.23/PrintEase-Desktop-0.1.23-x86_64.AppImage";
       } else {
         const choice = window.prompt("Which OS are you using? Type 'win' for Windows or 'linux' for Linux:", "win");
         if (choice?.toLowerCase().includes("win")) {
-          downloadUrl = "https://github.com/adityasomde/printease-desk/releases/download/desktop-v0.1.20/PrintEase-Desktop-Setup-0.1.20.exe";
+          downloadUrl = "https://github.com/adityasomde/printease-desk/releases/download/desktop-v0.1.23/PrintEase-Desktop-Setup-0.1.23.exe";
         } else if (choice?.toLowerCase().includes("linux")) {
-          downloadUrl = "https://github.com/adityasomde/printease-desk/releases/download/desktop-v0.1.20/PrintEase-Desktop-0.1.20-x86_64.AppImage";
+          downloadUrl = "https://github.com/adityasomde/printease-desk/releases/download/desktop-v0.1.23/PrintEase-Desktop-0.1.23-x86_64.AppImage";
         }
       }
       if (downloadUrl) {
@@ -62,6 +63,18 @@ export default function HomePage({
   };
 
   const isAndroid = typeof navigator !== "undefined" ? /android/i.test(navigator.userAgent || navigator.vendor || window.opera) : false;
+  const filteredCentres = useMemo(() => {
+    const query = centreSearch.trim().toLowerCase();
+    if (!query) return centres;
+
+    return centres.filter((centre) => {
+      return [centre.name, centre.code, centre.owner, centre.status]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query);
+    });
+  }, [centreSearch, centres]);
 
   return (
     <div className="space-y-8">
@@ -92,8 +105,9 @@ export default function HomePage({
             <div className="grid gap-3 sm:grid-cols-2">
               <button
                 onClick={() => navigate("centre")}
-                className="flex min-h-16 items-center justify-center gap-2 rounded-2xl border bg-white px-4 py-3 font-semibold shadow-sm hover:bg-slate-50"
+                className="flex min-h-16 items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 font-bold text-white shadow-sm hover:bg-slate-800"
               >
+                <QrCode size={20} />
                 <Search size={18} />
                 Scan / Select Centre
               </button>
@@ -143,7 +157,7 @@ export default function HomePage({
               <button onClick={() => startRegister("user")} className="rounded-2xl border bg-white p-4 text-left hover:bg-slate-50">
                 <Plus className="mb-3" />
                 <b>Register User</b>
-                <p className="text-sm text-slate-500">Mobile number based account.</p>
+                <p className="text-sm text-slate-500">Username/password account.</p>
               </button>
               <button onClick={() => startRegister("hub")} className="rounded-2xl border bg-white p-4 text-left hover:bg-slate-50">
                 <Building2 className="mb-3" />
@@ -156,20 +170,37 @@ export default function HomePage({
       </div>
 
       <Card>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h3 className="text-2xl font-bold">Available Printing Centres</h3>
             <p className="text-sm text-slate-600">Select a centre directly and upload your document.</p>
           </div>
-          <button onClick={() => navigate("centre")} className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white">
-            Search by Code
-          </button>
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] lg:w-[560px]">
+            <label className="relative block">
+              <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              <input
+                value={centreSearch}
+                onChange={(event) => setCentreSearch(event.target.value)}
+                placeholder="Search centre by name, code, or area"
+                className="w-full rounded-2xl border bg-white py-3 pl-11 pr-4 text-sm outline-none focus:ring-2 focus:ring-slate-300"
+              />
+            </label>
+            <button onClick={() => navigate("centre")} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white">
+              <QrCode size={17} />
+              Scan / Code
+            </button>
+          </div>
         </div>
 
         <div className="mt-6 grid gap-4 md:grid-cols-2">
-          {centres.map((centre) => (
+          {filteredCentres.map((centre) => (
             <CentrePriceCard key={centre.id} centre={centre} onUpload={() => selectCentreAndUpload(centre)} />
           ))}
+          {filteredCentres.length === 0 && (
+            <div className="rounded-2xl border border-dashed bg-slate-50 p-6 text-center text-sm text-slate-500 md:col-span-2">
+              No centre matches this search. Try the centre code or shop name.
+            </div>
+          )}
         </div>
       </Card>
     </div>

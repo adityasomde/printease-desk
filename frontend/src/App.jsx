@@ -449,6 +449,7 @@ export default function App() {
   const [centres, setCentres] = useState(initialCentres);
   const [orders, setOrders] = useState(initialOrders);
   const [lastOrdersUpdatedAt, setLastOrdersUpdatedAt] = useState("");
+  const handledCentreLinkRef = useRef("");
 
   useEffect(() => {
     setDesktopAvailable(isDesktop());
@@ -630,6 +631,39 @@ export default function App() {
     return orders.filter((item) => item.centreCode === currentHub.code || item.centreId === currentHub.id);
   }, [orders, currentHub]);
 
+  const prioritizedCentres = useMemo(() => {
+    const usageByCentre = new Map();
+
+    for (const item of orders) {
+      const keys = [item.centreId, item.centreCode].filter(Boolean);
+      for (const key of keys) {
+        usageByCentre.set(String(key), (usageByCentre.get(String(key)) || 0) + 1);
+      }
+    }
+
+    return [...centres].sort((left, right) => {
+      const rightUsage = (usageByCentre.get(String(right.id)) || 0) + (usageByCentre.get(String(right.code)) || 0);
+      const leftUsage = (usageByCentre.get(String(left.id)) || 0) + (usageByCentre.get(String(left.code)) || 0);
+      if (rightUsage !== leftUsage) return rightUsage - leftUsage;
+
+      const rightAvailable = String(right.status || "").toLowerCase() === "available" ? 1 : 0;
+      const leftAvailable = String(left.status || "").toLowerCase() === "available" ? 1 : 0;
+      if (rightAvailable !== leftAvailable) return rightAvailable - leftAvailable;
+
+      return String(left.name || "").localeCompare(String(right.name || ""));
+    });
+  }, [centres, orders]);
+
+  useEffect(() => {
+    if (authMode !== "register" && authMode !== "profile") return;
+    if (usernameEdited) return;
+
+    const immediateUsername = getUsernameBaseCandidates(name, email)[0];
+    setUsernameState(immediateUsername);
+    const timer = setTimeout(() => suggestUniqueUsername(name, email), 250);
+    return () => clearTimeout(timer);
+  }, [authMode, name, email, usernameEdited]);
+
   function navigate(nextPage, options = {}) {
     if (typeof nextPage === "number") {
       routerNavigate(nextPage);
@@ -680,6 +714,7 @@ export default function App() {
   function updateEmail(value) {
     setEmail(value);
     if (!usernameEdited) {
+      setUsernameState(getUsernameBaseCandidates(name, value)[0]);
       suggestUniqueUsername(name, value);
     }
   }
@@ -687,6 +722,7 @@ export default function App() {
   function updateName(value) {
     setName(value);
     if (!usernameEdited) {
+      setUsernameState(getUsernameBaseCandidates(value, email)[0]);
       suggestUniqueUsername(value, email);
     }
   }
@@ -999,20 +1035,22 @@ export default function App() {
 
   const approvalReturnPath = `${location.pathname}${location.search}`;
 
-  async function handleCentreCode() {
-    const code = centreCode.trim();
+  async function selectCentreByCode(rawCode, options = {}) {
+    const code = String(rawCode || "").trim();
     setCentreLookupError("");
 
     if (!code) {
       setCentreLookupError("Enter a centre code.");
-      return;
+      return false;
     }
 
-    const localCentre = centres.find((c) => c.code === code);
+    const localCentre = centres.find(
+      (c) => String(c.code || "").toLowerCase() === code.toLowerCase() || String(c.id || "") === code
+    );
     if (localCentre) {
       setSelectedCentre(localCentre);
-      navigate("upload");
-      return;
+      navigate("upload", options);
+      return true;
     }
 
     setCentreLookupLoading(true);
@@ -1022,13 +1060,33 @@ export default function App() {
       const centre = normalizeCentre(data.centre);
       setCentres((prev) => upsertCentre(prev, centre));
       setSelectedCentre(centre);
-      navigate("upload");
+      navigate("upload", options);
+      return true;
     } catch (error) {
       setCentreLookupError(error.message || "Centre not found.");
+      return false;
     } finally {
       setCentreLookupLoading(false);
     }
   }
+
+  async function handleCentreCode() {
+    await selectCentreByCode(centreCode);
+  }
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const code = params.get("centre") || params.get("code") || params.get("centreCode");
+    const trimmedCode = String(code || "").trim();
+    if (!trimmedCode) return;
+
+    const requestKey = `${location.pathname}:${trimmedCode}`;
+    if (handledCentreLinkRef.current === requestKey) return;
+    handledCentreLinkRef.current = requestKey;
+
+    setCentreCode(trimmedCode);
+    selectCentreByCode(trimmedCode, { replace: true });
+  }, [location.pathname, location.search, centres]);
 
   function startDirectUpload() {
     setSelectedCentre(null);
@@ -1504,7 +1562,7 @@ export default function App() {
         PrintEase local dev · frontend may run locally · backend Render cloud only · desktop bridge {desktopAvailable ? "connected" : "not connected"}
       </div>
 
-      <main className="mx-auto max-w-6xl px-4 py-8">
+      <main className="mx-auto max-w-6xl px-4 pb-28 pt-8 md:pb-8">
         <BackendStatus />
 
         <RouteErrorBoundary>
@@ -1515,7 +1573,7 @@ export default function App() {
                 <HomePage
                   currentUser={currentUser}
                   navigate={navigate}
-                  centres={centres}
+                  centres={prioritizedCentres}
                   startLogin={startLogin}
                   startRegister={startRegister}
                   startDirectUpload={startDirectUpload}
@@ -1616,7 +1674,7 @@ export default function App() {
             }
           />
           <Route path={ROUTES.desktopAgent} element={<DesktopAgentPage currentUser={currentUser} />} />
-          <Route path={ROUTES.centre} element={<CentreCodePage centreCode={centreCode} setCentreCode={setCentreCode} handleCentreCode={handleCentreCode} centres={centres} selectCentreAndUpload={selectCentreAndUpload} lookupLoading={centreLookupLoading} lookupError={centreLookupError} />} />
+          <Route path={ROUTES.centre} element={<CentreCodePage centreCode={centreCode} setCentreCode={setCentreCode} handleCentreCode={handleCentreCode} selectCentreByCode={selectCentreByCode} centres={prioritizedCentres} selectCentreAndUpload={selectCentreAndUpload} lookupLoading={centreLookupLoading} lookupError={centreLookupError} />} />
           <Route path={ROUTES.upload} element={<UploadPage selectedCentre={selectedCentre} documentFile={documentFile} setDocumentFile={setDocumentFile} documentFiles={documentFiles} setDocumentFiles={setDocumentFiles} documentName={documentName} setDocumentName={setDocumentName} pages={pages} setPages={setPages} selectedPages={selectedPages} setSelectedPages={setSelectedPages} copies={copies} setCopies={setCopies} colorType={colorType} setColorType={setColorType} sideType={sideType} setSideType={setSideType} paperSize={paperSize} setPaperSize={setPaperSize} pagesPerSheet={pagesPerSheet} setPagesPerSheet={setPagesPerSheet} orientation={orientation} setOrientation={setOrientation} printDpi={printDpi} setPrintDpi={setPrintDpi} scaleMode={scaleMode} setScaleMode={setScaleMode} marginMode={marginMode} setMarginMode={setMarginMode} watermark={watermark} setWatermark={setWatermark} watermarkType={watermarkType} setWatermarkType={setWatermarkType} watermarkText={watermarkText} setWatermarkText={setWatermarkText} watermarkPosition={watermarkPosition} setWatermarkPosition={setWatermarkPosition} watermarkOpacity={watermarkOpacity} setWatermarkOpacity={setWatermarkOpacity} watermarkFontSize={watermarkFontSize} setWatermarkFontSize={setWatermarkFontSize} watermarkRotation={watermarkRotation} setWatermarkRotation={setWatermarkRotation} pricePerPage={pricePerPage} estimatedSelectedPageCount={estimatedSelectedPageCount} totalAmount={totalAmount} backendPrice={backendPrice} preparePayment={preparePayment} paymentLoading={paymentLoading} paymentError={paymentError} navigate={navigate} />} />
           <Route
             path={ROUTES.payment}

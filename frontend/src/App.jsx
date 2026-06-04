@@ -15,6 +15,7 @@ import UploadPage from "./pages/UploadPage";
 import PaymentPage from "./pages/PaymentPage";
 import TrackPage from "./pages/TrackPage";
 import HistoryPage from "./pages/HistoryPage";
+import PlatformStatsPage from "./pages/PlatformStatsPage";
 import { initialCentres, initialOrders } from "./data/demoData";
 import { calculateTotalAmount, countSelectedPages, getPricePerPage } from "./utils/price";
 import { clearStoredAuth, getStoredAuth, isDesktop, onPrintersUpdated, saveStoredAuth } from "./utils/desktopBridge";
@@ -40,6 +41,7 @@ const ROUTES = {
   payment: "/payment",
   track: "/track",
   history: "/history",
+  platformStats: "/_system/global-metrics",
 };
 
 function getPageFromPath(pathname) {
@@ -456,6 +458,22 @@ export default function App() {
     return onPrintersUpdated(() => {
       setDesktopAvailable(true);
     });
+  }, []);
+
+  useEffect(() => {
+    let sessionId = sessionStorage.getItem("printease_session_id");
+    if (!sessionId) {
+      sessionId = window.crypto.randomUUID();
+      sessionStorage.setItem("printease_session_id", sessionId);
+    }
+
+    const pingVisit = () => {
+      apiRequest("/api/stats/visit", { method: "POST", body: { sessionId } }).catch(() => {});
+    };
+
+    pingVisit();
+    const interval = setInterval(pingVisit, 60000);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -1613,6 +1631,8 @@ export default function App() {
                 />
               }
             />
+            
+            <Route path={ROUTES.platformStats} element={<PlatformStatsPage />} />
 
           <Route
             path={ROUTES.auth}

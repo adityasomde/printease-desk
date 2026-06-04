@@ -30,7 +30,7 @@ protocol.registerSchemesAsPrivileged([
 
 const DEV_FRONTEND_URL = process.env.PRINTEASE_FRONTEND_URL || "http://127.0.0.1:5175";
 const USE_DEV_FRONTEND = process.env.PRINTEASE_USE_DEV_FRONTEND === "1";
-const VERSION = "0.1.25";
+const VERSION = "0.1.26";
 const HEARTBEAT_INTERVAL_MS = 25000;
 const PRINTER_SYNC_INTERVAL_MS = 30000;
 const JOB_POLL_INTERVAL_MS = 5000;
@@ -1416,8 +1416,17 @@ function registerIpcHandlers() {
 
 function isAllowedNavigation(url) {
   if (url.startsWith("data:text/html")) return true;
-  if (url.startsWith("file://")) return true;
   if (url.startsWith(DESKTOP_PROTOCOL_ORIGIN)) return true;
+
+  if (app.isPackaged) {
+    return false;
+  }
+
+  if (url.startsWith("file://")) return true;
+
+  if (!USE_DEV_FRONTEND) {
+    return false;
+  }
 
   try {
     return new URL(url).origin === new URL(DEV_FRONTEND_URL).origin;

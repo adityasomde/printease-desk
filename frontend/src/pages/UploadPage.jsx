@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { FileText, Upload, IndianRupee } from "lucide-react";
 import Card from "../components/Card";
 import Row from "../components/Row";
@@ -63,6 +64,29 @@ export default function UploadPage({
     if (files.length === 1) setDocumentName(firstFile.name);
     if (files.length > 1) setDocumentName(`${files.length} uploaded documents`);
   }
+
+  // Handle global paste gesture for files
+  useEffect(() => {
+    const handlePaste = (e) => {
+      const files = Array.from(e.clipboardData?.files || []).filter(f => f.type === 'application/pdf');
+      if (files.length > 0) {
+        setDocumentFiles(files);
+        setDocumentFile(files[0]);
+        if (files.length === 1) setDocumentName(files[0].name);
+        if (files.length > 1) setDocumentName(`${files.length} uploaded documents`);
+      }
+    };
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [setDocumentFiles, setDocumentFile, setDocumentName]);
+
+  const handlePaymentClick = () => {
+    if (!selectedCentre) {
+      navigate("centre");
+      return;
+    }
+    preparePayment();
+  };
 
   const selectedFileCount = documentFiles?.length || (documentFile ? 1 : 0);
   const selectedFileLabel = selectedFileCount > 1
@@ -229,11 +253,14 @@ export default function UploadPage({
           )}
         </div>
       </Card>
+      
+      {/* Spacer to prevent form hiding under sticky footer on mobile */}
+      <div className="h-28 md:hidden"></div>
 
-      <div className="fixed bottom-[68px] left-0 right-0 z-40 border-t bg-white p-4 pb-3 shadow-[0_-8px_15px_rgba(0,0,0,0.08)] md:static md:bottom-auto md:z-auto md:block md:border-t-0 md:bg-transparent md:p-0 md:shadow-none">
+      <div className="fixed bottom-[68px] left-0 right-0 z-40 border-t bg-white p-3 shadow-[0_-8px_15px_rgba(0,0,0,0.08)] md:static md:bottom-auto md:z-auto md:block md:border-t-0 md:bg-transparent md:p-0 md:shadow-none">
         <Card className="rounded-none border-0 p-0 shadow-none md:rounded-2xl md:border md:p-6 md:shadow-sm">
           
-          <div className="mb-3 flex items-center justify-between md:mb-0 md:block">
+          <div className="mb-2 flex items-center justify-between md:mb-0 md:block">
             <h3 className="hidden text-xl font-bold md:block">Price Summary</h3>
             
             <div className="flex w-full items-center justify-between font-bold md:hidden">
@@ -242,12 +269,12 @@ export default function UploadPage({
             </div>
           </div>
 
-          <details className="group mb-3 md:hidden">
+          <details className="group mb-2 md:hidden">
             <summary className="flex cursor-pointer items-center text-xs font-semibold text-slate-500 outline-none">
               <span>View Price Details</span>
               <span className="ml-1 transition-transform group-open:rotate-180">▼</span>
             </summary>
-            <div className="mt-3 max-h-[30vh] space-y-2 overflow-y-auto pb-2 text-xs">
+            <div className="mt-2 max-h-[30vh] space-y-2 overflow-y-auto pb-2 text-xs">
               <Row label="Original Pages" value={backendPrice?.originalPageCount || pages} />
               <Row label="Selected Pages" value={backendPrice?.selectedPageCount || selectedPages || "All"} />
               <Row label="Copies" value={copies} />
@@ -288,15 +315,15 @@ export default function UploadPage({
             </div>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 md:block">
             {!selectedCentre && (
-              <button onClick={() => navigate("centre")} className="w-1/3 rounded-2xl border bg-white px-3 py-3 text-sm font-semibold hover:bg-slate-50 md:mt-6 md:w-full md:px-4 md:text-base">
+              <button onClick={() => navigate("centre")} className="flex-1 rounded-2xl border bg-white px-2 py-3 text-sm font-semibold hover:bg-slate-50 md:mt-6 md:w-full md:px-4 md:text-base">
                 Select Centre
               </button>
             )}
 
-            <button onClick={preparePayment} disabled={!selectedCentre || !selectedFileCount || paymentLoading} className="w-full flex-1 rounded-2xl bg-slate-900 px-4 py-3 font-semibold text-white disabled:opacity-40 md:mt-3">
-              {paymentLoading ? "Calculating..." : "Continue to Payment"}
+            <button onClick={handlePaymentClick} disabled={!selectedFileCount || paymentLoading} className="flex-1 rounded-2xl bg-slate-900 px-2 py-3 text-sm font-semibold text-white disabled:opacity-40 md:mt-3 md:w-full md:px-4 md:text-base">
+              {paymentLoading ? "Calculating..." : (!selectedCentre ? "Select & Continue" : "Continue to Payment")}
             </button>
           </div>
         </Card>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
+import jsQR from "jsqr";
 
 export function extractCentreCodeFromQr(value) {
   const raw = String(value || "").trim();
@@ -23,11 +24,6 @@ export default function QRScanner({ onScan, onClose }) {
     let mounted = true;
 
     async function startScanner() {
-      if (!("BarcodeDetector" in window)) {
-        if (mounted) setError("QR camera scan is not supported in this browser. Use your phone camera or search by centre name/code.");
-        return;
-      }
-
       if (!navigator.mediaDevices?.getUserMedia) {
         if (mounted) setError("Camera access is not available. Search by centre name/code instead.");
         return;
@@ -48,23 +44,33 @@ export default function QRScanner({ onScan, onClose }) {
 
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
+          videoRef.current.setAttribute("playsinline", "true"); // required for iOS Safari
           await videoRef.current.play();
         }
 
-        const detector = new window.BarcodeDetector({ formats: ["qr_code"] });
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d", { willReadFrequently: true });
         
-        const scan = async () => {
+        const scan = () => {
           if (!mounted || !videoRef.current || !streamRef.current) return;
 
-          try {
-            const codes = await detector.detect(videoRef.current);
-            const code = extractCentreCodeFromQr(codes[0]?.rawValue);
+          if (videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
+            canvas.height = videoRef.current.videoHeight;
+            canvas.width = videoRef.current.videoWidth;
+            context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+            const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+            
+            const code = jsQR(imageData.data, imageData.width, imageData.height, {
+              inversionAttempts: "dontInvert",
+            });
+
             if (code) {
-              onScan(code);
-              return; // Stop scanning once we found one
+              const extractedCode = extractCentreCodeFromQr(code.data);
+              if (extractedCode) {
+                onScan(extractedCode);
+                return; // Stop scanning once we found one
+              }
             }
-          } catch {
-            // Continue scanning
           }
 
           scanFrameRef.current = requestAnimationFrame(scan);

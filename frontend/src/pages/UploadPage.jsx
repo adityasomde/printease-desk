@@ -1,5 +1,5 @@
-import { useEffect, useState, useMemo } from "react";
-import { FileText, Upload, IndianRupee, CheckSquare, Square } from "lucide-react";
+import { useEffect, useState, useMemo, useRef } from "react";
+import { FileText, Upload, IndianRupee, CheckSquare, Square, X, Settings2 } from "lucide-react";
 import Card from "../components/Card";
 import Row from "../components/Row";
 import { calculateTotalAmount, getPricePerPage, countSelectedPages } from "../utils/price";
@@ -107,7 +107,7 @@ export default function UploadPage({
     return () => window.removeEventListener("paste", handlePaste);
   }, [multiFileConfigs, documentFiles]); // eslint-disable-line
   
-  const activeConfig = isMulti && selectedFileNames.length > 0
+  const activeConfig = modalFile ? multiFileConfigs[modalFile] : isMulti && selectedFileNames.length > 0
     ? multiFileConfigs[selectedFileNames[0]]
     : {
         pages,
@@ -131,6 +131,13 @@ export default function UploadPage({
       };
 
   const setConfigVal = (key, value) => {
+    if (modalFile) {
+      setMultiFileConfigs((prev) => ({
+        ...prev,
+        [modalFile]: { ...prev[modalFile], [key]: value },
+      }));
+      return;
+    }
     if (!isMulti) {
       if (key === "pages") setPages(value);
       else if (key === "selectedPages") setSelectedPages(value);
@@ -165,33 +172,33 @@ export default function UploadPage({
 
   const compactConfigurationForm = (
     <div className="grid gap-2 grid-cols-2 md:grid-cols-4 bg-slate-50 p-3 rounded-2xl border border-slate-100">
-      <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-2 md:col-span-1">
+      <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-1">
         Pages
         <input type="number" min="1" value={activeConfig?.pages || 1} onChange={(e) => setConfigVal("pages", Number(e.target.value))} className="rounded-xl border px-2 py-1.5 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
       </label>
-      <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-2 md:col-span-1">
+      <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-1">
         Range
         <input value={activeConfig?.selectedPages || ""} onChange={(e) => setConfigVal("selectedPages", e.target.value)} placeholder="1,3-4" className="rounded-xl border px-2 py-1.5 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
       </label>
-      <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-2 md:col-span-1">
+      <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-1">
         Copies
         <input type="number" min="1" value={activeConfig?.copies || 1} onChange={(e) => setConfigVal("copies", Number(e.target.value))} className="rounded-xl border px-2 py-1.5 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
       </label>
-      <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-2 md:col-span-1">
+      <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-1">
         Color
         <select value={activeConfig?.colorType || "bw"} onChange={(e) => setConfigVal("colorType", e.target.value)} className="rounded-xl border px-2 py-1.5 font-normal text-slate-900">
           <option value="bw">B & W</option>
           <option value="color">Color</option>
         </select>
       </label>
-      <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-2 md:col-span-1">
+      <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-1">
         Sides
         <select value={activeConfig?.sideType || "single"} onChange={(e) => setConfigVal("sideType", e.target.value)} className="rounded-xl border px-2 py-1.5 font-normal text-slate-900">
           <option value="single">Single side</option>
           <option value="double">Double side</option>
         </select>
       </label>
-      <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-2 md:col-span-1">
+      <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-1">
         Size
         <select value={activeConfig?.paperSize || "A4"} onChange={(e) => setConfigVal("paperSize", e.target.value)} className="rounded-xl border px-2 py-1.5 font-normal text-slate-900">
           <option value="A4">A4</option>
@@ -200,7 +207,7 @@ export default function UploadPage({
           <option value="Legal">Legal</option>
         </select>
       </label>
-      <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-2 md:col-span-1">
+      <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-1">
         Layout
         <select value={activeConfig?.orientation || "auto"} onChange={(e) => setConfigVal("orientation", e.target.value)} className="rounded-xl border px-2 py-1.5 font-normal text-slate-900">
           <option value="auto">Auto</option>
@@ -208,7 +215,7 @@ export default function UploadPage({
           <option value="landscape">Landscape</option>
         </select>
       </label>
-      <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-2 md:col-span-1">
+      <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-1">
         Pages/Sheet
         <select value={activeConfig?.pagesPerSheet || 1} onChange={(e) => setConfigVal("pagesPerSheet", Number(e.target.value))} className="rounded-xl border px-2 py-1.5 font-normal text-slate-900">
           <option value={1}>1</option>
@@ -219,7 +226,7 @@ export default function UploadPage({
           <option value={16}>16</option>
         </select>
       </label>
-      <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-2 md:col-span-1">
+      <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-1">
         DPI
         <select value={activeConfig?.printDpi || 300} onChange={(e) => setConfigVal("printDpi", Number(e.target.value))} className="rounded-xl border px-2 py-1.5 font-normal text-slate-900">
           <option value={203}>203</option>
@@ -227,7 +234,7 @@ export default function UploadPage({
           <option value={600}>600</option>
         </select>
       </label>
-      <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-2 md:col-span-1">
+      <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-1">
         Scale
         <select value={activeConfig?.scaleMode || "original"} onChange={(e) => setConfigVal("scaleMode", e.target.value)} className="rounded-xl border px-2 py-1.5 font-normal text-slate-900">
           <option value="original">Original</option>
@@ -249,13 +256,13 @@ export default function UploadPage({
       </label>
       {activeConfig?.watermark && (
         <div className="grid gap-2 rounded-xl border bg-white p-3 col-span-2 md:col-span-4 md:grid-cols-4">
-          <select value={activeConfig?.watermarkType || "order_code"} onChange={(e) => setConfigVal("watermarkType", e.target.value)} className="rounded-xl border px-2 py-1.5 text-xs col-span-2 md:col-span-1">
+          <select value={activeConfig?.watermarkType || "order_code"} onChange={(e) => setConfigVal("watermarkType", e.target.value)} className="rounded-xl border px-2 py-1.5 text-xs col-span-1">
             <option value="order_code">Order code</option>
             <option value="pickup_code">Pickup code</option>
             <option value="date_time">Date/time</option>
             <option value="custom_text">Custom text</option>
           </select>
-          <select value={activeConfig?.watermarkPosition || "bottom_right"} onChange={(e) => setConfigVal("watermarkPosition", e.target.value)} className="rounded-xl border px-2 py-1.5 text-xs col-span-2 md:col-span-1">
+          <select value={activeConfig?.watermarkPosition || "bottom_right"} onChange={(e) => setConfigVal("watermarkPosition", e.target.value)} className="rounded-xl border px-2 py-1.5 text-xs col-span-1">
             <option value="bottom_right">Bottom right</option>
             <option value="center">Center</option>
             <option value="top_left">Top left</option>
@@ -263,11 +270,11 @@ export default function UploadPage({
           {activeConfig?.watermarkType === "custom_text" && (
             <input value={activeConfig?.watermarkText || ""} onChange={(e) => setConfigVal("watermarkText", e.target.value)} placeholder="Text" className="rounded-xl border px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-slate-300 col-span-2 md:col-span-2" />
           )}
-          <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-2 md:col-span-1">
+          <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-1">
             Opacity
             <input type="range" min="0.05" max="0.6" step="0.01" value={activeConfig?.watermarkOpacity || 0.18} onChange={(e) => setConfigVal("watermarkOpacity", Number(e.target.value))} />
           </label>
-          <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-2 md:col-span-1">
+          <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-1">
             Rotation
             <input type="range" min="-90" max="90" step="5" value={activeConfig?.watermarkRotation || 0} onChange={(e) => setConfigVal("watermarkRotation", Number(e.target.value))} />
           </label>
@@ -325,34 +332,34 @@ export default function UploadPage({
   };
 
   const regularConfigurationForm = (
-    <div className="grid gap-4 grid-cols-2">
-      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-2 md:col-span-1">
+    <div className="grid gap-2 md:gap-4 grid-cols-2">
+      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-1">
         Estimated pages
         <input type="number" min="1" value={activeConfig?.pages || 1} onChange={(e) => setConfigVal("pages", Number(e.target.value))} className="rounded-2xl border px-4 py-3 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
       </label>
-      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-2 md:col-span-1">
+      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-1">
         Page range
         <input value={activeConfig?.selectedPages || ""} onChange={(e) => setConfigVal("selectedPages", e.target.value)} placeholder="All, or 1,3-4" className="rounded-2xl border px-4 py-3 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
       </label>
-      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-2 md:col-span-1">
+      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-1">
         Copies
         <input type="number" min="1" value={activeConfig?.copies || 1} onChange={(e) => setConfigVal("copies", Number(e.target.value))} className="rounded-2xl border px-4 py-3 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
       </label>
-      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-2 md:col-span-1">
+      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-1">
         Color mode
         <select value={activeConfig?.colorType || "bw"} onChange={(e) => setConfigVal("colorType", e.target.value)} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
           <option value="bw">Black & White</option>
           <option value="color">Color</option>
         </select>
       </label>
-      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-2 md:col-span-1">
+      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-1">
         Sides
         <select value={activeConfig?.sideType || "single"} onChange={(e) => setConfigVal("sideType", e.target.value)} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
           <option value="single">Single side</option>
           <option value="double">Double side</option>
         </select>
       </label>
-      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-2 md:col-span-1">
+      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-1">
         Paper size
         <select value={activeConfig?.paperSize || "A4"} onChange={(e) => setConfigVal("paperSize", e.target.value)} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
           <option value="A4">A4</option>
@@ -361,7 +368,7 @@ export default function UploadPage({
           <option value="Legal">Legal</option>
         </select>
       </label>
-      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-2 md:col-span-1">
+      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-1">
         Orientation
         <select value={activeConfig?.orientation || "auto"} onChange={(e) => setConfigVal("orientation", e.target.value)} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
           <option value="auto">Auto</option>
@@ -369,7 +376,7 @@ export default function UploadPage({
           <option value="landscape">Landscape</option>
         </select>
       </label>
-      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-2 md:col-span-1">
+      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-1">
         Pages per sheet
         <select value={activeConfig?.pagesPerSheet || 1} onChange={(e) => setConfigVal("pagesPerSheet", Number(e.target.value))} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
           <option value={1}>1 page per sheet</option>
@@ -380,7 +387,7 @@ export default function UploadPage({
           <option value={16}>16 pages per sheet</option>
         </select>
       </label>
-      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-2 md:col-span-1">
+      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-1">
         Print quality
         <select value={activeConfig?.printDpi || 300} onChange={(e) => setConfigVal("printDpi", Number(e.target.value))} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
           <option value={203}>Draft - 203 DPI</option>
@@ -388,7 +395,7 @@ export default function UploadPage({
           <option value={600}>High - 600 DPI</option>
         </select>
       </label>
-      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-2 md:col-span-1">
+      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-1">
         Scale
         <select value={activeConfig?.scaleMode || "original"} onChange={(e) => setConfigVal("scaleMode", e.target.value)} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
           <option value="original">Original size</option>
@@ -493,6 +500,11 @@ export default function UploadPage({
                     <div
                       key={file.name}
                       onClick={() => toggleSelectFile(file.name)}
+                      onTouchStart={() => handleTouchStart(file.name)}
+                      onTouchEnd={handleTouchEnd}
+                      onMouseDown={() => handleTouchStart(file.name)}
+                      onMouseUp={handleTouchEnd}
+                      onMouseLeave={handleTouchEnd}
                       className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 transition ${
                         isSelected ? "border-slate-400 bg-slate-100" : "border-transparent bg-slate-50 hover:bg-slate-100"
                       }`}
@@ -504,6 +516,9 @@ export default function UploadPage({
                       <div className="shrink-0 flex items-center gap-2 text-slate-500 text-xs">
                         <span className="bg-slate-200 px-2 py-0.5 rounded text-slate-700">{conf.colorType === 'bw' ? 'B/W' : 'Color'}</span>
                         <span className="bg-slate-200 px-2 py-0.5 rounded text-slate-700">{conf.copies} copy</span>
+                        <button onClick={(e) => { e.stopPropagation(); setModalFile(file.name); }} className="ml-1 p-1 text-slate-400 hover:text-slate-900">
+                          <Settings2 size={16} />
+                        </button>
                       </div>
                     </div>
                   );
@@ -618,6 +633,27 @@ export default function UploadPage({
           </div>
         </Card>
       </div>
-    </div>
+    
+      {modalFile && (
+        <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center bg-black/50 p-0 md:p-4 transition-opacity" onClick={() => setModalFile(null)}>
+          <div className="w-full max-w-2xl md:rounded-2xl rounded-t-2xl bg-white p-4 shadow-xl animate-in slide-in-from-bottom-full md:slide-in-from-bottom-10" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-4 flex items-center justify-between border-b pb-2">
+              <h3 className="font-bold text-lg truncate pr-4 text-slate-900">Configure {modalFile}</h3>
+              <button onClick={() => setModalFile(null)} className="text-slate-500 hover:text-slate-900 rounded-full p-1 hover:bg-slate-100 transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="max-h-[70vh] overflow-y-auto pr-2 pb-4">
+              {compactConfigurationForm}
+            </div>
+            <div className="pt-2">
+              <button onClick={() => setModalFile(null)} className="w-full rounded-xl bg-slate-900 py-3.5 font-semibold text-white shadow-md hover:bg-slate-800 transition-colors">
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+</div>
   );
 }

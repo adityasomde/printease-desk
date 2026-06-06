@@ -14,7 +14,7 @@ export function extractCentreCodeFromQr(value) {
   }
 }
 
-export default function QRScanner({ onScan, onClose }) {
+export default function QRScanner({ onScan, onClose, inline = false }) {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const scanFrameRef = useRef(0);
@@ -94,6 +94,13 @@ export default function QRScanner({ onScan, onClose }) {
       }
     };
   }, [onScan]);
+
+  if (inline) {
+    if (error) return null;
+    return (
+      <video ref={videoRef} playsInline muted className="absolute inset-0 h-full w-full object-cover" />
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-[80] bg-slate-950/90 p-4 text-white">

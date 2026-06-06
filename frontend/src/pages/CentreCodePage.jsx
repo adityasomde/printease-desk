@@ -15,6 +15,27 @@ export default function CentreCodePage({
   lookupLoading,
   lookupError,
 }) {
+  const [cameraGranted, setCameraGranted] = useState(false);
+
+  useEffect(() => {
+    async function checkCameraPermission() {
+      if (navigator.permissions && navigator.permissions.query) {
+        try {
+          const result = await navigator.permissions.query({ name: "camera" });
+          if (result.state === "granted") {
+            setCameraGranted(true);
+          }
+          result.onchange = () => {
+            setCameraGranted(result.state === "granted");
+          };
+        } catch (e) {
+          // Ignore
+        }
+      }
+    }
+    checkCameraPermission();
+  }, []);
+
   const [scannerOpen, setScannerOpen] = useState(false);
   const startScanner = () => setScannerOpen(true);
   const stopScanner = () => setScannerOpen(false);
@@ -49,14 +70,20 @@ export default function CentreCodePage({
           <button
             type="button"
             onClick={startScanner}
-            className="group relative overflow-hidden flex h-full min-h-[185px] w-full flex-col items-center justify-center gap-3 rounded-3xl border-2 border-slate-200 bg-slate-50 p-6 text-slate-700 transition hover:bg-slate-100 hover:border-slate-300"
+            className={`group relative overflow-hidden flex h-full min-h-[185px] w-full flex-col items-center justify-center gap-3 rounded-3xl border-2 transition ${cameraGranted ? "border-transparent bg-slate-900 text-white" : "border-slate-200 bg-slate-50 p-6 text-slate-700 hover:bg-slate-100 hover:border-slate-300"}`}
             title="Scan QR Code"
           >
-            <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden opacity-30">
+            {cameraGranted && !scannerOpen && (
+               <div className="absolute inset-0 z-0 opacity-80 md:opacity-100">
+                  <QRScanner onScan={handleScan} inline />
+               </div>
+            )}
+            <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden opacity-30">
                <div className="absolute left-[10%] h-[3px] w-[80%] rounded-full bg-emerald-500 shadow-[0_0_12px_3px_rgba(16,185,129,0.7)] animate-scan" />
             </div>
-            <QrCode size={54} className="z-10 text-slate-900" />
-            <span className="z-10 font-bold text-lg">Scan QR</span>
+            <div className="pointer-events-none absolute inset-0 z-20 bg-black/20" />
+            <QrCode size={54} className={`z-30 ${cameraGranted ? 'text-white drop-shadow-md' : 'text-slate-900'}`} />
+            <span className={`z-30 font-bold text-lg ${cameraGranted ? 'text-white drop-shadow-md' : ''}`}>Scan QR</span>
           </button>
 
           <div className="flex flex-col gap-4 justify-center">

@@ -104,6 +104,8 @@ export default function UploadPage({
       }
     };
     window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [multiFileConfigs, documentFiles]); // eslint-disable-line
   
   const compactConfigurationForm = (
     <div className="grid gap-2 grid-cols-2 md:grid-cols-4 bg-slate-50 p-3 rounded-2xl border border-slate-100">
@@ -218,9 +220,6 @@ export default function UploadPage({
       )}
     </div>
   );
-
-  return () => window.removeEventListener("paste", handlePaste);
-  }, [multiFileConfigs, documentFiles]); // eslint-disable-line
 
   const handlePaymentClick = () => {
     if (!selectedCentre) {

@@ -143,8 +143,8 @@ export default function PaymentPage({
       <div className="h-24 md:hidden"></div>
 
       {/* Floating Action Bar */}
-      <div className="fixed bottom-[68px] left-0 right-0 z-40 border-t bg-white p-4 shadow-[0_-8px_15px_rgba(0,0,0,0.08)] md:static md:bottom-auto md:z-auto md:mt-6 md:block md:border-t-0 md:bg-transparent md:p-0 md:shadow-none">
-        <button disabled={paymentLoading} onClick={handlePayment} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400 disabled:opacity-70">
+      <div className="fixed bottom-[84px] left-4 right-4 z-40 rounded-2xl border bg-white/90 p-2 shadow-2xl backdrop-blur md:static md:bottom-auto md:z-auto md:mt-6 md:block md:border-0 md:bg-transparent md:p-0 md:shadow-none md:backdrop-blur-none">
+        <button disabled={paymentLoading} onClick={handlePayment} className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:opacity-70 md:rounded-2xl">
           <ButtonIcon size={18} /> {paymentLoading ? loadingLabel : buttonLabel}
         </button>
       </div>

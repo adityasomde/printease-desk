@@ -30,8 +30,8 @@ ROOT="/home/adisssss/Desktop/web_dev/printhub"
 
 MVP_FRONTEND="$ROOT/printease-mvp-main/frontend"
 DESK_FRONTEND="$ROOT/printease-desk/frontend"
-DESK_REPO="$ROOT/desk"
-MVP_REPO="$ROOT/printease"
+DESK_REPO="$ROOT/printease-desk"
+MVP_REPO="$ROOT/printease-mvp-main"
 
 MODE="${1:-status}"
 APPLY="false"

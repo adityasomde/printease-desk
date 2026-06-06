@@ -4,7 +4,7 @@ import Card from "../components/Card";
 import Metric from "../components/Metric";
 import StatusBadge from "../components/StatusBadge";
 import { hubStatusOptions } from "../data/demoData";
-import { collectCashPayment, createDocumentSignedDownload, getHubAgentSummary, getOrderDocuments, pairAgent, sendOrderToAgent } from "../services/api";
+import { apiRequest, collectCashPayment, createDocumentSignedDownload, getHubAgentSummary, getOrderDocuments, pairAgent, sendOrderToAgent } from "../services/api";
 
 function normalizeStatus(status) {
   return String(status || "").toLowerCase().replace(/\s+/g, "_");
@@ -162,7 +162,14 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
   const [orderSearch, setOrderSearch] = useState("");
   const [centreLinkCopied, setCentreLinkCopied] = useState(false);
-  const [globalAutoPrintAfterCash, setGlobalAutoPrintAfterCash] = useState(false);
+  const [globalAutoPrintAfterCash, setGlobalAutoPrintAfterCash] = useState(() => {
+    const saved = localStorage.getItem("printease_global_auto_print_cash");
+    return saved !== null ? saved === "true" : true;
+  });
+
+  useEffect(() => {
+    localStorage.setItem("printease_global_auto_print_cash", String(globalAutoPrintAfterCash));
+  }, [globalAutoPrintAfterCash]);
   const ordersForHub = hubOrders || [];
   const centreUploadUrl =
     typeof window !== "undefined" && currentHub?.code
@@ -552,6 +559,8 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
     printWindow.document.write(printableHtml);
     printWindow.document.close();
   }
+
+
 
   return (
     <div className="space-y-6">

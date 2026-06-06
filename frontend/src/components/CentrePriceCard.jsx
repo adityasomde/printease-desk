@@ -11,9 +11,11 @@ export default function CentrePriceCard({ centre, onUpload }) {
           <p className="text-xs text-slate-500">UPI: {centre.upiId}</p>
           {centre.upiQrImageUrl && <p className="text-xs text-slate-500">UPI QR available</p>}
         </div>
-        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${centre.status === "Available" ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
-          {centre.status}
-        </span>
+        <div className="flex flex-col items-end gap-2">
+          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${centre.printerOnline ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
+            {centre.printerOnline ? "Available" : "Unavailable"}
+          </span>
+        </div>
       </div>
 
       <div className="mt-4 space-y-2 rounded-2xl bg-white p-4 text-sm">

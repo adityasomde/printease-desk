@@ -125,6 +125,7 @@ export default function AuthPage({
               name="name"
               autoComplete="name"
               disabled={authLoading}
+              maxLength={50}
             />
             <Input
               label="PrintEase username"
@@ -182,7 +183,7 @@ export default function AuthPage({
             </div>
 
             {isHub && <Input label="Hub / Shop Name" icon={<Store size={18} />} value={hubName} setValue={setHubName} placeholder="Example: Sai Printing Hub" disabled={authLoading} />}
-            {isHub && <Input label="Centre Code" icon={<QrCode size={18} />} value={hubCode} setValue={setHubCode} placeholder="Example: 2045" disabled={authLoading} />}
+            {isHub && <Input label="Centre Code" icon={<QrCode size={18} />} value={hubCode} setValue={setHubCode} placeholder="Example: 2045" disabled={authLoading} maxLength={8} />}
 
             <div className="rounded-2xl border bg-white p-4">
               <p className="text-sm font-semibold text-slate-800">Contact details</p>

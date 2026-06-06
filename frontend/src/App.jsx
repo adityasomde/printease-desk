@@ -6,6 +6,7 @@ import HomePage from "./pages/HomePage";
 import AuthPage from "./pages/AuthPage";
 import UserDashboard from "./pages/UserDashboard";
 import HubDashboard from "./pages/HubDashboard";
+import ProfilePage from "./pages/ProfilePage";
 import HubPricingPage from "./pages/HubPricingPage";
 import HubPrinterAgentPage from "./pages/HubPrinterAgentPage";
 import ApproveAgentPage from "./pages/ApproveAgentPage";
@@ -36,6 +37,7 @@ const ROUTES = {
   hubPrinters: "/hub/printers",
   approveAgent: "/hub/printers/approve-agent",
   desktopAgent: "/desktop-agent",
+  profile: "/profile",
   centre: "/centre",
   upload: "/upload",
   payment: "/payment",
@@ -188,6 +190,7 @@ function normalizeCentre(centre) {
     colorSingle: pricing.colorSingle ?? centre.colorSingle ?? 2,
     colorDouble: pricing.colorDouble ?? centre.colorDouble ?? 3,
     watermarkCharge: pricing.watermarkCharge ?? centre.watermarkCharge ?? 2,
+    printerOnline: centre.printerOnline ?? centre.isOnline ?? false,
   };
 }
 
@@ -724,14 +727,14 @@ export default function App() {
         }
       } catch {
         if (usernameSuggestionRequest.current === requestId && (force || !usernameEdited)) {
-          setUsernameState(candidates[0]);
+          setUsernameState("");
         }
         return;
       }
     }
 
     if (usernameSuggestionRequest.current === requestId && (force || !usernameEdited)) {
-      setUsernameState(candidates[0]);
+      setUsernameState("");
     }
   }
 
@@ -796,6 +799,49 @@ export default function App() {
       suggestUniqueUsername(name, email, true);
     }
     setAuthError("");
+  }
+
+  function openProfile() {
+    navigate(ROUTES.profile);
+  }
+
+  async function updateProfile(updates) {
+    const { name, username, email, mobile, hubName, hubCode } = updates;
+    const trimmedName = name?.trim();
+    const trimmedEmail = email?.trim();
+    const trimmedUsername = username?.trim();
+    const trimmedMobile = mobile?.trim();
+    const trimmedHubName = hubName?.trim();
+    const trimmedHubCode = hubCode?.trim();
+
+    if (!trimmedName) throw new Error("Enter your name.");
+    if (trimmedName.length > 50) throw new Error("Name must be 50 characters or less.");
+    if (trimmedEmail && !/^\S+@\S+\.\S+$/.test(trimmedEmail)) throw new Error("Enter a valid email address.");
+    if (!trimmedUsername || !/^[a-z0-9]+$/.test(trimmedUsername)) throw new Error("Username can use only lowercase letters and numbers.");
+    if (currentUser?.role === "hub") {
+      if (!trimmedHubName || !trimmedHubCode) throw new Error("Enter print hub name and centre code.");
+      if (trimmedHubCode.length > 8) throw new Error("Centre code must be 8 characters or less.");
+    }
+
+    const data = await apiRequest("/api/auth/profile", {
+      method: "POST",
+      body: JSON.stringify({
+        name: trimmedName,
+        role: currentUser?.role,
+        username: trimmedUsername,
+        displayHandle: trimmedUsername,
+        mobile: trimmedMobile || null,
+        hubName: trimmedHubName,
+        centreCode: trimmedHubCode,
+      }),
+    });
+
+    const nextUser = { ...currentUser, ...data.user, centre: data.centre || currentUser?.centre };
+    setCurrentUser(nextUser);
+    localStorage.setItem("printease_user", JSON.stringify(nextUser));
+    
+    await refreshCentres();
+    return nextUser;
   }
 
   async function refreshCentres() {
@@ -912,6 +958,11 @@ export default function App() {
       return;
     }
 
+    if (trimmedName.length > 50) {
+      setAuthError("Name must be 50 characters or less.");
+      return;
+    }
+
     if (trimmedEmail && !/^\S+@\S+\.\S+$/.test(trimmedEmail)) {
       setAuthError("Enter a valid email address.");
       return;
@@ -978,6 +1029,11 @@ export default function App() {
       return;
     }
 
+    if (authMode === "register" && trimmedName.length > 50) {
+      setAuthError("Name must be 50 characters or less.");
+      return;
+    }
+
     if (authMode === "register" && (!trimmedUsername || !/^[a-z0-9]+$/.test(trimmedUsername))) {
       setAuthError("Username can use only lowercase letters and numbers.");
       return;
@@ -993,9 +1049,15 @@ export default function App() {
       return;
     }
 
-    if (authMode === "register" && authRole === "hub" && (!trimmedHubName || !trimmedHubCode)) {
-      setAuthError("Enter print hub name and centre code.");
-      return;
+    if (authMode === "register" && authRole === "hub") {
+      if (!trimmedHubName || !trimmedHubCode) {
+        setAuthError("Enter print hub name and centre code.");
+        return;
+      }
+      if (trimmedHubCode.length > 8) {
+        setAuthError("Centre code must be 8 characters or less.");
+        return;
+      }
     }
 
     if (!password) {
@@ -1124,7 +1186,7 @@ export default function App() {
     navigate("upload");
   }
 
-  async function preparePayment() {
+  async function preparePayment(customFileConfigs) {
     if (!selectedCentre) {
       setPaymentError("Please select a printing centre first.");
       navigate("centre");
@@ -1168,7 +1230,7 @@ export default function App() {
         setPages(trustedPageCount);
       }
 
-      const printOptions = buildPrintOptions({
+      const defaultPrintOptions = buildPrintOptions({
         selectedPages,
         copies,
         colorType,
@@ -1193,22 +1255,44 @@ export default function App() {
         body: JSON.stringify({
           centreCode: selectedCentre.code,
           documentIds: uploadedDocuments.map((document) => document.id),
-          files: uploadedDocuments.map((document) => ({
-            documentId: document.id,
-            documentName: document.fileName,
-            selectedPages,
-            copies,
-            colorType,
-            sideType,
-            paperSize,
-            pagesPerSheet,
-            orientation,
-            printDpi,
-            scaleMode,
-            marginMode,
-            watermarkEnabled: watermark,
-            printOptions,
-          })),
+          files: uploadedDocuments.map((document) => {
+            const config = customFileConfigs?.[document.fileName] || {
+              selectedPages,
+              copies,
+              colorType,
+              sideType,
+              paperSize,
+              pagesPerSheet,
+              orientation,
+              printDpi,
+              scaleMode,
+              marginMode,
+              watermark,
+              watermarkType,
+              watermarkText,
+              watermarkPosition,
+              watermarkOpacity,
+              watermarkFontSize,
+              watermarkRotation,
+            };
+
+            return {
+              documentId: document.id,
+              documentName: document.fileName,
+              selectedPages: config.selectedPages,
+              copies: config.copies,
+              colorType: config.colorType,
+              sideType: config.sideType,
+              paperSize: config.paperSize,
+              pagesPerSheet: config.pagesPerSheet,
+              orientation: config.orientation,
+              printDpi: config.printDpi,
+              scaleMode: config.scaleMode,
+              marginMode: config.marginMode,
+              watermarkEnabled: config.watermark,
+              printOptions: customFileConfigs ? buildPrintOptions(config) : defaultPrintOptions,
+            };
+          }),
           documentName: uploadedDocuments.length === 1
             ? uploadedDocuments[0]?.fileName || documentName || filesToUpload[0].name
             : `${uploadedDocuments.length} uploaded documents`,
@@ -1611,6 +1695,7 @@ export default function App() {
         startLogin={startLogin}
         startRegister={startRegister}
         logout={logout}
+        openProfile={openProfile}
       />
 
       <div className={`border-b px-4 py-2 text-center text-xs font-semibold ${desktopAvailable ? "bg-emerald-50 text-emerald-800" : "bg-slate-100 text-slate-700"}`}>
@@ -1672,12 +1757,22 @@ export default function App() {
               />
             }
           />
+          <Route
+            path={ROUTES.profile}
+            element={
+              currentUser ? (
+                <ProfilePage currentUser={currentUser} updateProfile={updateProfile} navigate={navigate} />
+              ) : (
+                <RouteNotice title="Login Required" message="Please login to view your profile." actionLabel="Login" onAction={() => startLogin("user")} />
+              )
+            }
+          />
 
           <Route
             path={ROUTES.userDashboard}
             element={
               currentUser?.role === "user" ? (
-                <UserDashboard currentUser={currentUser} navigate={navigate} orders={orders} />
+                <UserDashboard currentUser={currentUser} navigate={navigate} orders={orders} openProfile={openProfile} />
               ) : (
                 <RouteNotice title="Login Required" message="Please login as a user to view your dashboard." actionLabel="Login as User" onAction={() => startLogin("user")} />
               )
@@ -1693,6 +1788,7 @@ export default function App() {
                   updateOrderStatus={updateOrderStatus}
                   refreshOrders={() => loadOrdersForSession(currentUser, centres)}
                   navigate={navigate}
+                  openProfile={openProfile}
                 />
               ) : (
                 <RouteNotice title="Print Hub Login Required" message="Please login as a print hub to view this dashboard." actionLabel="Login as Print Hub" onAction={() => startLogin("hub")} />

@@ -26,12 +26,12 @@ set -euo pipefail
 #   desktop-shell/
 #   release files
 
-ROOT="/home/adisssss/Desktop/web_dev/printhub"
+ROOT="/home/chaitanya/Downloads/printhub"
 
-MVP_FRONTEND="$ROOT/printease-mvp-main/frontend"
-DESK_FRONTEND="$ROOT/printease-desk/frontend"
-DESK_REPO="$ROOT/printease-desk"
-MVP_REPO="$ROOT/printease-mvp-main"
+MVP_FRONTEND="$ROOT/printease/frontend"
+DESK_FRONTEND="$ROOT/desk/frontend"
+DESK_REPO="$ROOT/desk"
+MVP_REPO="$ROOT/printease"
 
 MODE="${1:-status}"
 APPLY="false"

@@ -50,6 +50,7 @@ export default function Navbar({
   startLogin,
   startRegister,
   logout,
+  openProfile,
 }) {
   return (
     <>
@@ -115,6 +116,7 @@ export default function Navbar({
                         <MenuItem icon={<Settings size={16} />} onClick={() => navigate("hubPricing")}>Pricing & Payment</MenuItem>
                       </>
                     )}
+                    <MenuItem icon={<User size={16} />} onClick={openProfile}>Profile</MenuItem>
                     {desktopAvailable && <MenuItem icon={<Printer size={16} />} onClick={() => navigate("desktopAgent")}>Desktop Agent</MenuItem>}
                     <MenuItem icon={<History size={16} />} onClick={() => navigate("history")}>Usage History</MenuItem>
                     <MenuItem icon={<LogOut size={16} />} onClick={logout}>Logout</MenuItem>

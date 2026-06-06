@@ -1,7 +1,8 @@
-import { useEffect } from "react";
-import { FileText, Upload, IndianRupee } from "lucide-react";
+import { useEffect, useState, useMemo } from "react";
+import { FileText, Upload, IndianRupee, CheckSquare, Square } from "lucide-react";
 import Card from "../components/Card";
 import Row from "../components/Row";
+import { calculateTotalAmount, getPricePerPage, countSelectedPages } from "../utils/price";
 
 export default function UploadPage({
   selectedCentre,
@@ -11,42 +12,24 @@ export default function UploadPage({
   setDocumentFiles,
   documentName,
   setDocumentName,
-  pages,
-  setPages,
-  selectedPages,
-  setSelectedPages,
-  copies,
-  setCopies,
-  colorType,
-  setColorType,
-  sideType,
-  setSideType,
-  paperSize,
-  setPaperSize,
-  pagesPerSheet,
-  setPagesPerSheet,
-  orientation,
-  setOrientation,
-  printDpi,
-  setPrintDpi,
-  scaleMode,
-  setScaleMode,
-  marginMode,
-  setMarginMode,
-  watermark,
-  setWatermark,
-  watermarkType,
-  setWatermarkType,
-  watermarkText,
-  setWatermarkText,
-  watermarkPosition,
-  setWatermarkPosition,
-  watermarkOpacity,
-  setWatermarkOpacity,
-  watermarkFontSize,
-  setWatermarkFontSize,
-  watermarkRotation,
-  setWatermarkRotation,
+  pages, setPages,
+  selectedPages, setSelectedPages,
+  copies, setCopies,
+  colorType, setColorType,
+  sideType, setSideType,
+  paperSize, setPaperSize,
+  pagesPerSheet, setPagesPerSheet,
+  orientation, setOrientation,
+  printDpi, setPrintDpi,
+  scaleMode, setScaleMode,
+  marginMode, setMarginMode,
+  watermark, setWatermark,
+  watermarkType, setWatermarkType,
+  watermarkText, setWatermarkText,
+  watermarkPosition, setWatermarkPosition,
+  watermarkOpacity, setWatermarkOpacity,
+  watermarkFontSize, setWatermarkFontSize,
+  watermarkRotation, setWatermarkRotation,
   pricePerPage,
   estimatedSelectedPageCount,
   totalAmount,
@@ -56,6 +39,43 @@ export default function UploadPage({
   paymentError,
   navigate,
 }) {
+  const [fileConfigs, setFileConfigs] = useState({});
+  const [selectedFileNames, setSelectedFileNames] = useState([]);
+
+  const isMulti = documentFiles.length > 1;
+
+  function initConfigs(files) {
+    const newConfigs = { ...fileConfigs };
+    const names = [];
+    files.forEach((f) => {
+      names.push(f.name);
+      if (!newConfigs[f.name]) {
+        newConfigs[f.name] = {
+          pages: 1,
+          selectedPages: "",
+          copies: 1,
+          colorType: "bw",
+          sideType: "single",
+          paperSize: "A4",
+          pagesPerSheet: 1,
+          orientation: "auto",
+          printDpi: 300,
+          scaleMode: "original",
+          marginMode: "default",
+          watermark: false,
+          watermarkType: "order_code",
+          watermarkText: "",
+          watermarkPosition: "bottom_right",
+          watermarkOpacity: 0.18,
+          watermarkFontSize: 18,
+          watermarkRotation: 0,
+        };
+      }
+    });
+    setFileConfigs(newConfigs);
+    setSelectedFileNames(names);
+  }
+
   function handleFileChange(event) {
     const files = Array.from(event.target.files || []);
     const firstFile = files[0] || null;
@@ -63,36 +83,363 @@ export default function UploadPage({
     setDocumentFile(firstFile);
     if (files.length === 1) setDocumentName(firstFile.name);
     if (files.length > 1) setDocumentName(`${files.length} uploaded documents`);
+    if (files.length > 1) initConfigs(files);
   }
 
-  // Handle global paste gesture for files
   useEffect(() => {
     const handlePaste = (e) => {
-      const files = Array.from(e.clipboardData?.files || []).filter(f => f.type === 'application/pdf');
+      const files = Array.from(e.clipboardData?.files || []).filter((f) => f.type === "application/pdf");
       if (files.length > 0) {
         setDocumentFiles(files);
         setDocumentFile(files[0]);
         if (files.length === 1) setDocumentName(files[0].name);
-        if (files.length > 1) setDocumentName(`${files.length} uploaded documents`);
+        if (files.length > 1) {
+          setDocumentName(`${files.length} uploaded documents`);
+          initConfigs(files);
+        }
       }
     };
-    window.addEventListener('paste', handlePaste);
-    return () => window.removeEventListener('paste', handlePaste);
-  }, [setDocumentFiles, setDocumentFile, setDocumentName]);
+    window.addEventListener("paste", handlePaste);
+  
+  const compactConfigurationForm = (
+    <div className="grid gap-2 grid-cols-2 md:grid-cols-4 bg-slate-50 p-3 rounded-2xl border border-slate-100">
+      <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-2 md:col-span-1">
+        Pages
+        <input type="number" min="1" value={activeConfig?.pages || 1} onChange={(e) => setConfigVal("pages", Number(e.target.value))} className="rounded-xl border px-2 py-1.5 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
+      </label>
+      <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-2 md:col-span-1">
+        Range
+        <input value={activeConfig?.selectedPages || ""} onChange={(e) => setConfigVal("selectedPages", e.target.value)} placeholder="1,3-4" className="rounded-xl border px-2 py-1.5 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
+      </label>
+      <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-2 md:col-span-1">
+        Copies
+        <input type="number" min="1" value={activeConfig?.copies || 1} onChange={(e) => setConfigVal("copies", Number(e.target.value))} className="rounded-xl border px-2 py-1.5 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
+      </label>
+      <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-2 md:col-span-1">
+        Color
+        <select value={activeConfig?.colorType || "bw"} onChange={(e) => setConfigVal("colorType", e.target.value)} className="rounded-xl border px-2 py-1.5 font-normal text-slate-900">
+          <option value="bw">B & W</option>
+          <option value="color">Color</option>
+        </select>
+      </label>
+      <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-2 md:col-span-1">
+        Sides
+        <select value={activeConfig?.sideType || "single"} onChange={(e) => setConfigVal("sideType", e.target.value)} className="rounded-xl border px-2 py-1.5 font-normal text-slate-900">
+          <option value="single">Single side</option>
+          <option value="double">Double side</option>
+        </select>
+      </label>
+      <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-2 md:col-span-1">
+        Size
+        <select value={activeConfig?.paperSize || "A4"} onChange={(e) => setConfigVal("paperSize", e.target.value)} className="rounded-xl border px-2 py-1.5 font-normal text-slate-900">
+          <option value="A4">A4</option>
+          <option value="A3">A3</option>
+          <option value="Letter">Letter</option>
+          <option value="Legal">Legal</option>
+        </select>
+      </label>
+      <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-2 md:col-span-1">
+        Layout
+        <select value={activeConfig?.orientation || "auto"} onChange={(e) => setConfigVal("orientation", e.target.value)} className="rounded-xl border px-2 py-1.5 font-normal text-slate-900">
+          <option value="auto">Auto</option>
+          <option value="portrait">Portrait</option>
+          <option value="landscape">Landscape</option>
+        </select>
+      </label>
+      <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-2 md:col-span-1">
+        Pages/Sheet
+        <select value={activeConfig?.pagesPerSheet || 1} onChange={(e) => setConfigVal("pagesPerSheet", Number(e.target.value))} className="rounded-xl border px-2 py-1.5 font-normal text-slate-900">
+          <option value={1}>1</option>
+          <option value={2}>2</option>
+          <option value={4}>4</option>
+          <option value={6}>6</option>
+          <option value={9}>9</option>
+          <option value={16}>16</option>
+        </select>
+      </label>
+      <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-2 md:col-span-1">
+        DPI
+        <select value={activeConfig?.printDpi || 300} onChange={(e) => setConfigVal("printDpi", Number(e.target.value))} className="rounded-xl border px-2 py-1.5 font-normal text-slate-900">
+          <option value={203}>203</option>
+          <option value={300}>300</option>
+          <option value={600}>600</option>
+        </select>
+      </label>
+      <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-2 md:col-span-1">
+        Scale
+        <select value={activeConfig?.scaleMode || "original"} onChange={(e) => setConfigVal("scaleMode", e.target.value)} className="rounded-xl border px-2 py-1.5 font-normal text-slate-900">
+          <option value="original">Original</option>
+          <option value="fit_to_page">Fit page</option>
+          <option value="fit_to_page_width">Fit width</option>
+        </select>
+      </label>
+      <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-2 md:col-span-2">
+        Margins
+        <select value={activeConfig?.marginMode || "default"} onChange={(e) => setConfigVal("marginMode", e.target.value)} className="rounded-xl border px-2 py-1.5 font-normal text-slate-900">
+          <option value="default">Default</option>
+          <option value="minimum">Minimum</option>
+          <option value="none">None</option>
+        </select>
+      </label>
+      <label className="flex items-center gap-2 rounded-xl border px-3 py-1.5 col-span-2 md:col-span-4 bg-white">
+        <input type="checkbox" checked={activeConfig?.watermark || false} onChange={(e) => setConfigVal("watermark", e.target.checked)} />
+        <span className="text-xs font-semibold">Add watermark</span>
+      </label>
+      {activeConfig?.watermark && (
+        <div className="grid gap-2 rounded-xl border bg-white p-3 col-span-2 md:col-span-4 md:grid-cols-4">
+          <select value={activeConfig?.watermarkType || "order_code"} onChange={(e) => setConfigVal("watermarkType", e.target.value)} className="rounded-xl border px-2 py-1.5 text-xs col-span-2 md:col-span-1">
+            <option value="order_code">Order code</option>
+            <option value="pickup_code">Pickup code</option>
+            <option value="date_time">Date/time</option>
+            <option value="custom_text">Custom text</option>
+          </select>
+          <select value={activeConfig?.watermarkPosition || "bottom_right"} onChange={(e) => setConfigVal("watermarkPosition", e.target.value)} className="rounded-xl border px-2 py-1.5 text-xs col-span-2 md:col-span-1">
+            <option value="bottom_right">Bottom right</option>
+            <option value="center">Center</option>
+            <option value="top_left">Top left</option>
+          </select>
+          {activeConfig?.watermarkType === "custom_text" && (
+            <input value={activeConfig?.watermarkText || ""} onChange={(e) => setConfigVal("watermarkText", e.target.value)} placeholder="Text" className="rounded-xl border px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-slate-300 col-span-2 md:col-span-2" />
+          )}
+          <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-2 md:col-span-1">
+            Opacity
+            <input type="range" min="0.05" max="0.6" step="0.01" value={activeConfig?.watermarkOpacity || 0.18} onChange={(e) => setConfigVal("watermarkOpacity", Number(e.target.value))} />
+          </label>
+          <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-2 md:col-span-1">
+            Rotation
+            <input type="range" min="-90" max="90" step="5" value={activeConfig?.watermarkRotation || 0} onChange={(e) => setConfigVal("watermarkRotation", Number(e.target.value))} />
+          </label>
+          <input type="number" min="8" max="72" value={activeConfig?.watermarkFontSize || 18} onChange={(e) => setConfigVal("watermarkFontSize", Number(e.target.value))} placeholder="Size" className="rounded-xl border px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-slate-300 col-span-2 md:col-span-2" />
+        </div>
+      )}
+    </div>
+  );
+
+  return () => window.removeEventListener("paste", handlePaste);
+  }, [fileConfigs]); // eslint-disable-line
 
   const handlePaymentClick = () => {
     if (!selectedCentre) {
       navigate("centre");
       return;
     }
-    preparePayment();
+    if (isMulti) {
+      preparePayment(fileConfigs);
+    } else {
+      preparePayment();
+    }
   };
 
   const selectedFileCount = documentFiles?.length || (documentFile ? 1 : 0);
-  const selectedFileLabel = selectedFileCount > 1
-    ? `${selectedFileCount} PDFs selected`
-    : documentFile?.name;
+  const selectedFileLabel = selectedFileCount > 1 ? `${selectedFileCount} PDFs selected` : documentFile?.name;
   const selectedFileSize = (documentFiles || []).reduce((sum, file) => sum + file.size, 0) || documentFile?.size || 0;
+
+  const localEstimatedTotal = useMemo(() => {
+    if (!isMulti) return totalAmount;
+    let total = 0;
+    for (const f of documentFiles) {
+      const c = fileConfigs[f.name];
+      if (!c) continue;
+      const ppp = getPricePerPage(selectedCentre, c.colorType, c.sideType);
+      const estPages = countSelectedPages(c.selectedPages, c.pages) || c.pages;
+      total += calculateTotalAmount({
+        pages: estPages,
+        copies: c.copies,
+        pricePerPage: ppp,
+        watermark: c.watermark,
+        watermarkCharge: selectedCentre?.watermarkCharge,
+      });
+    }
+    return total;
+  }, [documentFiles, fileConfigs, selectedCentre, totalAmount, isMulti]);
+
+  const activeConfig = isMulti && selectedFileNames.length > 0
+    ? fileConfigs[selectedFileNames[0]]
+    : {
+        pages,
+        selectedPages,
+        copies,
+        colorType,
+        sideType,
+        paperSize,
+        pagesPerSheet,
+        orientation,
+        printDpi,
+        scaleMode,
+        marginMode,
+        watermark,
+        watermarkType,
+        watermarkText,
+        watermarkPosition,
+        watermarkOpacity,
+        watermarkFontSize,
+        watermarkRotation,
+      };
+
+  const setConfigVal = (key, value) => {
+    if (!isMulti) {
+      if (key === "pages") setPages(value);
+      else if (key === "selectedPages") setSelectedPages(value);
+      else if (key === "copies") setCopies(value);
+      else if (key === "colorType") setColorType(value);
+      else if (key === "sideType") setSideType(value);
+      else if (key === "paperSize") setPaperSize(value);
+      else if (key === "pagesPerSheet") setPagesPerSheet(value);
+      else if (key === "orientation") setOrientation(value);
+      else if (key === "printDpi") setPrintDpi(value);
+      else if (key === "scaleMode") setScaleMode(value);
+      else if (key === "marginMode") setMarginMode(value);
+      else if (key === "watermark") setWatermark(value);
+      else if (key === "watermarkType") setWatermarkType(value);
+      else if (key === "watermarkText") setWatermarkText(value);
+      else if (key === "watermarkPosition") setWatermarkPosition(value);
+      else if (key === "watermarkOpacity") setWatermarkOpacity(value);
+      else if (key === "watermarkFontSize") setWatermarkFontSize(value);
+      else if (key === "watermarkRotation") setWatermarkRotation(value);
+    } else {
+      setFileConfigs((prev) => {
+        const next = { ...prev };
+        selectedFileNames.forEach((name) => {
+          if (next[name]) {
+            next[name] = { ...next[name], [key]: value };
+          }
+        });
+        return next;
+      });
+    }
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedFileNames.length === documentFiles.length) {
+      setSelectedFileNames([]);
+    } else {
+      setSelectedFileNames(documentFiles.map((f) => f.name));
+    }
+  };
+
+  const toggleSelectFile = (name) => {
+    setSelectedFileNames((prev) =>
+      prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]
+    );
+  };
+
+  const regularConfigurationForm = (
+    <div className="grid gap-4 grid-cols-2">
+      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-2 md:col-span-1">
+        Estimated pages
+        <input type="number" min="1" value={activeConfig?.pages || 1} onChange={(e) => setConfigVal("pages", Number(e.target.value))} className="rounded-2xl border px-4 py-3 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
+      </label>
+      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-2 md:col-span-1">
+        Page range
+        <input value={activeConfig?.selectedPages || ""} onChange={(e) => setConfigVal("selectedPages", e.target.value)} placeholder="All, or 1,3-4" className="rounded-2xl border px-4 py-3 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
+      </label>
+      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-2 md:col-span-1">
+        Copies
+        <input type="number" min="1" value={activeConfig?.copies || 1} onChange={(e) => setConfigVal("copies", Number(e.target.value))} className="rounded-2xl border px-4 py-3 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
+      </label>
+      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-2 md:col-span-1">
+        Color mode
+        <select value={activeConfig?.colorType || "bw"} onChange={(e) => setConfigVal("colorType", e.target.value)} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
+          <option value="bw">Black & White</option>
+          <option value="color">Color</option>
+        </select>
+      </label>
+      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-2 md:col-span-1">
+        Sides
+        <select value={activeConfig?.sideType || "single"} onChange={(e) => setConfigVal("sideType", e.target.value)} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
+          <option value="single">Single side</option>
+          <option value="double">Double side</option>
+        </select>
+      </label>
+      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-2 md:col-span-1">
+        Paper size
+        <select value={activeConfig?.paperSize || "A4"} onChange={(e) => setConfigVal("paperSize", e.target.value)} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
+          <option value="A4">A4</option>
+          <option value="A3">A3</option>
+          <option value="Letter">Letter</option>
+          <option value="Legal">Legal</option>
+        </select>
+      </label>
+      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-2 md:col-span-1">
+        Orientation
+        <select value={activeConfig?.orientation || "auto"} onChange={(e) => setConfigVal("orientation", e.target.value)} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
+          <option value="auto">Auto</option>
+          <option value="portrait">Portrait</option>
+          <option value="landscape">Landscape</option>
+        </select>
+      </label>
+      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-2 md:col-span-1">
+        Pages per sheet
+        <select value={activeConfig?.pagesPerSheet || 1} onChange={(e) => setConfigVal("pagesPerSheet", Number(e.target.value))} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
+          <option value={1}>1 page per sheet</option>
+          <option value={2}>2 pages per sheet</option>
+          <option value={4}>4 pages per sheet</option>
+          <option value={6}>6 pages per sheet</option>
+          <option value={9}>9 pages per sheet</option>
+          <option value={16}>16 pages per sheet</option>
+        </select>
+      </label>
+      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-2 md:col-span-1">
+        Print quality
+        <select value={activeConfig?.printDpi || 300} onChange={(e) => setConfigVal("printDpi", Number(e.target.value))} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
+          <option value={203}>Draft - 203 DPI</option>
+          <option value={300}>Standard - 300 DPI</option>
+          <option value={600}>High - 600 DPI</option>
+        </select>
+      </label>
+      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-2 md:col-span-1">
+        Scale
+        <select value={activeConfig?.scaleMode || "original"} onChange={(e) => setConfigVal("scaleMode", e.target.value)} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
+          <option value="original">Original size</option>
+          <option value="fit_to_page">Fit to page</option>
+          <option value="fit_to_page_width">Fit to page width</option>
+        </select>
+      </label>
+      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-2">
+        Margins
+        <select value={activeConfig?.marginMode || "default"} onChange={(e) => setConfigVal("marginMode", e.target.value)} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
+          <option value="default">Default</option>
+          <option value="minimum">Minimum</option>
+          <option value="none">None</option>
+        </select>
+      </label>
+      <label className="flex items-center gap-3 rounded-2xl border px-4 py-3 col-span-2">
+        <input type="checkbox" checked={activeConfig?.watermark || false} onChange={(e) => setConfigVal("watermark", e.target.checked)} />
+        Add watermark to printable PDF
+      </label>
+      {activeConfig?.watermark && (
+        <div className="grid gap-3 rounded-2xl border bg-slate-50 p-4 col-span-2 md:grid-cols-2">
+          <select value={activeConfig?.watermarkType || "order_code"} onChange={(e) => setConfigVal("watermarkType", e.target.value)} className="rounded-2xl border px-4 py-3">
+            <option value="order_code">Order code</option>
+            <option value="pickup_code">Pickup code</option>
+            <option value="date_time">Date/time</option>
+            <option value="custom_text">Custom text</option>
+          </select>
+          <select value={activeConfig?.watermarkPosition || "bottom_right"} onChange={(e) => setConfigVal("watermarkPosition", e.target.value)} className="rounded-2xl border px-4 py-3">
+            <option value="bottom_right">Bottom right</option>
+            <option value="bottom_center">Bottom center</option>
+            <option value="bottom_left">Bottom left</option>
+            <option value="center">Center</option>
+            <option value="top_left">Top left</option>
+            <option value="top_center">Top center</option>
+            <option value="top_right">Top right</option>
+          </select>
+          {activeConfig?.watermarkType === "custom_text" && (
+            <input value={activeConfig?.watermarkText || ""} onChange={(e) => setConfigVal("watermarkText", e.target.value)} placeholder="Watermark text" className="rounded-2xl border px-4 py-3 outline-none focus:ring-2 focus:ring-slate-300 md:col-span-2" />
+          )}
+          <label className="grid gap-2 text-sm font-semibold text-slate-600">
+            Opacity
+            <input type="range" min="0.05" max="0.6" step="0.01" value={activeConfig?.watermarkOpacity || 0.18} onChange={(e) => setConfigVal("watermarkOpacity", Number(e.target.value))} />
+          </label>
+          <label className="grid gap-2 text-sm font-semibold text-slate-600">
+            Rotation
+            <input type="range" min="-90" max="90" step="5" value={activeConfig?.watermarkRotation || 0} onChange={(e) => setConfigVal("watermarkRotation", Number(e.target.value))} />
+          </label>
+          <input type="number" min="8" max="72" value={activeConfig?.watermarkFontSize || 18} onChange={(e) => setConfigVal("watermarkFontSize", Number(e.target.value))} placeholder="Font size" className="rounded-2xl border px-4 py-3 outline-none focus:ring-2 focus:ring-slate-300 col-span-2" />
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="grid gap-6 lg:grid-cols-3">
@@ -112,143 +459,79 @@ export default function UploadPage({
           </p>
         )}
 
-        <div className="mt-6 grid gap-4 grid-cols-2 md:grid-cols-2">
-          <label className="cursor-pointer rounded-2xl border border-dashed bg-slate-50 p-6 text-center hover:bg-slate-100 col-span-2 md:col-span-2">
+        <div className="mt-6">
+          <label className="cursor-pointer rounded-2xl border border-dashed bg-slate-50 p-6 text-center hover:bg-slate-100 flex flex-col mb-4">
             <input type="file" accept="application/pdf" multiple onChange={handleFileChange} className="hidden" />
             {documentFile ? <FileText className="mx-auto mb-3" size={36} /> : <Upload className="mx-auto mb-3" size={36} />}
             <p className="font-semibold">{selectedFileLabel || "Choose one or more PDFs"}</p>
             <p className="text-sm text-slate-500">{selectedFileCount ? `${Math.ceil(selectedFileSize / 1024)} KB selected` : "Select multiple PDF files from your file manager"}</p>
           </label>
 
-          {selectedFileCount > 1 && (
-            <div className="rounded-2xl border bg-white p-4 text-sm col-span-2 md:col-span-2">
-              <p className="font-semibold">Files in this order</p>
-              <div className="mt-3 grid gap-2">
-                {documentFiles.map((file) => (
-                  <div key={`${file.name}-${file.size}`} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2">
-                    <span className="min-w-0 truncate">{file.name}</span>
-                    <span className="shrink-0 text-slate-500">{Math.ceil(file.size / 1024)} KB</span>
-                  </div>
-                ))}
+          {!isMulti && (
+            <div className="mb-4">
+              <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-2 md:col-span-2">
+                Order document name
+                <input value={documentName} onChange={(e) => setDocumentName(e.target.value)} placeholder="Assignment.pdf" className="rounded-2xl border px-4 py-3 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
+              </label>
+            </div>
+          )}
+
+          {isMulti && (
+            <div className="mb-6 rounded-2xl border bg-white p-4 text-sm">
+              <div className="mb-3 flex items-center justify-between">
+                <p className="font-bold text-lg">Select Files to Configure</p>
+                <button onClick={toggleSelectAll} className="text-sm font-semibold text-slate-600 hover:text-slate-900">
+                  {selectedFileNames.length === documentFiles.length ? "Deselect All" : "Select All"}
+                </button>
+              </div>
+              <div className="grid gap-2 max-h-64 overflow-y-auto pr-2">
+                {documentFiles.map((file) => {
+                  const isSelected = selectedFileNames.includes(file.name);
+                  const conf = fileConfigs[file.name] || {};
+                  return (
+                    <div
+                      key={file.name}
+                      onClick={() => toggleSelectFile(file.name)}
+                      className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 transition ${
+                        isSelected ? "border-slate-400 bg-slate-100" : "border-transparent bg-slate-50 hover:bg-slate-100"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        {isSelected ? <CheckSquare className="text-slate-900 shrink-0" size={18} /> : <Square className="text-slate-400 shrink-0" size={18} />}
+                        <span className="min-w-0 truncate font-medium">{file.name}</span>
+                      </div>
+                      <div className="shrink-0 flex items-center gap-2 text-slate-500 text-xs">
+                        <span className="bg-slate-200 px-2 py-0.5 rounded text-slate-700">{conf.colorType === 'bw' ? 'B/W' : 'Color'}</span>
+                        <span className="bg-slate-200 px-2 py-0.5 rounded text-slate-700">{conf.copies} copy</span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
 
-          <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-2 md:col-span-2">
-            Order document name
-            <input value={documentName} onChange={(e) => setDocumentName(e.target.value)} placeholder="Assignment.pdf" className="rounded-2xl border px-4 py-3 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
-          </label>
-          <label className="grid gap-2 text-sm font-semibold text-slate-600">
-            Estimated pages
-            <input type="number" min="1" value={pages} onChange={(e) => setPages(Number(e.target.value))} className="rounded-2xl border px-4 py-3 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
-          </label>
-          <label className="grid gap-2 text-sm font-semibold text-slate-600">
-            Page range
-            <input value={selectedPages} onChange={(e) => setSelectedPages(e.target.value)} placeholder="All, or 1,3-4" className="rounded-2xl border px-4 py-3 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
-          </label>
-          <label className="grid gap-2 text-sm font-semibold text-slate-600">
-            Copies
-            <input type="number" min="1" value={copies} onChange={(e) => setCopies(Number(e.target.value))} className="rounded-2xl border px-4 py-3 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
-          </label>
-          <label className="grid gap-2 text-sm font-semibold text-slate-600">
-            Color mode
-            <select value={colorType} onChange={(e) => setColorType(e.target.value)} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
-              <option value="bw">Black & White</option>
-              <option value="color">Color</option>
-            </select>
-          </label>
-          <label className="grid gap-2 text-sm font-semibold text-slate-600">
-            Sides
-            <select value={sideType} onChange={(e) => setSideType(e.target.value)} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
-              <option value="single">Single side</option>
-              <option value="double">Double side</option>
-            </select>
-          </label>
-          <label className="grid gap-2 text-sm font-semibold text-slate-600">
-            Paper size
-            <select value={paperSize} onChange={(e) => setPaperSize(e.target.value)} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
-              <option value="A4">A4</option>
-              <option value="A3">A3</option>
-              <option value="Letter">Letter</option>
-              <option value="Legal">Legal</option>
-            </select>
-          </label>
-          <label className="grid gap-2 text-sm font-semibold text-slate-600">
-            Orientation
-            <select value={orientation} onChange={(e) => setOrientation(e.target.value)} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
-              <option value="auto">Auto</option>
-              <option value="portrait">Portrait</option>
-              <option value="landscape">Landscape</option>
-            </select>
-          </label>
-          <label className="grid gap-2 text-sm font-semibold text-slate-600">
-            Pages per sheet
-            <select value={pagesPerSheet} onChange={(e) => setPagesPerSheet(Number(e.target.value))} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
-              <option value={1}>1 page per sheet</option>
-              <option value={2}>2 pages per sheet</option>
-              <option value={4}>4 pages per sheet</option>
-              <option value={6}>6 pages per sheet</option>
-              <option value={9}>9 pages per sheet</option>
-              <option value={16}>16 pages per sheet</option>
-            </select>
-          </label>
-          <label className="grid gap-2 text-sm font-semibold text-slate-600">
-            Print quality
-            <select value={printDpi} onChange={(e) => setPrintDpi(Number(e.target.value))} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
-              <option value={203}>Draft - 203 DPI</option>
-              <option value={300}>Standard - 300 DPI</option>
-              <option value={600}>High - 600 DPI</option>
-            </select>
-          </label>
-          <label className="grid gap-2 text-sm font-semibold text-slate-600">
-            Scale
-            <select value={scaleMode} onChange={(e) => setScaleMode(e.target.value)} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
-              <option value="original">Original size</option>
-              <option value="fit_to_page">Fit to page</option>
-              <option value="fit_to_page_width">Fit to page width</option>
-            </select>
-          </label>
-          <label className="grid gap-2 text-sm font-semibold text-slate-600">
-            Margins
-            <select value={marginMode} onChange={(e) => setMarginMode(e.target.value)} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
-              <option value="default">Default</option>
-              <option value="minimum">Minimum</option>
-              <option value="none">None</option>
-            </select>
-          </label>
-          <label className="flex items-center gap-3 rounded-2xl border px-4 py-3 col-span-2 md:col-span-2">
-            <input type="checkbox" checked={watermark} onChange={(e) => setWatermark(e.target.checked)} />
-            Add watermark to printable PDF
-          </label>
-          {watermark && (
-            <div className="grid gap-3 rounded-2xl border bg-slate-50 p-4 col-span-2 md:col-span-2 md:grid-cols-2">
-              <select value={watermarkType} onChange={(e) => setWatermarkType(e.target.value)} className="rounded-2xl border px-4 py-3">
-                <option value="order_code">Order code</option>
-                <option value="pickup_code">Pickup code</option>
-                <option value="date_time">Date/time</option>
-                <option value="custom_text">Custom text</option>
-              </select>
-              <select value={watermarkPosition} onChange={(e) => setWatermarkPosition(e.target.value)} className="rounded-2xl border px-4 py-3">
-                <option value="bottom_right">Bottom right</option>
-                <option value="bottom_center">Bottom center</option>
-                <option value="bottom_left">Bottom left</option>
-                <option value="center">Center</option>
-                <option value="top_left">Top left</option>
-                <option value="top_center">Top center</option>
-                <option value="top_right">Top right</option>
-              </select>
-              {watermarkType === "custom_text" && (
-                <input value={watermarkText} onChange={(e) => setWatermarkText(e.target.value)} placeholder="Watermark text" className="rounded-2xl border px-4 py-3 outline-none focus:ring-2 focus:ring-slate-300 md:col-span-2" />
-              )}
-              <label className="grid gap-2 text-sm font-semibold text-slate-600">
-                Opacity
-                <input type="range" min="0.05" max="0.6" step="0.01" value={watermarkOpacity} onChange={(e) => setWatermarkOpacity(Number(e.target.value))} />
-              </label>
-              <label className="grid gap-2 text-sm font-semibold text-slate-600">
-                Rotation
-                <input type="range" min="-90" max="90" step="5" value={watermarkRotation} onChange={(e) => setWatermarkRotation(Number(e.target.value))} />
-              </label>
-              <input type="number" min="8" max="72" value={watermarkFontSize} onChange={(e) => setWatermarkFontSize(Number(e.target.value))} placeholder="Font size" className="rounded-2xl border px-4 py-3 outline-none focus:ring-2 focus:ring-slate-300" />
+          {isMulti ? (
+            <details className="group rounded-2xl border bg-white [&_summary::-webkit-details-marker]:hidden" open>
+              <summary className="flex cursor-pointer items-center justify-between p-4 outline-none">
+                <span className="font-bold text-lg">
+                  {selectedFileNames.length === 0 
+                    ? "Select files above to configure" 
+                    : `Configuring ${selectedFileNames.length} file(s)`}
+                </span>
+                <span className="transition-transform group-open:rotate-180 md:hidden">▼</span>
+              </summary>
+              <div className="p-4 border-t opacity-100 transition-opacity">
+                {selectedFileNames.length > 0 ? (
+                  configurationForm
+                ) : (
+                  <p className="text-slate-500 text-sm italic">No files selected. Check the boxes above to apply configuration.</p>
+                )}
+              </div>
+            </details>
+          ) : (
+            <div className="mt-4">
+              {isMulti ? compactConfigurationForm : regularConfigurationForm}
             </div>
           )}
         </div>
@@ -265,7 +548,7 @@ export default function UploadPage({
             
             <div className="flex w-full items-center justify-between font-bold md:hidden">
               <span className="text-sm text-slate-500">{backendPrice ? "Total" : "Est. Total"}</span>
-              <span className="flex items-center text-xl text-emerald-600"><IndianRupee size={20} />{backendPrice?.totalAmount ?? totalAmount}</span>
+              <span className="flex items-center text-xl text-emerald-600"><IndianRupee size={20} />{backendPrice?.totalAmount ?? localEstimatedTotal}</span>
             </div>
           </div>
 
@@ -291,27 +574,33 @@ export default function UploadPage({
           </details>
 
           <div className="hidden space-y-3 text-sm md:block md:mt-4">
-            <Row label="Original Pages" value={backendPrice?.originalPageCount || pages} />
-            <Row label="Selected Pages" value={backendPrice?.selectedPageCount || selectedPages || "All"} />
-            <Row label="Copies" value={copies} />
-            <Row label="Printable Pages" value={backendPrice?.printablePageCount || Number(estimatedSelectedPageCount || pages || 0) * Number(copies || 0)} />
-            <Row label="Sheets" value={backendPrice?.sheetCount || "-"} />
-            <Row label="Print Type" value={colorType === "bw" ? "B/W" : "Color"} />
-            <Row label="Side" value={sideType} />
-            <Row label="Orientation" value={orientation} />
-            <Row label="Pages/Sheet" value={pagesPerSheet} />
-            <Row label="Quality" value={`${printDpi} DPI`} />
-            <Row label="Scale" value={scaleMode.replaceAll("_", " ")} />
-            <Row label="Margins" value={marginMode} />
-            <Row label="Watermark" value={watermark ? "Yes" : "No"} />
-            <Row label={backendPrice ? "Backend Rate" : "Estimated Rate"} value={`₹${backendPrice?.pricePerPage ?? pricePerPage ?? 0}`} />
-            {backendPrice?.files?.map((file) => (
-              <Row key={file.documentId || file.fileName} label={file.fileName || "File"} value={`₹${file.totalAmount}`} />
-            ))}
+            {isMulti ? (
+               <p className="text-slate-500 italic mb-2">Detailed pricing for multiple files will be calculated at checkout.</p>
+            ) : (
+               <>
+                 <Row label="Original Pages" value={backendPrice?.originalPageCount || pages} />
+                 <Row label="Selected Pages" value={backendPrice?.selectedPageCount || selectedPages || "All"} />
+                 <Row label="Copies" value={copies} />
+                 <Row label="Printable Pages" value={backendPrice?.printablePageCount || Number(estimatedSelectedPageCount || pages || 0) * Number(copies || 0)} />
+                 <Row label="Sheets" value={backendPrice?.sheetCount || "-"} />
+                 <Row label="Print Type" value={colorType === "bw" ? "B/W" : "Color"} />
+                 <Row label="Side" value={sideType} />
+                 <Row label="Orientation" value={orientation} />
+                 <Row label="Pages/Sheet" value={pagesPerSheet} />
+                 <Row label="Quality" value={`${printDpi} DPI`} />
+                 <Row label="Scale" value={scaleMode.replaceAll("_", " ")} />
+                 <Row label="Margins" value={marginMode} />
+                 <Row label="Watermark" value={watermark ? "Yes" : "No"} />
+                 <Row label={backendPrice ? "Backend Rate" : "Estimated Rate"} value={`₹${backendPrice?.pricePerPage ?? pricePerPage ?? 0}`} />
+                 {backendPrice?.files?.map((file) => (
+                   <Row key={file.documentId || file.fileName} label={file.fileName || "File"} value={`₹${file.totalAmount}`} />
+                 ))}
+               </>
+            )}
             <hr />
             <div className="flex items-center justify-between text-lg font-bold">
               <span>{backendPrice ? "Backend Total" : "Estimated Total"}</span>
-              <span className="flex items-center"><IndianRupee size={18} />{backendPrice?.totalAmount ?? totalAmount}</span>
+              <span className="flex items-center"><IndianRupee size={18} />{backendPrice?.totalAmount ?? localEstimatedTotal}</span>
             </div>
           </div>
 

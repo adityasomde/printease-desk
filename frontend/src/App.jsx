@@ -1308,7 +1308,7 @@ export default function App() {
           scaleMode,
           marginMode,
           watermarkEnabled: watermark,
-          printOptions,
+          printOptions: defaultPrintOptions,
         }),
       });
 

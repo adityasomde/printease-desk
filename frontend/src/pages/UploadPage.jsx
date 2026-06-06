@@ -523,7 +523,7 @@ export default function UploadPage({
               </summary>
               <div className="p-4 border-t opacity-100 transition-opacity">
                 {selectedFileNames.length > 0 ? (
-                  configurationForm
+                  compactConfigurationForm
                 ) : (
                   <p className="text-slate-500 text-sm italic">No files selected. Check the boxes above to apply configuration.</p>
                 )}

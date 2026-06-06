@@ -1,9 +1,10 @@
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useCallback, useMemo, useState, useEffect } from "react";
 import { motion } from "framer-motion";
 
-import { User, Upload, Store, Plus, Building2, Search, Download, QrCode, X } from "lucide-react";
+import { User, Upload, Store, Plus, Building2, Search, Download, QrCode } from "lucide-react";
 import Card from "../components/Card";
 import CentrePriceCard from "../components/CentrePriceCard";
+import CentreScannerTile from "../components/CentreScannerTile";
 
 import QRScanner from "../components/QRScanner";
 
@@ -23,10 +24,10 @@ export default function HomePage({
   const startScanner = () => setScannerOpen(true);
   const stopScanner = () => setScannerOpen(false);
 
-  const handleScan = async (code) => {
+  const handleScan = useCallback(async (code) => {
     stopScanner();
     await selectCentreByCode(code);
-  };
+  }, [selectCentreByCode]);
 
   useEffect(() => {
     const handler = (e) => {
@@ -114,16 +115,7 @@ export default function HomePage({
             </button>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <button
-                onClick={startScanner}
-                className="group relative overflow-hidden flex min-h-[160px] flex-col items-center justify-center gap-3 rounded-2xl border bg-white px-4 py-3 font-bold text-slate-950 shadow-sm hover:bg-slate-50"
-              >
-                <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden opacity-30">
-                   <div className="absolute left-[10%] h-[3px] w-[80%] rounded-full bg-emerald-500 shadow-[0_0_12px_3px_rgba(16,185,129,0.7)] animate-scan" />
-                </div>
-                <QrCode size={40} className="z-10 text-slate-950" />
-                <span className="z-10 text-center text-sm">Scan / Select Centre</span>
-              </button>
+              <CentreScannerTile onScan={handleScan} />
 
               <button
                 onClick={() => startLogin("user")}

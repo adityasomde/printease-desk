@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Camera, Search, QrCode, X } from "lucide-react";
+import { useCallback, useMemo } from "react";
+import { Search } from "lucide-react";
 import Card from "../components/Card";
 import CentrePriceCard from "../components/CentrePriceCard";
-
-import QRScanner from "../components/QRScanner";
+import CentreScannerTile from "../components/CentreScannerTile";
 
 export default function CentreCodePage({
   centreCode,
@@ -15,68 +14,10 @@ export default function CentreCodePage({
   lookupLoading,
   lookupError,
 }) {
-  const [cameraError, setCameraError] = useState(false);
-  const [cameraGranted, setCameraGranted] = useState(false);
-  const [scannerOpen, setScannerOpen] = useState(false);
-
-  const checkCameraPermission = useCallback(async () => {
-    setCameraError(false);
-
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setCameraGranted(false);
-      return;
-    }
-
-    if (navigator.permissions?.query) {
-      try {
-        const result = await navigator.permissions.query({ name: "camera" });
-        if (result.state === "granted") {
-          setCameraGranted(true);
-        }
-        if (result.state === "denied") {
-          setCameraGranted(false);
-        }
-        result.onchange = () => setCameraGranted(result.state === "granted");
-      } catch (e) {
-        // Some browsers do not support querying camera permission.
-      }
-    }
-
-    try {
-      const devices = await navigator.mediaDevices.enumerateDevices?.();
-      const cameras = Array.isArray(devices) ? devices.filter((device) => device.kind === "videoinput") : [];
-      if (cameras.some((camera) => camera.label)) {
-        setCameraGranted(true);
-      }
-    } catch (e) {
-      // Device labels are often hidden until the user grants camera access.
-    }
-  }, []);
-
-  useEffect(() => {
-    checkCameraPermission();
-  }, [checkCameraPermission]);
-
-  const startScanner = useCallback(() => {
-    setCameraError(false);
-    setScannerOpen(true);
-  }, []);
-
-  const stopScanner = useCallback(() => {
-    setScannerOpen(false);
-    setTimeout(checkCameraPermission, 500);
-  }, [checkCameraPermission]);
-
   const handleScan = useCallback(async (code) => {
     setCentreCode(code);
-    stopScanner();
     await selectCentreByCode(code);
-  }, [selectCentreByCode, setCentreCode, stopScanner]);
-
-  const handlePreviewError = useCallback(() => {
-    setCameraError(true);
-    setCameraGranted(false);
-  }, []);
+  }, [selectCentreByCode, setCentreCode]);
 
   const filteredCentres = useMemo(() => {
     const query = String(centreCode || "").trim().toLowerCase();
@@ -91,45 +32,20 @@ export default function CentreCodePage({
     );
   }, [centreCode, centres]);
 
-  const cameraPreviewReady = cameraGranted && !scannerOpen && !cameraError;
-
   return (
     <div className="space-y-8">
       <Card className="text-center sm:text-left sm:p-8">
         <h2 className="text-3xl font-bold text-slate-900">Find a Printing Centre</h2>
 
         <div className="mt-6 grid gap-6 md:grid-cols-[45%_1fr]">
-          <button
-            type="button"
-            onClick={startScanner}
-            className={`group relative flex h-full min-h-[185px] w-full flex-col items-center justify-center gap-3 overflow-hidden rounded-3xl border-2 p-6 transition ${
-              cameraPreviewReady
-                ? "border-white/20 bg-slate-950/85 text-white shadow-inner"
-                : "border-slate-200 bg-white/75 text-slate-800 shadow-sm backdrop-blur hover:border-slate-300 hover:bg-white"
-            }`}
-            title="Scan QR Code"
-            aria-label="Scan centre QR code"
-          >
-            {cameraPreviewReady && (
-               <div className="absolute inset-0 z-0 bg-slate-900">
-                  <QRScanner
-                    inline
-                    active={cameraPreviewReady}
-                    previewOnly
-                    onError={handlePreviewError}
-                  />
-               </div>
-            )}
-            {cameraPreviewReady && <div className="pointer-events-none absolute inset-0 z-10 bg-slate-950/35" />}
-            <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden opacity-35">
-               <div className="absolute left-[10%] h-[3px] w-[80%] rounded-full bg-emerald-500 shadow-[0_0_12px_3px_rgba(16,185,129,0.7)] animate-scan" />
-            </div>
-            <QrCode size={54} className={`z-30 transition-transform group-hover:scale-110 ${cameraPreviewReady ? "text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" : "text-slate-900"}`} />
-            <span className={`z-30 text-lg font-bold ${cameraPreviewReady ? "text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" : ""}`}>Scan QR</span>
-            <span className={`z-30 max-w-[16rem] text-center text-xs font-semibold ${cameraPreviewReady ? "text-white/85" : "text-slate-500"}`}>
-              {cameraPreviewReady ? "Camera ready. Tap to scan." : "Tap to open camera scanner."}
-            </span>
-          </button>
+          <CentreScannerTile
+            onScan={handleScan}
+            minHeightClass="min-h-[185px]"
+            iconSize={54}
+            idleLabel="Scan QR"
+            activeLabel="Point at centre QR"
+            idleHint="Tap to scan inside this card."
+          />
 
           <div className="flex flex-col gap-4 justify-center">
             <div className="relative w-full">
@@ -178,10 +94,6 @@ export default function CentreCodePage({
           </div>
         )}
       </div>
-
-      {scannerOpen && (
-        <QRScanner onScan={handleScan} onClose={stopScanner} />
-      )}
     </div>
   );
 }

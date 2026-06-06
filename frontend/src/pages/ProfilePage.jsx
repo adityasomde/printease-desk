@@ -166,4 +166,5 @@ export default function ProfilePage({ currentUser, updateProfile, navigate }) {
       </Card>
     </div>
   );
+
 }

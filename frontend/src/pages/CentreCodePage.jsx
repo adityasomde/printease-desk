@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Camera, Search, QrCode, X } from "lucide-react";
 import Card from "../components/Card";
 import CentrePriceCard from "../components/CentrePriceCard";
@@ -17,53 +17,66 @@ export default function CentreCodePage({
 }) {
   const [cameraError, setCameraError] = useState(false);
   const [cameraGranted, setCameraGranted] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
 
-  
-
-  const checkCameraPermission = async () => {
+  const checkCameraPermission = useCallback(async () => {
     setCameraError(false);
-    if (navigator.permissions && navigator.permissions.query) {
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraGranted(false);
+      return;
+    }
+
+    if (navigator.permissions?.query) {
       try {
         const result = await navigator.permissions.query({ name: "camera" });
         if (result.state === "granted") {
           setCameraGranted(true);
-        } else {
+        }
+        if (result.state === "denied") {
           setCameraGranted(false);
         }
         result.onchange = () => setCameraGranted(result.state === "granted");
       } catch (e) {
-        // Fallback below
+        // Some browsers do not support querying camera permission.
       }
     }
-    
-    // Fallback for Safari/Firefox
+
     try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const cameras = devices.filter(device => device.kind === 'videoinput');
-      if (cameras.some(camera => camera.label !== '')) {
+      const devices = await navigator.mediaDevices.enumerateDevices?.();
+      const cameras = Array.isArray(devices) ? devices.filter((device) => device.kind === "videoinput") : [];
+      if (cameras.some((camera) => camera.label)) {
         setCameraGranted(true);
       }
     } catch (e) {
-      // Ignore
+      // Device labels are often hidden until the user grants camera access.
     }
-  };
+  }, []);
 
   useEffect(() => {
     checkCameraPermission();
+  }, [checkCameraPermission]);
+
+  const startScanner = useCallback(() => {
+    setCameraError(false);
+    setScannerOpen(true);
   }, []);
 
-  const [scannerOpen, setScannerOpen] = useState(false);
-  const startScanner = () => setScannerOpen(true);
-  const stopScanner = () => {
+  const stopScanner = useCallback(() => {
     setScannerOpen(false);
     setTimeout(checkCameraPermission, 500);
-  };
+  }, [checkCameraPermission]);
 
-  const handleScan = async (code) => {
+  const handleScan = useCallback(async (code) => {
     setCentreCode(code);
     stopScanner();
     await selectCentreByCode(code);
-  };
+  }, [selectCentreByCode, setCentreCode, stopScanner]);
+
+  const handlePreviewError = useCallback(() => {
+    setCameraError(true);
+    setCameraGranted(false);
+  }, []);
 
   const filteredCentres = useMemo(() => {
     const query = String(centreCode || "").trim().toLowerCase();
@@ -78,7 +91,7 @@ export default function CentreCodePage({
     );
   }, [centreCode, centres]);
 
-
+  const cameraPreviewReady = cameraGranted && !scannerOpen && !cameraError;
 
   return (
     <div className="space-y-8">
@@ -89,19 +102,33 @@ export default function CentreCodePage({
           <button
             type="button"
             onClick={startScanner}
-            className={`group relative overflow-hidden flex h-full min-h-[185px] w-full flex-col items-center justify-center gap-3 rounded-3xl border-2 transition ${cameraGranted && !cameraError ? "border-transparent bg-slate-900 text-white" : "border-slate-200 bg-slate-50 p-6 text-slate-700 hover:bg-slate-100 hover:border-slate-300"}`}
+            className={`group relative flex h-full min-h-[185px] w-full flex-col items-center justify-center gap-3 overflow-hidden rounded-3xl border-2 p-6 transition ${
+              cameraPreviewReady
+                ? "border-white/20 bg-slate-950/85 text-white shadow-inner"
+                : "border-slate-200 bg-white/75 text-slate-800 shadow-sm backdrop-blur hover:border-slate-300 hover:bg-white"
+            }`}
             title="Scan QR Code"
+            aria-label="Scan centre QR code"
           >
-            {cameraGranted && !scannerOpen && !cameraError && (
+            {cameraPreviewReady && (
                <div className="absolute inset-0 z-0 bg-slate-900">
-                  <QRScanner onScan={handleScan} inline onError={() => setCameraError(true)} />
+                  <QRScanner
+                    inline
+                    active={cameraPreviewReady}
+                    previewOnly
+                    onError={handlePreviewError}
+                  />
                </div>
             )}
-            <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden opacity-30">
+            {cameraPreviewReady && <div className="pointer-events-none absolute inset-0 z-10 bg-slate-950/35" />}
+            <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden opacity-35">
                <div className="absolute left-[10%] h-[3px] w-[80%] rounded-full bg-emerald-500 shadow-[0_0_12px_3px_rgba(16,185,129,0.7)] animate-scan" />
             </div>
-            <QrCode size={54} className={`z-30 transition-transform group-hover:scale-110 ${cameraGranted && !cameraError ? 'text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]' : 'text-slate-900'}`} />
-            <span className={`z-30 font-bold text-lg ${cameraGranted && !cameraError ? 'text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]' : ''}`}>Scan QR</span>
+            <QrCode size={54} className={`z-30 transition-transform group-hover:scale-110 ${cameraPreviewReady ? "text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" : "text-slate-900"}`} />
+            <span className={`z-30 text-lg font-bold ${cameraPreviewReady ? "text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" : ""}`}>Scan QR</span>
+            <span className={`z-30 max-w-[16rem] text-center text-xs font-semibold ${cameraPreviewReady ? "text-white/85" : "text-slate-500"}`}>
+              {cameraPreviewReady ? "Camera ready. Tap to scan." : "Tap to open camera scanner."}
+            </span>
           </button>
 
           <div className="flex flex-col gap-4 justify-center">

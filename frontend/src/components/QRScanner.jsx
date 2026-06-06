@@ -14,7 +14,15 @@ export function extractCentreCodeFromQr(value) {
   }
 }
 
-export default function QRScanner({ onScan, onClose, inline = false, onError }) {
+export default function QRScanner({
+  onScan,
+  onClose,
+  inline = false,
+  onError,
+  active = true,
+  previewOnly = false,
+  className = "",
+}) {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const scanFrameRef = useRef(0);
@@ -24,16 +32,30 @@ export default function QRScanner({ onScan, onClose, inline = false, onError }) 
     let mounted = true;
 
     async function startScanner() {
+      if (!active) return;
+
       if (!navigator.mediaDevices?.getUserMedia) {
         if (mounted) { setError("Camera access is not available."); if (onError) onError(new Error("No camera access")); }
         return;
       }
 
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment" },
-          audio: false,
-        });
+        let stream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: { ideal: "environment" },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            },
+            audio: false,
+          });
+        } catch (cameraError) {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false,
+          });
+        }
         
         if (!mounted) {
           stream.getTracks().forEach((track) => track.stop());
@@ -48,8 +70,13 @@ export default function QRScanner({ onScan, onClose, inline = false, onError }) 
           await videoRef.current.play();
         }
 
+        if (previewOnly) return;
+
         const canvas = document.createElement("canvas");
         const context = canvas.getContext("2d", { willReadFrequently: true });
+        if (!context) {
+          throw new Error("Camera scanner is not available in this browser.");
+        }
         
         const scan = () => {
           if (!mounted || !videoRef.current || !streamRef.current) return;
@@ -67,7 +94,7 @@ export default function QRScanner({ onScan, onClose, inline = false, onError }) 
             if (code) {
               const extractedCode = extractCentreCodeFromQr(code.data);
               if (extractedCode) {
-                onScan(extractedCode);
+                onScan?.(extractedCode);
                 return; // Stop scanning once we found one
               }
             }
@@ -91,14 +118,16 @@ export default function QRScanner({ onScan, onClose, inline = false, onError }) 
       }
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
       }
     };
-  }, [onScan]);
+  }, [active, onError, onScan, previewOnly]);
 
   if (inline) {
+    if (!active) return null;
     if (error) return null;
     return (
-      <video ref={videoRef} playsInline muted className="absolute inset-0 h-full w-full object-cover" />
+      <video ref={videoRef} playsInline muted className={`absolute inset-0 h-full w-full object-cover ${className}`} />
     );
   }
 

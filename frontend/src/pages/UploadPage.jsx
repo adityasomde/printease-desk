@@ -107,6 +107,62 @@ export default function UploadPage({
     return () => window.removeEventListener("paste", handlePaste);
   }, [multiFileConfigs, documentFiles]); // eslint-disable-line
   
+  const activeConfig = isMulti && selectedFileNames.length > 0
+    ? multiFileConfigs[selectedFileNames[0]]
+    : {
+        pages,
+        selectedPages,
+        copies,
+        colorType,
+        sideType,
+        paperSize,
+        pagesPerSheet,
+        orientation,
+        printDpi,
+        scaleMode,
+        marginMode,
+        watermark,
+        watermarkType,
+        watermarkText,
+        watermarkPosition,
+        watermarkOpacity,
+        watermarkFontSize,
+        watermarkRotation,
+      };
+
+  const setConfigVal = (key, value) => {
+    if (!isMulti) {
+      if (key === "pages") setPages(value);
+      else if (key === "selectedPages") setSelectedPages(value);
+      else if (key === "copies") setCopies(value);
+      else if (key === "colorType") setColorType(value);
+      else if (key === "sideType") setSideType(value);
+      else if (key === "paperSize") setPaperSize(value);
+      else if (key === "pagesPerSheet") setPagesPerSheet(value);
+      else if (key === "orientation") setOrientation(value);
+      else if (key === "printDpi") setPrintDpi(value);
+      else if (key === "scaleMode") setScaleMode(value);
+      else if (key === "marginMode") setMarginMode(value);
+      else if (key === "watermark") setWatermark(value);
+      else if (key === "watermarkType") setWatermarkType(value);
+      else if (key === "watermarkText") setWatermarkText(value);
+      else if (key === "watermarkPosition") setWatermarkPosition(value);
+      else if (key === "watermarkOpacity") setWatermarkOpacity(value);
+      else if (key === "watermarkFontSize") setWatermarkFontSize(value);
+      else if (key === "watermarkRotation") setWatermarkRotation(value);
+    } else {
+      setMultiFileConfigs((prev) => {
+        const next = { ...prev };
+        selectedFileNames.forEach((name) => {
+          if (next[name]) {
+            next[name] = { ...next[name], [key]: value };
+          }
+        });
+        return next;
+      });
+    }
+  };
+
   const compactConfigurationForm = (
     <div className="grid gap-2 grid-cols-2 md:grid-cols-4 bg-slate-50 p-3 rounded-2xl border border-slate-100">
       <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-2 md:col-span-1">
@@ -252,61 +308,7 @@ export default function UploadPage({
     return total;
   }, [documentFiles, multiFileConfigs, selectedCentre, totalAmount, isMulti]);
 
-  const activeConfig = isMulti && selectedFileNames.length > 0
-    ? multiFileConfigs[selectedFileNames[0]]
-    : {
-        pages,
-        selectedPages,
-        copies,
-        colorType,
-        sideType,
-        paperSize,
-        pagesPerSheet,
-        orientation,
-        printDpi,
-        scaleMode,
-        marginMode,
-        watermark,
-        watermarkType,
-        watermarkText,
-        watermarkPosition,
-        watermarkOpacity,
-        watermarkFontSize,
-        watermarkRotation,
-      };
 
-  const setConfigVal = (key, value) => {
-    if (!isMulti) {
-      if (key === "pages") setPages(value);
-      else if (key === "selectedPages") setSelectedPages(value);
-      else if (key === "copies") setCopies(value);
-      else if (key === "colorType") setColorType(value);
-      else if (key === "sideType") setSideType(value);
-      else if (key === "paperSize") setPaperSize(value);
-      else if (key === "pagesPerSheet") setPagesPerSheet(value);
-      else if (key === "orientation") setOrientation(value);
-      else if (key === "printDpi") setPrintDpi(value);
-      else if (key === "scaleMode") setScaleMode(value);
-      else if (key === "marginMode") setMarginMode(value);
-      else if (key === "watermark") setWatermark(value);
-      else if (key === "watermarkType") setWatermarkType(value);
-      else if (key === "watermarkText") setWatermarkText(value);
-      else if (key === "watermarkPosition") setWatermarkPosition(value);
-      else if (key === "watermarkOpacity") setWatermarkOpacity(value);
-      else if (key === "watermarkFontSize") setWatermarkFontSize(value);
-      else if (key === "watermarkRotation") setWatermarkRotation(value);
-    } else {
-      setMultiFileConfigs((prev) => {
-        const next = { ...prev };
-        selectedFileNames.forEach((name) => {
-          if (next[name]) {
-            next[name] = { ...next[name], [key]: value };
-          }
-        });
-        return next;
-      });
-    }
-  };
 
   const toggleSelectAll = () => {
     if (selectedFileNames.length === documentFiles.length) {

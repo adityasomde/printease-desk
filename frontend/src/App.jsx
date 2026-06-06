@@ -471,7 +471,7 @@ export default function App() {
     }
 
     const pingVisit = () => {
-      apiRequest("/api/stats/visit", { method: "POST", body: { sessionId, isPageView: false } }).catch(() => {});
+      apiRequest("/api/stats/visit", { method: "POST", body: JSON.stringify({ sessionId, isPageView: false }) }).catch(() => {});
     };
 
     const interval = setInterval(pingVisit, 60000);
@@ -481,7 +481,7 @@ export default function App() {
   useEffect(() => {
     const sessionId = sessionStorage.getItem("printease_session_id");
     if (sessionId) {
-      apiRequest("/api/stats/visit", { method: "POST", body: { sessionId, isPageView: true } }).catch(() => {});
+      apiRequest("/api/stats/visit", { method: "POST", body: JSON.stringify({ sessionId, isPageView: true }) }).catch(() => {});
     }
   }, [location.pathname]);
 

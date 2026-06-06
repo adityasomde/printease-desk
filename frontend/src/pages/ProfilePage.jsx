@@ -58,7 +58,7 @@ export default function ProfilePage({ currentUser, updateProfile, navigate }) {
     if (!confirmDelete) return;
 
     try {
-      await apiRequest('/api/centres', { method: 'DELETE' });
+      await apiRequest('/api/centres/me', { method: 'DELETE' });
       alert("Hub deleted successfully.");
       window.location.reload();
     } catch (error) {

@@ -824,7 +824,7 @@ export default function App() {
     }
 
     const data = await apiRequest("/api/auth/profile", {
-      method: "POST",
+      method: "PUT",
       body: JSON.stringify({
         name: trimmedName,
         role: currentUser?.role,

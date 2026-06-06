@@ -14,7 +14,7 @@ export function extractCentreCodeFromQr(value) {
   }
 }
 
-export default function QRScanner({ onScan, onClose, inline = false }) {
+export default function QRScanner({ onScan, onClose, inline = false, onError }) {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const scanFrameRef = useRef(0);
@@ -25,7 +25,7 @@ export default function QRScanner({ onScan, onClose, inline = false }) {
 
     async function startScanner() {
       if (!navigator.mediaDevices?.getUserMedia) {
-        if (mounted) setError("Camera access is not available. Search by centre name/code instead.");
+        if (mounted) { setError("Camera access is not available."); if (onError) onError(new Error("No camera access")); }
         return;
       }
 
@@ -78,7 +78,7 @@ export default function QRScanner({ onScan, onClose, inline = false }) {
 
         scanFrameRef.current = requestAnimationFrame(scan);
       } catch (err) {
-        if (mounted) setError(err.message || "Could not open camera. Search by centre name/code instead.");
+        if (mounted) { setError(err.message || "Could not open camera."); if (onError) onError(err); }
       }
     }
 

@@ -15,30 +15,49 @@ export default function CentreCodePage({
   lookupLoading,
   lookupError,
 }) {
+  const [cameraError, setCameraError] = useState(false);
   const [cameraGranted, setCameraGranted] = useState(false);
 
-  useEffect(() => {
-    async function checkCameraPermission() {
-      if (navigator.permissions && navigator.permissions.query) {
-        try {
-          const result = await navigator.permissions.query({ name: "camera" });
-          if (result.state === "granted") {
-            setCameraGranted(true);
-          }
-          result.onchange = () => {
-            setCameraGranted(result.state === "granted");
-          };
-        } catch (e) {
-          // Ignore
+  
+
+  const checkCameraPermission = async () => {
+    setCameraError(false);
+    if (navigator.permissions && navigator.permissions.query) {
+      try {
+        const result = await navigator.permissions.query({ name: "camera" });
+        if (result.state === "granted") {
+          setCameraGranted(true);
+        } else {
+          setCameraGranted(false);
         }
+        result.onchange = () => setCameraGranted(result.state === "granted");
+      } catch (e) {
+        // Fallback below
       }
     }
+    
+    // Fallback for Safari/Firefox
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const cameras = devices.filter(device => device.kind === 'videoinput');
+      if (cameras.some(camera => camera.label !== '')) {
+        setCameraGranted(true);
+      }
+    } catch (e) {
+      // Ignore
+    }
+  };
+
+  useEffect(() => {
     checkCameraPermission();
   }, []);
 
   const [scannerOpen, setScannerOpen] = useState(false);
   const startScanner = () => setScannerOpen(true);
-  const stopScanner = () => setScannerOpen(false);
+  const stopScanner = () => {
+    setScannerOpen(false);
+    setTimeout(checkCameraPermission, 500);
+  };
 
   const handleScan = async (code) => {
     setCentreCode(code);
@@ -70,20 +89,19 @@ export default function CentreCodePage({
           <button
             type="button"
             onClick={startScanner}
-            className={`group relative overflow-hidden flex h-full min-h-[185px] w-full flex-col items-center justify-center gap-3 rounded-3xl border-2 transition ${cameraGranted ? "border-transparent bg-slate-900 text-white" : "border-slate-200 bg-slate-50 p-6 text-slate-700 hover:bg-slate-100 hover:border-slate-300"}`}
+            className={`group relative overflow-hidden flex h-full min-h-[185px] w-full flex-col items-center justify-center gap-3 rounded-3xl border-2 transition ${cameraGranted && !cameraError ? "border-transparent bg-slate-900 text-white" : "border-slate-200 bg-slate-50 p-6 text-slate-700 hover:bg-slate-100 hover:border-slate-300"}`}
             title="Scan QR Code"
           >
-            {cameraGranted && !scannerOpen && (
-               <div className="absolute inset-0 z-0 opacity-80 md:opacity-100">
-                  <QRScanner onScan={handleScan} inline />
+            {cameraGranted && !scannerOpen && !cameraError && (
+               <div className="absolute inset-0 z-0 bg-slate-900">
+                  <QRScanner onScan={handleScan} inline onError={() => setCameraError(true)} />
                </div>
             )}
             <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden opacity-30">
                <div className="absolute left-[10%] h-[3px] w-[80%] rounded-full bg-emerald-500 shadow-[0_0_12px_3px_rgba(16,185,129,0.7)] animate-scan" />
             </div>
-            <div className="pointer-events-none absolute inset-0 z-20 bg-black/20" />
-            <QrCode size={54} className={`z-30 ${cameraGranted ? 'text-white drop-shadow-md' : 'text-slate-900'}`} />
-            <span className={`z-30 font-bold text-lg ${cameraGranted ? 'text-white drop-shadow-md' : ''}`}>Scan QR</span>
+            <QrCode size={54} className={`z-30 transition-transform group-hover:scale-110 ${cameraGranted && !cameraError ? 'text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]' : 'text-slate-900'}`} />
+            <span className={`z-30 font-bold text-lg ${cameraGranted && !cameraError ? 'text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]' : ''}`}>Scan QR</span>
           </button>
 
           <div className="flex flex-col gap-4 justify-center">

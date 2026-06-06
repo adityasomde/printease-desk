@@ -13,10 +13,12 @@ The transparent scan button feature failed because scanner behavior was being pa
 ## What Changed
 
 - Added reusable `CentreScannerTile`.
+- Added reusable `CameraScanLayer`.
 - Home and Centre pages now use the same transparent scan tile.
-- The tile starts camera input inside the card only after the user taps it.
+- The Home hero attempts to start the scanner background automatically for 30 seconds on page load.
+- After that automatic window closes, it stays off until the user taps the scan tile again.
 - The moving scan line and labels stay over the live camera feed.
-- QR decoding happens inside the tile, so the rest of the page stays visible.
+- QR decoding happens inside the transparent hero/tile surface, so the rest of the page stays visible.
 - Camera startup now falls back from an ideal environment camera to `video: true`.
 - Scanner callbacks are stabilized with `useCallback`.
 - Camera errors stay local to the tile and do not break centre search.
@@ -27,10 +29,11 @@ The transparent scan button feature failed because scanner behavior was being pa
 Do not add scanner state separately to every page. Reuse:
 
 ```txt
+frontend/src/components/CameraScanLayer.jsx
 frontend/src/components/CentreScannerTile.jsx
 ```
 
-Do not start camera capture before a user tap. Browser permission prompts should be caused by a clear user action.
+The only automatic camera start should be the Home hero's 30-second preview window. Do not add automatic camera starts to other pages without a clear product reason.
 
 Do not commit one-off patch scripts such as:
 

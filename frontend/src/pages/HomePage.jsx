@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { User, Upload, Store, Plus, Building2, Search, Download, QrCode } from "lucide-react";
 import Card from "../components/Card";
 import CentrePriceCard from "../components/CentrePriceCard";
+import CameraScanLayer from "../components/CameraScanLayer";
 import CentreScannerTile from "../components/CentreScannerTile";
 
 import QRScanner from "../components/QRScanner";
@@ -21,13 +22,31 @@ export default function HomePage({
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [centreSearch, setCentreSearch] = useState("");
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [heroScannerActive, setHeroScannerActive] = useState(false);
+  const [heroScannerError, setHeroScannerError] = useState("");
+  const [heroScannerAutoUsed, setHeroScannerAutoUsed] = useState(false);
   const startScanner = () => setScannerOpen(true);
   const stopScanner = () => setScannerOpen(false);
 
   const handleScan = useCallback(async (code) => {
+    setHeroScannerActive(false);
     stopScanner();
     await selectCentreByCode(code);
   }, [selectCentreByCode]);
+
+  const startHeroScanner = useCallback(() => {
+    setHeroScannerError("");
+    setHeroScannerActive(true);
+  }, []);
+
+  const stopHeroScanner = useCallback(() => {
+    setHeroScannerActive(false);
+  }, []);
+
+  const handleHeroScannerError = useCallback((error) => {
+    setHeroScannerError(error?.message || "Camera is not available. You can still search by centre name or code.");
+    setHeroScannerActive(false);
+  }, []);
 
   useEffect(() => {
     const handler = (e) => {
@@ -37,6 +56,29 @@ export default function HomePage({
     window.addEventListener("beforeinstallprompt", handler);
     return () => window.removeEventListener("beforeinstallprompt", handler);
   }, []);
+
+  useEffect(() => {
+    if (heroScannerAutoUsed) return undefined;
+
+    setHeroScannerAutoUsed(true);
+    setHeroScannerActive(true);
+
+    const timer = window.setTimeout(() => {
+      setHeroScannerActive(false);
+    }, 30000);
+
+    return () => window.clearTimeout(timer);
+  }, [heroScannerAutoUsed]);
+
+  useEffect(() => {
+    if (!heroScannerActive) return undefined;
+
+    const timer = window.setTimeout(() => {
+      setHeroScannerActive(false);
+    }, 30000);
+
+    return () => window.clearTimeout(timer);
+  }, [heroScannerActive]);
 
   const handleDownloadApp = async () => {
     const ua = navigator.userAgent || navigator.vendor || window.opera;
@@ -91,35 +133,60 @@ export default function HomePage({
   return (
     <div className="space-y-8">
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(340px,420px)] lg:items-stretch">
-        <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col justify-between gap-5 rounded-3xl border bg-white p-5 shadow-sm sm:p-6">
-          <div className="space-y-3">
-            <div className="inline-flex rounded-full bg-slate-200 px-4 py-2 text-sm font-medium text-slate-700">
+        <motion.section
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          className={`relative isolate flex flex-col justify-between gap-5 overflow-hidden rounded-3xl border p-5 shadow-sm transition sm:p-6 ${
+            heroScannerActive ? "border-white/20 bg-transparent text-white" : "bg-white"
+          }`}
+        >
+          <CameraScanLayer active={heroScannerActive} onScan={handleScan} onError={handleHeroScannerError} />
+          <div className={`pointer-events-none absolute inset-0 z-20 transition ${heroScannerActive ? "bg-slate-950/30" : "bg-transparent"}`} />
+          <div className="relative z-30 space-y-3">
+            <div className={`inline-flex rounded-full px-4 py-2 text-sm font-medium ${heroScannerActive ? "bg-white/15 text-white backdrop-blur" : "bg-slate-200 text-slate-700"}`}>
               QR based web printing platform
             </div>
             <div>
-              <h2 className="text-3xl font-extrabold tracking-tight text-slate-950 sm:text-4xl">
+              <h2 className={`text-3xl font-extrabold tracking-tight sm:text-4xl ${heroScannerActive ? "text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.6)]" : "text-slate-950"}`}>
                 Print documents securely.
               </h2>
-              <p className="mt-2 max-w-xl text-sm leading-6 text-slate-600 sm:text-base">
+              <p className={`mt-2 max-w-xl text-sm leading-6 sm:text-base ${heroScannerActive ? "text-white/85" : "text-slate-600"}`}>
                 Scan QR or enter code to select a centre, upload your document, pay, and collect your print.
               </p>
+              {heroScannerActive && (
+                <p className="mt-2 inline-flex rounded-full bg-white/15 px-3 py-1 text-xs font-semibold text-white/90 backdrop-blur">
+                  Scanner preview closes automatically in 30 seconds.
+                </p>
+              )}
             </div>
           </div>
-          <div className="grid gap-3">
+          <div className="relative z-30 grid gap-3">
             <button
               onClick={startDirectUpload}
-              className="flex min-h-20 items-center justify-center gap-3 rounded-2xl bg-slate-900 px-6 py-5 text-lg font-bold text-white shadow-lg transition hover:bg-slate-800"
+              className={`flex min-h-20 items-center justify-center gap-3 rounded-2xl px-6 py-5 text-lg font-bold shadow-lg transition ${
+                heroScannerActive ? "bg-white/90 text-slate-950 hover:bg-white" : "bg-slate-900 text-white hover:bg-slate-800"
+              }`}
             >
               <Upload size={30} />
               Upload Documents
             </button>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <CentreScannerTile onScan={handleScan} />
+              <CentreScannerTile
+                onScan={handleScan}
+                active={heroScannerActive}
+                onStart={startHeroScanner}
+                onStop={stopHeroScanner}
+                onError={handleHeroScannerError}
+                externalCamera
+                idleHint={heroScannerError || "Tap to restart camera preview."}
+              />
 
               <button
                 onClick={() => startLogin("user")}
-                className="flex min-h-16 items-center justify-center gap-2 rounded-2xl border bg-white px-4 py-3 font-semibold shadow-sm hover:bg-slate-50"
+                className={`flex min-h-16 items-center justify-center gap-2 rounded-2xl border px-4 py-3 font-semibold shadow-sm ${
+                  heroScannerActive ? "border-white/25 bg-white/85 text-slate-950 hover:bg-white" : "bg-white hover:bg-slate-50"
+                }`}
               >
                 <User size={18} />
                 Login / My Orders

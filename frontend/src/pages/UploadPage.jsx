@@ -37,12 +37,28 @@ export default function UploadPage({
   preparePayment,
   paymentLoading,
   paymentError,
+  navigate,
   multiFileConfigs,
   setMultiFileConfigs,
 }) {
   const [selectedFileNames, setSelectedFileNames] = useState([]);
+  const [modalFile, setModalFile] = useState(null);
+  const longPressTimerRef = useRef(null);
 
   const isMulti = documentFiles.length > 1;
+
+  function handleTouchStart(fileName) {
+    longPressTimerRef.current = window.setTimeout(() => {
+      setModalFile(fileName);
+    }, 500);
+  }
+
+  function handleTouchEnd() {
+    if (longPressTimerRef.current) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }
 
   function initConfigs(files) {
     const newConfigs = { ...multiFileConfigs };
@@ -81,6 +97,12 @@ export default function UploadPage({
     const firstFile = files[0] || null;
     setDocumentFiles(files);
     setDocumentFile(firstFile);
+    if (!firstFile) {
+      setDocumentName("");
+      setSelectedFileNames([]);
+      setModalFile(null);
+      return;
+    }
     if (files.length === 1) setDocumentName(firstFile.name);
     if (files.length > 1) setDocumentName(`${files.length} uploaded documents`);
     if (files.length > 1) initConfigs(files);

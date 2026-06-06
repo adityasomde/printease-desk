@@ -26,10 +26,10 @@ set -euo pipefail
 #   desktop-shell/
 #   release files
 
-ROOT="/home/chaitanya/Downloads/printhub"
+ROOT="/home/adisssss/Desktop/web_dev/printhub"
 
-MVP_FRONTEND="$ROOT/printease/frontend"
-DESK_FRONTEND="$ROOT/desk/frontend"
+MVP_FRONTEND="$ROOT/printease-mvp-main/frontend"
+DESK_FRONTEND="$ROOT/printease-desk/frontend"
 DESK_REPO="$ROOT/desk"
 MVP_REPO="$ROOT/printease"
 

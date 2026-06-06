@@ -423,6 +423,7 @@ export default function App() {
   const [selectedCentre, setSelectedCentre] = useState(null);
   const [documentFile, setDocumentFile] = useState(null);
   const [documentFiles, setDocumentFiles] = useState([]);
+  const [multiFileConfigs, setMultiFileConfigs] = useState({});
   const [documentName, setDocumentName] = useState("");
   const [pages, setPages] = useState(1);
   const [selectedPages, setSelectedPages] = useState("");
@@ -1186,7 +1187,7 @@ export default function App() {
     navigate("upload");
   }
 
-  async function preparePayment(customFileConfigs) {
+  async function preparePayment() {
     if (!selectedCentre) {
       setPaymentError("Please select a printing centre first.");
       navigate("centre");
@@ -1202,7 +1203,7 @@ export default function App() {
 
     if (!currentUser) {
       setPaymentError("Please login before payment.");
-      setPostAuthRedirect("payment");
+      setPostAuthRedirect("upload");
       startLogin("user");
       return;
     }
@@ -1256,7 +1257,7 @@ export default function App() {
           centreCode: selectedCentre.code,
           documentIds: uploadedDocuments.map((document) => document.id),
           files: uploadedDocuments.map((document) => {
-            const config = customFileConfigs?.[document.fileName] || {
+            const config = multiFileConfigs?.[document.fileName] || {
               selectedPages,
               copies,
               colorType,
@@ -1290,7 +1291,7 @@ export default function App() {
               scaleMode: config.scaleMode,
               marginMode: config.marginMode,
               watermarkEnabled: config.watermark,
-              printOptions: customFileConfigs ? buildPrintOptions(config) : defaultPrintOptions,
+              printOptions: multiFileConfigs?.[document.fileName] ? buildPrintOptions(config) : defaultPrintOptions,
             };
           }),
           documentName: uploadedDocuments.length === 1
@@ -1829,7 +1830,7 @@ export default function App() {
           />
           <Route path={ROUTES.desktopAgent} element={<DesktopAgentPage currentUser={currentUser} />} />
           <Route path={ROUTES.centre} element={<CentreCodePage centreCode={centreCode} setCentreCode={setCentreCode} handleCentreCode={handleCentreCode} selectCentreByCode={selectCentreByCode} centres={prioritizedCentres} selectCentreAndUpload={selectCentreAndUpload} lookupLoading={centreLookupLoading} lookupError={centreLookupError} />} />
-          <Route path={ROUTES.upload} element={<UploadPage selectedCentre={selectedCentre} documentFile={documentFile} setDocumentFile={setDocumentFile} documentFiles={documentFiles} setDocumentFiles={setDocumentFiles} documentName={documentName} setDocumentName={setDocumentName} pages={pages} setPages={setPages} selectedPages={selectedPages} setSelectedPages={setSelectedPages} copies={copies} setCopies={setCopies} colorType={colorType} setColorType={setColorType} sideType={sideType} setSideType={setSideType} paperSize={paperSize} setPaperSize={setPaperSize} pagesPerSheet={pagesPerSheet} setPagesPerSheet={setPagesPerSheet} orientation={orientation} setOrientation={setOrientation} printDpi={printDpi} setPrintDpi={setPrintDpi} scaleMode={scaleMode} setScaleMode={setScaleMode} marginMode={marginMode} setMarginMode={setMarginMode} watermark={watermark} setWatermark={setWatermark} watermarkType={watermarkType} setWatermarkType={setWatermarkType} watermarkText={watermarkText} setWatermarkText={setWatermarkText} watermarkPosition={watermarkPosition} setWatermarkPosition={setWatermarkPosition} watermarkOpacity={watermarkOpacity} setWatermarkOpacity={setWatermarkOpacity} watermarkFontSize={watermarkFontSize} setWatermarkFontSize={setWatermarkFontSize} watermarkRotation={watermarkRotation} setWatermarkRotation={setWatermarkRotation} pricePerPage={pricePerPage} estimatedSelectedPageCount={estimatedSelectedPageCount} totalAmount={totalAmount} backendPrice={backendPrice} preparePayment={preparePayment} paymentLoading={paymentLoading} paymentError={paymentError} navigate={navigate} />} />
+          <Route path={ROUTES.upload} element={<UploadPage selectedCentre={selectedCentre} documentFile={documentFile} setDocumentFile={setDocumentFile} documentFiles={documentFiles} setDocumentFiles={setDocumentFiles} multiFileConfigs={multiFileConfigs} setMultiFileConfigs={setMultiFileConfigs} documentName={documentName} setDocumentName={setDocumentName} pages={pages} setPages={setPages} selectedPages={selectedPages} setSelectedPages={setSelectedPages} copies={copies} setCopies={setCopies} colorType={colorType} setColorType={setColorType} sideType={sideType} setSideType={setSideType} paperSize={paperSize} setPaperSize={setPaperSize} pagesPerSheet={pagesPerSheet} setPagesPerSheet={setPagesPerSheet} orientation={orientation} setOrientation={setOrientation} printDpi={printDpi} setPrintDpi={setPrintDpi} scaleMode={scaleMode} setScaleMode={setScaleMode} marginMode={marginMode} setMarginMode={setMarginMode} watermark={watermark} setWatermark={setWatermark} watermarkType={watermarkType} setWatermarkType={setWatermarkType} watermarkText={watermarkText} setWatermarkText={setWatermarkText} watermarkPosition={watermarkPosition} setWatermarkPosition={setWatermarkPosition} watermarkOpacity={watermarkOpacity} setWatermarkOpacity={setWatermarkOpacity} watermarkFontSize={watermarkFontSize} setWatermarkFontSize={setWatermarkFontSize} watermarkRotation={watermarkRotation} setWatermarkRotation={setWatermarkRotation} pricePerPage={pricePerPage} estimatedSelectedPageCount={estimatedSelectedPageCount} totalAmount={totalAmount} backendPrice={backendPrice} preparePayment={preparePayment} paymentLoading={paymentLoading} paymentError={paymentError} navigate={navigate} />} />
           <Route
             path={ROUTES.payment}
             element={

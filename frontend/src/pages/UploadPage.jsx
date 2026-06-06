@@ -37,15 +37,15 @@ export default function UploadPage({
   preparePayment,
   paymentLoading,
   paymentError,
-  navigate,
+  multiFileConfigs,
+  setMultiFileConfigs,
 }) {
-  const [fileConfigs, setFileConfigs] = useState({});
   const [selectedFileNames, setSelectedFileNames] = useState([]);
 
   const isMulti = documentFiles.length > 1;
 
   function initConfigs(files) {
-    const newConfigs = { ...fileConfigs };
+    const newConfigs = { ...multiFileConfigs };
     const names = [];
     files.forEach((f) => {
       names.push(f.name);
@@ -72,7 +72,7 @@ export default function UploadPage({
         };
       }
     });
-    setFileConfigs(newConfigs);
+    setMultiFileConfigs(newConfigs);
     setSelectedFileNames(names);
   }
 
@@ -87,6 +87,10 @@ export default function UploadPage({
   }
 
   useEffect(() => {
+    if (documentFiles.length > 1 && Object.keys(multiFileConfigs).length === 0) {
+      initConfigs(documentFiles);
+    }
+
     const handlePaste = (e) => {
       const files = Array.from(e.clipboardData?.files || []).filter((f) => f.type === "application/pdf");
       if (files.length > 0) {
@@ -216,18 +220,14 @@ export default function UploadPage({
   );
 
   return () => window.removeEventListener("paste", handlePaste);
-  }, [fileConfigs]); // eslint-disable-line
+  }, [multiFileConfigs, documentFiles]); // eslint-disable-line
 
   const handlePaymentClick = () => {
     if (!selectedCentre) {
       navigate("centre");
       return;
     }
-    if (isMulti) {
-      preparePayment(fileConfigs);
-    } else {
-      preparePayment();
-    }
+    preparePayment();
   };
 
   const selectedFileCount = documentFiles?.length || (documentFile ? 1 : 0);
@@ -238,7 +238,7 @@ export default function UploadPage({
     if (!isMulti) return totalAmount;
     let total = 0;
     for (const f of documentFiles) {
-      const c = fileConfigs[f.name];
+      const c = multiFileConfigs[f.name];
       if (!c) continue;
       const ppp = getPricePerPage(selectedCentre, c.colorType, c.sideType);
       const estPages = countSelectedPages(c.selectedPages, c.pages) || c.pages;
@@ -251,10 +251,10 @@ export default function UploadPage({
       });
     }
     return total;
-  }, [documentFiles, fileConfigs, selectedCentre, totalAmount, isMulti]);
+  }, [documentFiles, multiFileConfigs, selectedCentre, totalAmount, isMulti]);
 
   const activeConfig = isMulti && selectedFileNames.length > 0
-    ? fileConfigs[selectedFileNames[0]]
+    ? multiFileConfigs[selectedFileNames[0]]
     : {
         pages,
         selectedPages,
@@ -297,7 +297,7 @@ export default function UploadPage({
       else if (key === "watermarkFontSize") setWatermarkFontSize(value);
       else if (key === "watermarkRotation") setWatermarkRotation(value);
     } else {
-      setFileConfigs((prev) => {
+      setMultiFileConfigs((prev) => {
         const next = { ...prev };
         selectedFileNames.forEach((name) => {
           if (next[name]) {
@@ -487,7 +487,7 @@ export default function UploadPage({
               <div className="grid gap-2 max-h-64 overflow-y-auto pr-2">
                 {documentFiles.map((file) => {
                   const isSelected = selectedFileNames.includes(file.name);
-                  const conf = fileConfigs[file.name] || {};
+                  const conf = multiFileConfigs[file.name] || {};
                   return (
                     <div
                       key={file.name}

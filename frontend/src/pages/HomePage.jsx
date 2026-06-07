@@ -38,7 +38,6 @@ export default function HomePage({
   const [scannerOpen, setScannerOpen] = useState(false);
   const [heroScannerActive, setHeroScannerActive] = useState(false);
   const [heroScannerError, setHeroScannerError] = useState("");
-  const [heroScannerAutoUsed, setHeroScannerAutoUsed] = useState(false);
   const [scannerMode, setScannerMode] = useState(getSavedScannerMode);
   const startScanner = useCallback(() => setScannerOpen(true), []);
   const stopScanner = useCallback(() => setScannerOpen(false), []);
@@ -93,38 +92,6 @@ export default function HomePage({
       // Scanner preference is optional.
     }
   }, [scannerMode]);
-
-  useEffect(() => {
-    if (scannerMode !== "transparent") return undefined;
-    if (heroScannerAutoUsed) return undefined;
-
-    setHeroScannerAutoUsed(true);
-    let cancelled = false;
-    let timer;
-
-    async function startIfCameraAlreadyAllowed() {
-      if (!navigator.mediaDevices?.getUserMedia || !navigator.permissions?.query) return;
-
-      try {
-        const permission = await navigator.permissions.query({ name: "camera" });
-        if (!cancelled && permission.state === "granted") {
-          setHeroScannerActive(true);
-          timer = window.setTimeout(() => {
-            setHeroScannerActive(false);
-          }, 30000);
-        }
-      } catch {
-        // First-time users should not get an automatic camera prompt.
-      }
-    }
-
-    startIfCameraAlreadyAllowed();
-
-    return () => {
-      cancelled = true;
-      if (timer) window.clearTimeout(timer);
-    };
-  }, [heroScannerAutoUsed, scannerMode]);
 
   useEffect(() => {
     if (!heroScannerActive) return undefined;

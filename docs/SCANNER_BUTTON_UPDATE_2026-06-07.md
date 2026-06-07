@@ -15,13 +15,13 @@ The transparent scan button feature failed because scanner behavior was being pa
 - Added reusable `CentreScannerTile`.
 - Added reusable `CameraScanLayer`.
 - Home and Centre pages now use the same transparent scan tile.
-- The Home hero starts the transparent scanner automatically for 30 seconds only when the browser already reports camera permission as `granted`.
+- The Home hero does not start the camera automatically on page load.
 - First-time users, denied camera users, and browsers that only report `prompt` do not get an automatic camera prompt on page load.
 - The Home hero has a corner mode switch for Ready, Transparent scanner, and Classic scanner.
 - Ready mode keeps the camera off until the user taps the scan tile.
 - Transparent mode runs the camera inside the hero/tile surface.
 - Classic mode opens the older full-screen QR scanner modal.
-- After the automatic transparent scanner window closes, it stays off until the user taps the scan tile again.
+- Scanner mode is remembered locally, but camera startup still requires a user tap.
 - The Centre page scanner auto-starts only when navigation comes from the Upload page's select-centre/continue flow.
 - Normal Centre page visits through navbar/dashboard do not auto-start the camera.
 - When the hero scanner is active, the scan tile is transparent and does not draw a second scan line.
@@ -42,10 +42,9 @@ frontend/src/components/CentreScannerTile.jsx
 
 Automatic camera starts are limited to:
 
-- Home hero's 30-second preview window, and only when camera permission is already `granted`.
 - Centre page only when opened from Upload with the `autoStartScanner` navigation flag.
 
-Do not add automatic camera starts to other pages without a clear product reason.
+Do not add automatic camera starts to Home or other pages without a clear product reason and a user gesture.
 
 Do not commit one-off patch scripts such as:
 

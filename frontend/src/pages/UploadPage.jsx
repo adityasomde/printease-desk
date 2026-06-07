@@ -663,7 +663,7 @@ export default function UploadPage({
                      </div>
                    </div>
                  ))}
-                 <p className="text-xs text-slate-500">Final page count is verified from the uploaded PDFs at checkout.</p>
+                 <p className="text-xs text-slate-500">Estimate updates here from each file's settings. The backend verifies PDF pages before payment.</p>
                </div>
             ) : (
                <>

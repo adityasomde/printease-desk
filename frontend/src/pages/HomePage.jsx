@@ -60,10 +60,8 @@ export default function HomePage({
       return;
     }
 
-    if (scannerMode === "ready") {
-      setScannerMode("transparent");
-    }
-
+    // Both ready and transparent now use the inline hero scanner.
+    // Ready mode auto-starts it if permissions exist, but tapping it always forces it to start.
     startHeroScanner();
   }, [scannerMode, startHeroScanner, startScanner]);
 
@@ -75,6 +73,35 @@ export default function HomePage({
     setHeroScannerError(error?.message || "Camera is not available. You can still search by centre name or code.");
     setHeroScannerActive(false);
   }, []);
+
+  useEffect(() => {
+    if (scannerMode !== "ready") return;
+    
+    let mounted = true;
+    const checkCameraPermission = async () => {
+      let granted = false;
+      if (navigator.permissions && navigator.permissions.query) {
+        try {
+          const result = await navigator.permissions.query({ name: "camera" });
+          if (result.state === "granted") granted = true;
+        } catch (e) {}
+      }
+      if (!granted && navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+        try {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const cameras = devices.filter(device => device.kind === 'videoinput');
+          if (cameras.some(camera => camera.label !== '')) granted = true;
+        } catch (e) {}
+      }
+      
+      if (mounted && granted && scannerMode === "ready") {
+        setHeroScannerActive(true);
+      }
+    };
+    
+    checkCameraPermission();
+    return () => { mounted = false; };
+  }, [scannerMode]);
 
   useEffect(() => {
     const handler = (e) => {
@@ -226,7 +253,7 @@ export default function HomePage({
             <div className="grid gap-3 sm:grid-cols-2">
               <CentreScannerTile
                 onScan={handleScan}
-                active={scannerMode === "transparent" ? heroScannerActive : false}
+                active={(scannerMode === "transparent" || scannerMode === "ready") ? heroScannerActive : false}
                 onStart={startSelectedScanner}
                 onStop={stopHeroScanner}
                 onError={handleHeroScannerError}

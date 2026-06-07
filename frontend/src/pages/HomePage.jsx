@@ -60,8 +60,8 @@ export default function HomePage({
       return;
     }
 
-    // Both ready and transparent now use the inline hero scanner.
-    // Ready mode auto-starts it if permissions exist, but tapping it always forces it to start.
+    // Both ready and transparent use the inline hero scanner.
+    // Ready mode also starts it automatically when the home page loads.
     startHeroScanner();
   }, [scannerMode, startHeroScanner, startScanner]);
 
@@ -76,32 +76,8 @@ export default function HomePage({
 
   useEffect(() => {
     if (scannerMode !== "ready") return;
-    
-    let mounted = true;
-    const checkCameraPermission = async () => {
-      let granted = false;
-      if (navigator.permissions && navigator.permissions.query) {
-        try {
-          const result = await navigator.permissions.query({ name: "camera" });
-          if (result.state === "granted") granted = true;
-        } catch (e) {}
-      }
-      if (!granted && navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
-        try {
-          const devices = await navigator.mediaDevices.enumerateDevices();
-          const cameras = devices.filter(device => device.kind === 'videoinput');
-          if (cameras.some(camera => camera.label !== '')) granted = true;
-        } catch (e) {}
-      }
-      
-      if (mounted && granted && scannerMode === "ready") {
-        setHeroScannerActive(true);
-      }
-    };
-    
-    checkCameraPermission();
-    return () => { mounted = false; };
-  }, [scannerMode]);
+    startHeroScanner();
+  }, [scannerMode, startHeroScanner]);
 
   useEffect(() => {
     const handler = (e) => {

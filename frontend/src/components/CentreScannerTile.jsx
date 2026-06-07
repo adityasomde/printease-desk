@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { QrCode, X } from "lucide-react";
 import CameraScanLayer from "./CameraScanLayer";
 
@@ -8,6 +8,7 @@ export default function CentreScannerTile({
   onStart,
   onStop,
   onError,
+  autoStart = false,
   externalCamera = false,
   className = "",
   minHeightClass = "min-h-[160px]",
@@ -20,6 +21,7 @@ export default function CentreScannerTile({
   const controlled = typeof active === "boolean";
   const [internalActive, setInternalActive] = useState(false);
   const [error, setError] = useState("");
+  const autoStartedRef = useRef(false);
   const isActive = controlled ? active : internalActive;
 
   const start = useCallback(() => {
@@ -49,8 +51,26 @@ export default function CentreScannerTile({
     }
   }, [controlled, onError, onStop]);
 
+  useEffect(() => {
+    if (!autoStart || controlled || autoStartedRef.current) return;
+
+    autoStartedRef.current = true;
+    setError("");
+    setInternalActive(true);
+
+    const timer = window.setTimeout(() => {
+      setInternalActive(false);
+    }, 30000);
+
+    return () => window.clearTimeout(timer);
+  }, [autoStart, controlled]);
+
+  const showLocalScanLine = !(externalCamera && isActive);
+
   return (
-    <div className={`relative overflow-hidden rounded-2xl border bg-white/75 shadow-sm backdrop-blur ${minHeightClass} ${className}`}>
+    <div className={`relative overflow-hidden rounded-2xl border shadow-sm transition ${minHeightClass} ${
+      externalCamera && isActive ? "border-white/20 bg-transparent backdrop-blur-0 shadow-none" : "bg-white/75 backdrop-blur"
+    } ${className}`}>
       <button
         type="button"
         onClick={isActive ? undefined : start}
@@ -62,9 +82,11 @@ export default function CentreScannerTile({
         {isActive && !externalCamera && (
           <CameraScanLayer active={isActive} onScan={handleScan} onError={handleError} />
         )}
-        <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden opacity-35">
-          <div className="absolute left-[10%] h-[3px] w-[80%] rounded-full bg-emerald-500 shadow-[0_0_12px_3px_rgba(16,185,129,0.7)] animate-scan" />
-        </div>
+        {showLocalScanLine && (
+          <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden opacity-35">
+            <div className="absolute left-[10%] h-[3px] w-[80%] rounded-full bg-emerald-500 shadow-[0_0_12px_3px_rgba(16,185,129,0.7)] animate-scan" />
+          </div>
+        )}
         <QrCode size={iconSize} className={`z-30 ${isActive ? "text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" : "text-slate-950"}`} />
         <span className={`z-30 text-center text-sm ${isActive ? "text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" : ""}`}>
           {isActive ? activeLabel : idleLabel}

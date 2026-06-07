@@ -308,7 +308,7 @@ export default function UploadPage({
 
   const handlePaymentClick = () => {
     if (!selectedCentre) {
-      navigate("centre");
+      navigate("centre", { state: { autoStartScanner: true, fromUpload: true } });
       return;
     }
     preparePayment();
@@ -644,7 +644,7 @@ export default function UploadPage({
 
           <div className="flex gap-2 md:block">
             {!selectedCentre && (
-              <button onClick={() => navigate("centre")} className="flex-1 rounded-2xl border bg-white px-2 py-3 text-sm font-semibold hover:bg-slate-50 md:mt-6 md:w-full md:px-4 md:text-base">
+              <button onClick={() => navigate("centre", { state: { autoStartScanner: true, fromUpload: true } })} className="flex-1 rounded-2xl border bg-white px-2 py-3 text-sm font-semibold hover:bg-slate-50 md:mt-6 md:w-full md:px-4 md:text-base">
                 Select Centre
               </button>
             )}

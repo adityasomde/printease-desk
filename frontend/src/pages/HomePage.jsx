@@ -25,19 +25,30 @@ export default function HomePage({
   const [heroScannerActive, setHeroScannerActive] = useState(false);
   const [heroScannerError, setHeroScannerError] = useState("");
   const [heroScannerAutoUsed, setHeroScannerAutoUsed] = useState(false);
-  const startScanner = () => setScannerOpen(true);
-  const stopScanner = () => setScannerOpen(false);
+  const [scannerMode, setScannerMode] = useState("transparent");
+  const startScanner = useCallback(() => setScannerOpen(true), []);
+  const stopScanner = useCallback(() => setScannerOpen(false), []);
 
   const handleScan = useCallback(async (code) => {
     setHeroScannerActive(false);
     stopScanner();
     await selectCentreByCode(code);
-  }, [selectCentreByCode]);
+  }, [selectCentreByCode, stopScanner]);
 
   const startHeroScanner = useCallback(() => {
     setHeroScannerError("");
     setHeroScannerActive(true);
   }, []);
+
+  const startSelectedScanner = useCallback(() => {
+    if (scannerMode === "classic") {
+      setHeroScannerActive(false);
+      startScanner();
+      return;
+    }
+
+    startHeroScanner();
+  }, [scannerMode, startHeroScanner, startScanner]);
 
   const stopHeroScanner = useCallback(() => {
     setHeroScannerActive(false);
@@ -61,13 +72,31 @@ export default function HomePage({
     if (heroScannerAutoUsed) return undefined;
 
     setHeroScannerAutoUsed(true);
-    setHeroScannerActive(true);
+    let cancelled = false;
+    let timer;
 
-    const timer = window.setTimeout(() => {
-      setHeroScannerActive(false);
-    }, 30000);
+    async function startIfCameraAlreadyAllowed() {
+      if (!navigator.mediaDevices?.getUserMedia || !navigator.permissions?.query) return;
 
-    return () => window.clearTimeout(timer);
+      try {
+        const permission = await navigator.permissions.query({ name: "camera" });
+        if (!cancelled && permission.state === "granted") {
+          setHeroScannerActive(true);
+          timer = window.setTimeout(() => {
+            setHeroScannerActive(false);
+          }, 30000);
+        }
+      } catch {
+        // First-time users should not get an automatic camera prompt.
+      }
+    }
+
+    startIfCameraAlreadyAllowed();
+
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+    };
   }, [heroScannerAutoUsed]);
 
   useEffect(() => {
@@ -141,7 +170,26 @@ export default function HomePage({
           }`}
         >
           <CameraScanLayer active={heroScannerActive} onScan={handleScan} onError={handleHeroScannerError} />
-          <div className={`pointer-events-none absolute inset-0 z-20 transition ${heroScannerActive ? "bg-slate-950/30" : "bg-transparent"}`} />
+          <div className="pointer-events-none absolute inset-0 z-20 bg-transparent" />
+          <div className="absolute right-4 top-4 z-40 flex rounded-full border border-slate-200 bg-white/85 p-1 text-xs font-bold text-slate-700 shadow-sm backdrop-blur">
+            <button
+              type="button"
+              onClick={() => setScannerMode("transparent")}
+              className={`rounded-full px-3 py-1.5 ${scannerMode === "transparent" ? "bg-slate-900 text-white" : "hover:bg-slate-100"}`}
+            >
+              Transparent
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setScannerMode("classic");
+                setHeroScannerActive(false);
+              }}
+              className={`rounded-full px-3 py-1.5 ${scannerMode === "classic" ? "bg-slate-900 text-white" : "hover:bg-slate-100"}`}
+            >
+              Classic
+            </button>
+          </div>
           <div className="relative z-30 space-y-3">
             <div className={`inline-flex rounded-full px-4 py-2 text-sm font-medium ${heroScannerActive ? "bg-white/15 text-white backdrop-blur" : "bg-slate-200 text-slate-700"}`}>
               QR based web printing platform
@@ -174,12 +222,13 @@ export default function HomePage({
             <div className="grid gap-3 sm:grid-cols-2">
               <CentreScannerTile
                 onScan={handleScan}
-                active={heroScannerActive}
-                onStart={startHeroScanner}
+                active={scannerMode === "transparent" ? heroScannerActive : false}
+                onStart={startSelectedScanner}
                 onStop={stopHeroScanner}
                 onError={handleHeroScannerError}
                 externalCamera
-                idleHint={heroScannerError || "Tap to restart camera preview."}
+                idleLabel={scannerMode === "classic" ? "Classic QR Scanner" : "Scan / Select Centre"}
+                idleHint={heroScannerError || (scannerMode === "classic" ? "Tap to open full scanner." : "Tap to show transparent scanner.")}
               />
 
               <button

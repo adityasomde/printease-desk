@@ -13,6 +13,7 @@ export default function CentreCodePage({
   selectCentreAndUpload,
   lookupLoading,
   lookupError,
+  autoStartScanner = false,
 }) {
   const handleScan = useCallback(async (code) => {
     setCentreCode(code);
@@ -45,6 +46,7 @@ export default function CentreCodePage({
             idleLabel="Scan QR"
             activeLabel="Point at centre QR"
             idleHint="Tap to scan inside this card."
+            autoStart={autoStartScanner}
           />
 
           <div className="flex flex-col gap-4 justify-center">

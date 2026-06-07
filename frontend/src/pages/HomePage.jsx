@@ -9,6 +9,20 @@ import CentreScannerTile from "../components/CentreScannerTile";
 
 import QRScanner from "../components/QRScanner";
 
+const SCANNER_MODE_KEY = "printease_scanner_mode";
+const SCANNER_MODES = new Set(["ready", "transparent", "classic"]);
+
+function getSavedScannerMode() {
+  if (typeof window === "undefined") return "ready";
+
+  try {
+    const savedMode = window.localStorage.getItem(SCANNER_MODE_KEY);
+    return SCANNER_MODES.has(savedMode) ? savedMode : "ready";
+  } catch {
+    return "ready";
+  }
+}
+
 export default function HomePage({
   currentUser,
   navigate,
@@ -25,7 +39,7 @@ export default function HomePage({
   const [heroScannerActive, setHeroScannerActive] = useState(false);
   const [heroScannerError, setHeroScannerError] = useState("");
   const [heroScannerAutoUsed, setHeroScannerAutoUsed] = useState(false);
-  const [scannerMode, setScannerMode] = useState("transparent");
+  const [scannerMode, setScannerMode] = useState(getSavedScannerMode);
   const startScanner = useCallback(() => setScannerOpen(true), []);
   const stopScanner = useCallback(() => setScannerOpen(false), []);
 
@@ -45,6 +59,10 @@ export default function HomePage({
       setHeroScannerActive(false);
       startScanner();
       return;
+    }
+
+    if (scannerMode === "ready") {
+      setScannerMode("transparent");
     }
 
     startHeroScanner();
@@ -69,6 +87,15 @@ export default function HomePage({
   }, []);
 
   useEffect(() => {
+    try {
+      window.localStorage.setItem(SCANNER_MODE_KEY, scannerMode);
+    } catch {
+      // Scanner preference is optional.
+    }
+  }, [scannerMode]);
+
+  useEffect(() => {
+    if (scannerMode !== "transparent") return undefined;
     if (heroScannerAutoUsed) return undefined;
 
     setHeroScannerAutoUsed(true);
@@ -97,7 +124,7 @@ export default function HomePage({
       cancelled = true;
       if (timer) window.clearTimeout(timer);
     };
-  }, [heroScannerAutoUsed]);
+  }, [heroScannerAutoUsed, scannerMode]);
 
   useEffect(() => {
     if (!heroScannerActive) return undefined;
@@ -174,6 +201,16 @@ export default function HomePage({
           <div className="absolute right-4 top-4 z-40 flex rounded-full border border-slate-200 bg-white/85 p-1 text-xs font-bold text-slate-700 shadow-sm backdrop-blur">
             <button
               type="button"
+              onClick={() => {
+                setScannerMode("ready");
+                setHeroScannerActive(false);
+              }}
+              className={`rounded-full px-3 py-1.5 ${scannerMode === "ready" ? "bg-slate-900 text-white" : "hover:bg-slate-100"}`}
+            >
+              Ready
+            </button>
+            <button
+              type="button"
               onClick={() => setScannerMode("transparent")}
               className={`rounded-full px-3 py-1.5 ${scannerMode === "transparent" ? "bg-slate-900 text-white" : "hover:bg-slate-100"}`}
             >
@@ -227,8 +264,8 @@ export default function HomePage({
                 onStop={stopHeroScanner}
                 onError={handleHeroScannerError}
                 externalCamera
-                idleLabel={scannerMode === "classic" ? "Classic QR Scanner" : "Scan / Select Centre"}
-                idleHint={heroScannerError || (scannerMode === "classic" ? "Tap to open full scanner." : "Tap to show transparent scanner.")}
+                idleLabel={scannerMode === "classic" ? "Classic QR Scanner" : scannerMode === "ready" ? "Ready to Scan" : "Scan / Select Centre"}
+                idleHint={heroScannerError || (scannerMode === "classic" ? "Tap to open full scanner." : scannerMode === "ready" ? "Tap to start transparent scanner." : "Tap to show transparent scanner.")}
               />
 
               <button

@@ -17,7 +17,8 @@ The transparent scan button feature failed because scanner behavior was being pa
 - Home and Centre pages now use the same transparent scan tile.
 - The Home hero starts the transparent scanner automatically for 30 seconds only when the browser already reports camera permission as `granted`.
 - First-time users, denied camera users, and browsers that only report `prompt` do not get an automatic camera prompt on page load.
-- The Home hero has a corner mode switch for Transparent scanner and Classic scanner.
+- The Home hero has a corner mode switch for Ready, Transparent scanner, and Classic scanner.
+- Ready mode keeps the camera off until the user taps the scan tile.
 - Transparent mode runs the camera inside the hero/tile surface.
 - Classic mode opens the older full-screen QR scanner modal.
 - After the automatic transparent scanner window closes, it stays off until the user taps the scan tile again.

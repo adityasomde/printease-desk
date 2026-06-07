@@ -9,6 +9,7 @@ test("shows manual payment request and calls handlePayment", async () => {
 
   const props = {
     selectedCentre: { name: "Test Centre", upiId: "test@upi", upiQrImageUrl: "https://example.com/qr.png" },
+    currentUser: { id: "user-1", role: "user", name: "Test User" },
     documentName: "MyDoc.pdf",
     pages: 2,
     copies: 1,
@@ -26,7 +27,7 @@ test("shows manual payment request and calls handlePayment", async () => {
   expect(screen.getAllByText(/test@upi/i).length).toBeGreaterThan(0);
   expect(screen.getByAltText(/centre upi qr/i).getAttribute("src")).toBe(props.selectedCentre.upiQrImageUrl);
 
-  const requestBtn = screen.getByRole("button", { name: /create pending payment request/i });
+  const requestBtn = screen.getByRole("button", { name: /request payment/i });
   fireEvent.click(requestBtn);
   expect(handlePayment).toHaveBeenCalled();
 
@@ -43,6 +44,7 @@ test("shows Razorpay payment button when online method is selected", async () =>
   render(
     <PaymentPage
       selectedCentre={{ name: "Test Centre", upiId: "test@upi" }}
+      currentUser={{ id: "user-1", role: "user", name: "Test User" }}
       documentName="MyDoc.pdf"
       pages={2}
       copies={1}
@@ -56,6 +58,6 @@ test("shows Razorpay payment button when online method is selected", async () =>
     />
   );
 
-  fireEvent.click(screen.getByRole("button", { name: /^pay online$/i }));
+  fireEvent.click(screen.getByRole("button", { name: /^pay ₹50\.00$/i }));
   expect(handlePayment).toHaveBeenCalled();
 });

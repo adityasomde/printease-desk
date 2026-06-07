@@ -29,7 +29,7 @@ export default function UserDashboard({ currentUser, navigate, orders }) {
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <ActionButton icon={<QrCode />} title="Enter Centre Code" onClick={() => navigate("centre")} />
           <ActionButton icon={<Upload />} title="Direct Upload" onClick={() => navigate("upload")} />
-          <ActionButton icon={<History />} title="Usage History" onClick={() => navigate("history")} />
+          <ActionButton icon={<History />} title="My Prints" onClick={() => navigate("history")} />
         </div>
       </Card>
     </div>

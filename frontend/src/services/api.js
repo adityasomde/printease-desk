@@ -271,6 +271,10 @@ export function getOrderDocuments(orderId) {
   return apiRequest(`/api/orders/${encodeURIComponent(orderId)}/documents`);
 }
 
+export function getUserHistory() {
+  return apiRequest("/api/user/history");
+}
+
 export function createDocumentSignedDownload(documentId) {
   return apiRequest(`/api/documents/${encodeURIComponent(documentId)}/signed-download`, {
     method: "POST",

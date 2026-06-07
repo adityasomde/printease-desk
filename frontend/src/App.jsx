@@ -27,6 +27,7 @@ import {
   getSupabaseUser,
   readSupabaseSessionFromUrl,
 } from "./utils/supabaseAuth";
+import { handleDesktopAutoRegistration } from "./utils/desktopAutoRegistration";
 
 const ROUTES = {
   home: "/",
@@ -618,6 +619,12 @@ export default function App() {
 
     restoreSession();
   }, []);
+
+  useEffect(() => {
+    if (desktopAvailable) {
+      handleDesktopAutoRegistration(currentUser);
+    }
+  }, [desktopAvailable, currentUser]);
 
   const pricePerPage = useMemo(
     () => getPricePerPage(selectedCentre, colorType, sideType),
@@ -1657,31 +1664,28 @@ export default function App() {
   async function updateCentrePrice(field, value) {
     if (!currentHub) return;
 
-    try {
-      const data = await apiRequest("/api/centres/me/pricing", {
-        method: "PATCH",
-        body: JSON.stringify({ [field]: Number(value) }),
-      });
-      const centre = normalizeCentre(data.centre);
-      setCentres((prev) => upsertCentre(prev, centre));
-    } catch (error) {
-      alert(error.message || "Could not update pricing.");
+    const numericValue = Number(value);
+    if (isNaN(numericValue) || numericValue < 0 || numericValue > 10000) {
+      throw new Error("Price must be a number between 0 and 10,000.");
     }
+
+    const data = await apiRequest("/api/centres/me/pricing", {
+      method: "PATCH",
+      body: JSON.stringify({ [field]: numericValue }),
+    });
+    const centre = normalizeCentre(data.centre);
+    setCentres((prev) => upsertCentre(prev, centre));
   }
 
   async function updateCentrePayment(field, value) {
     if (!currentHub) return;
 
-    try {
-      const data = await apiRequest("/api/centres/me/payment-method", {
-        method: "PATCH",
-        body: JSON.stringify({ [field]: value }),
-      });
-      const centre = normalizeCentre(data.centre);
-      setCentres((prev) => upsertCentre(prev, centre));
-    } catch (error) {
-      alert(error.message || "Could not update payment method.");
-    }
+    const data = await apiRequest("/api/centres/me/payment-method", {
+      method: "PATCH",
+      body: JSON.stringify({ [field]: value }),
+    });
+    const centre = normalizeCentre(data.centre);
+    setCentres((prev) => upsertCentre(prev, centre));
   }
 
   return (

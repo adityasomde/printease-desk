@@ -313,10 +313,6 @@ export default function UploadPage({
       navigate("centre", { state: { autoStartScanner: true, fromUpload: true } });
       return;
     }
-    if (!currentUser) {
-      startLogin("user");
-      return;
-    }
     preparePayment();
   };
 
@@ -694,10 +690,10 @@ export default function UploadPage({
           </div>
 
           {!currentUser && (
-            <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-              <p className="font-semibold text-slate-900">Login to continue printing</p>
-              <p className="mt-1">Your documents and print history stay linked to your account. No temporary order is created.</p>
-              <button onClick={() => startLogin("user")} className="mt-3 rounded-xl bg-slate-900 px-4 py-2 font-semibold text-white">Login</button>
+            <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+              <p className="font-semibold">Continue without login for up to 5 selected pages.</p>
+              <p className="mt-1">Login for larger orders and saved print history.</p>
+              <button onClick={() => startLogin("user")} className="mt-3 rounded-xl bg-amber-900 px-4 py-2 font-semibold text-white">Login instead</button>
             </div>
           )}
 
@@ -708,7 +704,7 @@ export default function UploadPage({
               </button>
             )}
 
-            <button onClick={handlePaymentClick} disabled={!selectedFileCount || paymentLoading || !currentUser} className="flex-1 rounded-2xl bg-slate-900 px-2 py-3 text-sm font-semibold text-white disabled:opacity-40 md:mt-3 md:w-full md:px-4 md:text-base">
+            <button onClick={handlePaymentClick} disabled={!selectedFileCount || paymentLoading} className="flex-1 rounded-2xl bg-slate-900 px-2 py-3 text-sm font-semibold text-white disabled:opacity-40 md:mt-3 md:w-full md:px-4 md:text-base">
               {paymentLoading ? "Calculating..." : (!selectedCentre ? "Select & Continue" : "Continue to Payment")}
             </button>
           </div>

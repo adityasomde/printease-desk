@@ -453,6 +453,7 @@ export default function App() {
   const [pendingPayment, setPendingPayment] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState("manual");
   const [upiQr, setUpiQr] = useState(null);
+  const [orderAccessToken, setOrderAccessToken] = useState(() => localStorage.getItem("printease_order_access_token") || "");
   const demoPaymentEnabled = import.meta.env.VITE_DEMO_PAYMENT_ENABLED === "true";
 
   const [centres, setCentres] = useState(initialCentres);
@@ -1210,13 +1211,6 @@ export default function App() {
       return;
     }
 
-    if (!currentUser) {
-      setPaymentError("Please login before payment.");
-      setPostAuthRedirect("upload");
-      startLogin("user");
-      return;
-    }
-
     setPaymentLoading(true);
     setPaymentError("");
     setBackendPrice(null);
@@ -1325,6 +1319,13 @@ export default function App() {
       const nextOrder = normalizeOrder(orderData.order, centres);
       setOrder(nextOrder);
       setBackendPrice(orderData.price || null);
+      if (orderData.orderAccessToken) {
+        setOrderAccessToken(orderData.orderAccessToken);
+        localStorage.setItem("printease_order_access_token", orderData.orderAccessToken);
+      } else {
+        setOrderAccessToken("");
+        localStorage.removeItem("printease_order_access_token");
+      }
       setDocumentFile(null);
       setDocumentFiles([]);
       navigate("payment");
@@ -1349,7 +1350,8 @@ export default function App() {
       try {
         const paymentData = await apiRequest("/api/payments/manual-request", {
           method: "POST",
-          body: JSON.stringify({ orderId: order.backendId }),
+          headers: orderAccessToken ? { "x-order-access-token": orderAccessToken } : {},
+          body: JSON.stringify({ orderId: order.backendId, orderAccessToken: orderAccessToken || undefined }),
         });
         const requestedOrder = normalizeOrder(paymentData.order || order, centres);
         setOrder(requestedOrder);
@@ -1381,12 +1383,14 @@ export default function App() {
       if (paymentMethod === "upi_qr") {
         paymentData = await apiRequest("/api/payments/razorpay/upi-qr", {
           method: "POST",
-          body: JSON.stringify({ orderId: order.backendId }),
+          headers: orderAccessToken ? { "x-order-access-token": orderAccessToken } : {},
+          body: JSON.stringify({ orderId: order.backendId, orderAccessToken: orderAccessToken || undefined }),
         });
       } else {
         paymentData = await apiRequest("/api/payments/razorpay/order", {
           method: "POST",
-          body: JSON.stringify({ orderId: order.backendId }),
+          headers: orderAccessToken ? { "x-order-access-token": orderAccessToken } : {},
+          body: JSON.stringify({ orderId: order.backendId, orderAccessToken: orderAccessToken || undefined }),
         });
       }
 
@@ -1418,11 +1422,13 @@ export default function App() {
 
               const verifiedData = await apiRequest("/api/payments/razorpay/verify", {
                 method: "POST",
+                headers: orderAccessToken ? { "x-order-access-token": orderAccessToken } : {},
                 body: JSON.stringify({
                   paymentId: paymentData.payment.id,
                   razorpay_order_id: response.razorpay_order_id,
                   razorpay_payment_id: response.razorpay_payment_id,
                   razorpay_signature: response.razorpay_signature,
+                  orderAccessToken: orderAccessToken || undefined,
                 }),
               });
 
@@ -1555,7 +1561,8 @@ export default function App() {
     try {
       const paymentData = await apiRequest("/api/payments/razorpay/order", {
         method: "POST",
-        body: JSON.stringify({ orderId: existingOrder.backendId }),
+        headers: orderAccessToken ? { "x-order-access-token": orderAccessToken } : {},
+        body: JSON.stringify({ orderId: existingOrder.backendId, orderAccessToken: orderAccessToken || undefined }),
       });
 
       setPendingPayment(paymentData.payment || null);
@@ -1582,11 +1589,13 @@ export default function App() {
             setPaymentError("");
             const verifiedData = await apiRequest("/api/payments/razorpay/verify", {
               method: "POST",
+              headers: orderAccessToken ? { "x-order-access-token": orderAccessToken } : {},
               body: JSON.stringify({
                 paymentId: paymentData.payment.id,
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_signature: response.razorpay_signature,
+                orderAccessToken: orderAccessToken || undefined,
               }),
             });
 
@@ -1629,7 +1638,8 @@ export default function App() {
     try {
       const paymentData = await apiRequest("/api/payments/razorpay/upi-qr", {
         method: "POST",
-        body: JSON.stringify({ orderId: existingOrder.backendId }),
+        headers: orderAccessToken ? { "x-order-access-token": orderAccessToken } : {},
+        body: JSON.stringify({ orderId: existingOrder.backendId, orderAccessToken: orderAccessToken || undefined }),
       });
 
       setPendingPayment(paymentData.payment || null);

@@ -69,6 +69,42 @@ function getOrderPrintableSummary(order) {
   ].join(" • ");
 }
 
+function getPageRangeFromOptions(options, fallback = "all") {
+  const pages = options?.pages || {};
+  if (pages.mode === "custom") return pages.range || fallback || "custom";
+  return fallback || "all";
+}
+
+function getSidesLabel(options, fallback = "") {
+  const sides = options?.sides || fallback;
+  if (sides === "two_sided_long_edge" || sides === "double") return "Double-sided";
+  if (sides === "two_sided_short_edge") return "Double-sided short edge";
+  return "Single-sided";
+}
+
+function getWatermarkLabel(options) {
+  const watermark = options?.watermark || {};
+  if (!watermark.enabled) return "No";
+  return watermark.type ? `Yes • ${label(watermark.type)}` : "Yes";
+}
+
+function buildDocumentSettings(document, orderConfig) {
+  const options = document?.print_options || {};
+  return [
+    ["Paper", options.paperSize || orderConfig.paper_size || "A4"],
+    ["Color", label(options.colorMode || orderConfig.color_mode || "black_white")],
+    ["Sides", getSidesLabel(options, orderConfig.sides)],
+    ["Orientation", label(options.orientation || orderConfig.orientation || "auto")],
+    ["Copies", options.copies || document?.copies || orderConfig.copies || 1],
+    ["Page range", getPageRangeFromOptions(options, document?.page_range || orderConfig.page_range || "all")],
+    ["Pages/sheet", options.pagesPerSheet || orderConfig.pages_per_sheet || 1],
+    ["DPI", options.quality?.dpi || orderConfig.quality_dpi || 300],
+    ["Scaling", label(options.scale?.mode || orderConfig.scaling || "original")],
+    ["Margins", label(options.margins?.mode || orderConfig.margins || "default")],
+    ["Watermark", getWatermarkLabel(options.watermark ? options : { watermark: orderConfig.watermark })],
+  ];
+}
+
 function SummaryCard({ title, value, icon }) {
   return (
     <div className="rounded-2xl border bg-white p-4 shadow-sm">
@@ -261,6 +297,14 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
                     >
                       <Download size={15} /> View / Download
                     </button>
+                  </div>
+                  <div className="mt-4 border-t pt-4">
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Settings used for this document</p>
+                    <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-3">
+                      {buildDocumentSettings(document, config).map(([settingLabel, value]) => (
+                        <DetailLine key={`${document.id || document.document_id || index}-${settingLabel}`} label={settingLabel} value={value} />
+                      ))}
+                    </div>
                   </div>
                 </div>
               ))}

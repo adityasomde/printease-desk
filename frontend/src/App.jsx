@@ -1,22 +1,23 @@
-import { Component, useEffect, useMemo, useRef, useState } from "react";
+import { Component, useEffect, useMemo, useRef, useState, Suspense, lazy } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import Navbar from "./components/Navbar";
 import BackendStatus from "./components/BackendStatus";
 import HomePage from "./pages/HomePage";
 import AuthPage from "./pages/AuthPage";
-import UserDashboard from "./pages/UserDashboard";
 import HubDashboard from "./pages/HubDashboard";
-import ProfilePage from "./pages/ProfilePage";
-import HubPricingPage from "./pages/HubPricingPage";
 import HubPrinterAgentPage from "./pages/HubPrinterAgentPage";
-import ApproveAgentPage from "./pages/ApproveAgentPage";
 import DesktopAgentPage from "./pages/DesktopAgentPage";
-import CentreCodePage from "./pages/CentreCodePage";
-import UploadPage from "./pages/UploadPage";
-import PaymentPage from "./pages/PaymentPage";
-import TrackPage from "./pages/TrackPage";
-import HistoryPage from "./pages/HistoryPage";
-import PlatformStatsPage from "./pages/PlatformStatsPage";
+
+const UserDashboard = lazy(() => import("./pages/UserDashboard"));
+const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+const HubPricingPage = lazy(() => import("./pages/HubPricingPage"));
+const ApproveAgentPage = lazy(() => import("./pages/ApproveAgentPage"));
+const CentreCodePage = lazy(() => import("./pages/CentreCodePage"));
+const UploadPage = lazy(() => import("./pages/UploadPage"));
+const PaymentPage = lazy(() => import("./pages/PaymentPage"));
+const TrackPage = lazy(() => import("./pages/TrackPage"));
+const HistoryPage = lazy(() => import("./pages/HistoryPage"));
+const PlatformStatsPage = lazy(() => import("./pages/PlatformStatsPage"));
 import { initialCentres, initialOrders } from "./data/demoData";
 import { calculateTotalAmount, countSelectedPages, getPricePerPage } from "./utils/price";
 import { clearStoredAuth, getStoredAuth, isDesktop, onPrintersUpdated, saveStoredAuth } from "./utils/desktopBridge";
@@ -1826,8 +1827,9 @@ export default function App() {
         <BackendStatus />
 
         <RouteErrorBoundary>
-          <Routes>
-            <Route
+          <Suspense fallback={<div className="p-8 text-center font-semibold text-slate-500">Loading page...</div>}>
+            <Routes>
+              <Route
               path={ROUTES.home}
               element={
                 <HomePage
@@ -1982,7 +1984,8 @@ export default function App() {
             <Route path={ROUTES.orderHistory} element={<Navigate to={ROUTES.history} replace />} />
             <Route path={ROUTES.usageHistory} element={<Navigate to={ROUTES.history} replace />} />
             <Route path="*" element={<Navigate to={ROUTES.home} replace />} />
-          </Routes>
+            </Routes>
+          </Suspense>
         </RouteErrorBoundary>
       </main>
     </div>

@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
-import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import electron from "electron";
 import { diagnoseWindowsPrintHelper } from "./printer/windowsPrinter.js";
 import { diagnosePrinters, listPrinters, stopPrinting, testPrint } from "./printer/printExecutor.js";
 import { confirmPairing, sendHeartbeat, startPairing } from "./agent/heartbeat.js";
@@ -15,8 +15,7 @@ import { checkForUpdates, getUpdateStatus, initializeUpdater, installUpdateNow }
 import { secureHandle } from "./security/ipcSecurity.js";
 import { isSafeApprovalUrl } from "./security/urlValidator.js";
 
-const require = createRequire(import.meta.url);
-const { app, BrowserWindow, dialog, ipcMain, net, protocol, safeStorage, session, shell } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, net, protocol, safeStorage, session, shell } = electron;
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -1669,17 +1668,19 @@ app.whenReady().then(async () => {
   runStartupStep("ensure-device-identity", () => ensureDeviceIdentity()).then(() => emitAgentSession());
   runStartupStep("restore-stored-agent", () => restoreStoredDesktopAgent()).then((restoredAgent) => {
     if (restoredAgent?.restored) {
-      startAgentRuntime("startup-stored-agent").catch((error) => {
-        agentSession.lastJobPollError = error.message || "Could not start background desktop agent.";
-        writeStartupLog("startup-stored-agent:failed", { error: serializeStartupError(error) });
-        emitAgentSession();
-        console.warn("[DESKTOP AGENT BACKGROUND] startup failed", agentSession.lastJobPollError);
-      });
+      // Delay starting agent background services by 7 seconds to let startup load lightly.
+      setTimeout(() => {
+        startAgentRuntime("startup-stored-agent").catch((error) => {
+          agentSession.lastJobPollError = error.message || "Could not start background desktop agent.";
+          writeStartupLog("startup-stored-agent:failed", { error: serializeStartupError(error) });
+          emitAgentSession();
+          console.warn("[DESKTOP AGENT BACKGROUND] startup failed", agentSession.lastJobPollError);
+        });
+      }, 7000);
     }
   });
   runStartupStep("migrate-file-local-storage-auth", () => migrateFileLocalStorageAuth());
   runStartupStep("initialize-updater", () => initializeUpdater({ mainWindow }));
-  setTimeout(() => runStartupStep("startup-printer-diagnostics", () => reportStartupPrinterDiagnostics()), 1000);
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {

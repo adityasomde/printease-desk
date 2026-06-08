@@ -4,11 +4,28 @@ const asar = require("@electron/asar");
 
 const root = path.resolve(process.cwd(), "release");
 
+const targetPlatform = process.env.PE_TARGET_PLATFORM || (process.platform === "win32" ? "win32" : "linux");
+console.log(`Verifying package files for target platform: ${targetPlatform}`);
+
 const forbiddenNames = [
   "backend",
   "frontend/src",
-  ".env"
+  ".env",
+  ".git"
 ];
+
+function isForbiddenPath(filePath) {
+  const normalized = filePath.replaceAll("\\", "/").toLowerCase();
+  for (const bad of forbiddenNames) {
+    const badLower = bad.toLowerCase();
+    if (normalized === badLower || normalized.startsWith(`${badLower}/`) || normalized.includes(`/${badLower}/`) || normalized.endsWith(`/${badLower}`)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+const forbiddenExtensions = [".md", ".markdown"];
 
 const forbiddenText = [
   "DATABASE_URL",
@@ -71,23 +88,71 @@ function readAppFile(suffix) {
   return "";
 }
 
-for (const file of files) {
-  const normalized = file.replaceAll("\\", "/");
+// 1. Verify files inside app.asar
+for (const asarFile of appAsarFiles) {
+  const normalized = asarFile.toLowerCase();
 
-  for (const bad of forbiddenNames) {
-    if (normalized.includes(`/${bad}`) || normalized.endsWith(`/${bad}`)) {
-      console.error(`Forbidden path found: ${normalized}`);
+  if (targetPlatform === "win32") {
+    if (normalized.includes("printer/linux") || normalized.includes("linuxcups")) {
+      console.error(`Forbidden Linux printer file inside app.asar: ${asarFile}`);
+      failed = true;
+    }
+  }
+  if (targetPlatform === "linux") {
+    if (normalized.includes("printer/windows") || normalized.includes("windowsprinter") || normalized.includes("sumatrapdf")) {
+      console.error(`Forbidden Windows printer/binary file inside app.asar: ${asarFile}`);
       failed = true;
     }
   }
 
+  if (isForbiddenPath(asarFile)) {
+    console.error(`Forbidden name matched in app.asar: ${asarFile}`);
+    failed = true;
+  }
+
+  for (const ext of forbiddenExtensions) {
+    if (normalized.endsWith(ext)) {
+      console.error(`Forbidden file extension "${ext}" in app.asar: ${asarFile}`);
+      failed = true;
+    }
+  }
+}
+
+// 2. Verify loose files in release folder
+for (const file of files) {
+  const normalized = file.replaceAll("\\", "/").toLowerCase();
+
+  if (targetPlatform === "win32") {
+    if (normalized.includes("printer/linux") || normalized.includes("linuxcups")) {
+      console.error(`Forbidden Linux printer file found: ${file}`);
+      failed = true;
+    }
+  }
+  if (targetPlatform === "linux") {
+    if (normalized.includes("printer/windows") || normalized.includes("windowsprinter") || normalized.includes("sumatrapdf")) {
+      console.error(`Forbidden Windows printer/binary file found: ${file}`);
+      failed = true;
+    }
+  }
+
+  if (isForbiddenPath(file)) {
+    console.error(`Forbidden path found: ${file}`);
+    failed = true;
+  }
+
   if (fs.existsSync(file) && fs.statSync(file).isFile()) {
     const ext = path.extname(file).toLowerCase();
-    if ([".js", ".json", ".html", ".css", ".yml", ".yaml", ".txt", ".md"].includes(ext)) {
+
+    if (forbiddenExtensions.includes(ext)) {
+      console.error(`Forbidden file extension "${ext}" found: ${file}`);
+      failed = true;
+    }
+
+    if ([".js", ".json", ".html", ".css", ".yml", ".yaml", ".txt"].includes(ext)) {
       const text = fs.readFileSync(file, "utf8");
       for (const secret of forbiddenText) {
         if (text.includes(secret)) {
-          console.error(`Forbidden secret marker "${secret}" found in ${normalized}`);
+          console.error(`Forbidden secret marker "${secret}" found in ${file}`);
           failed = true;
         }
       }

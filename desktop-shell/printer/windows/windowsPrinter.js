@@ -14,7 +14,9 @@ const DEFAULT_TIMEOUT_MS = 30000;
 const WINDOWS_HELPER_MISSING_MESSAGE = "Windows PDF print helper is missing. Reinstall PrintEase Desktop or contact support.";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const DESKTOP_SHELL_ROOT = path.resolve(__dirname, "..");
+// Note: windowsPrinter.js has been moved to printer/windows/windowsPrinter.js, 
+// so the root of desktop-shell is now "../../" instead of ".."
+const DESKTOP_SHELL_ROOT = path.resolve(__dirname, "..", "..");
 
 function isWin() {
   return process.platform === "win32";

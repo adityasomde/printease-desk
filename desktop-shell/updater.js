@@ -139,9 +139,12 @@ export function initializeUpdater({ mainWindow: window, isPrintingActive: printi
 
   registerUpdaterEvents();
 
-  checkForUpdates().catch((error) => {
-    sendUpdateStatus({ status: "error", message: serializeError(error) });
-  });
+  // Delay the initial update check to prevent startup bandwidth spam.
+  setTimeout(() => {
+    checkForUpdates().catch((error) => {
+      sendUpdateStatus({ status: "error", message: serializeError(error) });
+    });
+  }, 20000);
 
   if (!updateCheckTimer) {
     updateCheckTimer = setInterval(() => {

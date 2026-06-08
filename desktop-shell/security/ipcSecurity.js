@@ -1,19 +1,42 @@
-import { ipcMain } from "electron";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import electron from "electron";
 import path from "node:path";
+
+const { ipcMain, app } = electron;
 
 function isAllowedRendererUrl(senderUrl, isPackaged) {
   if (!senderUrl) return false;
   
-  if (isPackaged) {
-    if (senderUrl.startsWith("app://")) return true;
-    
-    // Fallback for file:// if custom protocol isn't used
-    if (senderUrl.startsWith("file://")) {
+  if (senderUrl.startsWith("app://")) return true;
+
+  const packaged = isPackaged !== undefined ? isPackaged : app?.isPackaged;
+
+  // Packaged and local built-mode frontends can both be loaded from file://.
+  // Keep the check narrow so arbitrary local files cannot invoke privileged IPC.
+  if (senderUrl.startsWith("file://")) {
+    const normalizedSender = decodeURIComponent(senderUrl)
+      .replace("file:///", "/")
+      .replace("file://", "")
+      .replaceAll("\\", "/");
+
+    if (packaged) {
+      // In packaged mode, file:// should be resolved from process.resourcesPath
+      const prodRoot = path.resolve(process.resourcesPath, "frontend-dist").replaceAll("\\", "/");
+      return normalizedSender.startsWith(`${prodRoot}/`);
+    } else {
+      // In unpackaged/development mode, resolve relative to process.cwd()
       const frontendDistPath = path.resolve(process.cwd(), "frontend-dist").replaceAll("\\", "/");
-      const normalizedSender = senderUrl.replace("file:///", "").replace("file://", "").replaceAll("\\", "/");
-      return normalizedSender.includes("frontend-dist/");
+      const desktopFrontendDistPath = path.resolve(process.cwd(), "..", "frontend-dist").replaceAll("\\", "/");
+      const frontendBuildPath = path.resolve(process.cwd(), "..", "frontend", "dist").replaceAll("\\", "/");
+
+      return [
+        frontendDistPath,
+        desktopFrontendDistPath,
+        frontendBuildPath
+      ].some((allowedPath) => normalizedSender.startsWith(`${allowedPath}/`));
     }
+  }
+
+  if (packaged) {
     return false;
   }
   
@@ -24,12 +47,14 @@ function isAllowedRendererUrl(senderUrl, isPackaged) {
 export function validateIpcSender(event, isPackaged) {
   const senderFrame = event.senderFrame;
   if (!senderFrame) return false;
-  return isAllowedRendererUrl(senderFrame.url, isPackaged);
+  const packaged = isPackaged !== undefined ? isPackaged : app?.isPackaged;
+  return isAllowedRendererUrl(senderFrame.url, packaged);
 }
 
 export function secureHandle(channel, handler, isPackaged) {
   ipcMain.handle(channel, async (event, ...args) => {
-    if (!validateIpcSender(event, isPackaged)) {
+    const packaged = isPackaged !== undefined ? isPackaged : app?.isPackaged;
+    if (!validateIpcSender(event, packaged)) {
       console.error(`[IPC SECURITY BLOCK] Unauthorized IPC access attempt to channel "${channel}" from URL: ${event.senderFrame?.url || 'unknown'}`);
       throw new Error("Unauthorized IPC access");
     }

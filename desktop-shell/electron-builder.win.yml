@@ -1,0 +1,47 @@
+appId: com.printease.desktop
+productName: PrintEase Desktop
+directories:
+  output: release
+files:
+  - main.js
+  - preload.cjs
+  - package.json
+  - agent/**/*
+  - config/**/*
+  - ipc/**/*
+  - printer/**/*
+  - local/**/*
+  - updater.js
+  - scripts/**/*
+  - "!printer/linux/**/*"
+  - "!**/*.md"
+  - "!**/docs/**/*"
+  - "!**/tests/**/*"
+  - "!**/.git/**/*"
+  - "!**/frontend/src/**/*"
+extraResources:
+  - from: "../frontend-dist"
+    to: "frontend-dist"
+    filter:
+      - "**/*"
+      - "!**/*.md"
+  - from: "vendor/win/SumatraPDF.exe"
+    to: "vendor/win/SumatraPDF.exe"
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: "PrintEase-Desktop-Setup-${version}.${ext}"
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: "PrintEase Desktop"
+  deleteAppDataOnUninstall: false
+publish:
+  - provider: github
+    owner: adityasomde
+    repo: printease-desk

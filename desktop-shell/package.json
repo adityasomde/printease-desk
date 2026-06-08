@@ -15,17 +15,18 @@
     "package.json"
   ],
   "scripts": {
-    "dev": "electron .",
-    "start": "electron .",
+    "dev": "node scripts/run-electron-app.cjs",
+    "start": "node scripts/run-electron-app.cjs",
     "pack": "npm_config_loglevel=error electron-builder --dir",
     "dist": "npm_config_loglevel=error electron-builder",
-    "dist:win": "electron-builder --win nsis --publish never",
+    "dist:win": "cross-env PE_TARGET_PLATFORM=win32 electron-builder --config electron-builder.win.yml --win nsis --publish never",
     "verify:package": "node scripts/verify-package-files.cjs",
-    "dist:linux": "npm_config_loglevel=error electron-builder --linux AppImage deb --publish never && node scripts/create-linux-blockmaps.cjs",
-    "dist:appimage": "npm_config_loglevel=error electron-builder --linux AppImage --publish never && node scripts/create-linux-blockmaps.cjs"
+    "dist:linux": "cross-env PE_TARGET_PLATFORM=linux npm_config_loglevel=error electron-builder --config electron-builder.linux.yml --linux AppImage deb --publish never && node scripts/create-linux-blockmaps.cjs",
+    "dist:appimage": "cross-env PE_TARGET_PLATFORM=linux npm_config_loglevel=error electron-builder --config electron-builder.linux.yml --linux AppImage --publish never && node scripts/create-linux-blockmaps.cjs"
   },
   "devDependencies": {
-    "electron": "^42.3.3",
+    "cross-env": "^10.1.0",
+    "electron": "33.0.0",
     "electron-builder": "^26.8.1",
     "tmp": "^0.2.7"
   },
@@ -34,7 +35,7 @@
   },
   "productName": "PrintEase Desktop",
   "description": "PrintEase Desktop app and local printer agent",
-  "homepage": "https://github.com/Chaitanyavmundhe/printease-desk",
+  "homepage": "https://github.com/adityasomde/printease-desk",
   "build": {
     "appId": "com.printease.desktop",
     "productName": "PrintEase Desktop",

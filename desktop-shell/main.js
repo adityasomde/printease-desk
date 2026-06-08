@@ -12,6 +12,8 @@ import { syncPrinters } from "./agent/statusReporter.js";
 import { getApiBaseUrl, getBackendUrl } from "./config/backend.js";
 import { loadConfig, saveConfig, setConfigDirectory } from "./local/config.js";
 import { checkForUpdates, getUpdateStatus, initializeUpdater, installUpdateNow } from "./updater.js";
+import { secureHandle } from "./security/ipcSecurity.js";
+import { isSafeApprovalUrl } from "./security/urlValidator.js";
 
 const require = createRequire(import.meta.url);
 const { app, BrowserWindow, dialog, ipcMain, net, protocol, safeStorage, session, shell } = require("electron");
@@ -1327,7 +1329,7 @@ function registerIpcHandlers() {
   if (ipcHandlersRegistered) return;
   ipcHandlersRegistered = true;
 
-  ipcMain.handle("desktop:status", async () => {
+  secureHandle("desktop:status", async () => {
     const printerResult = latestPrinterResult || await refreshLocalPrinterResult("desktop:status");
 
     return {
@@ -1339,10 +1341,10 @@ function registerIpcHandlers() {
       version: VERSION,
       printerResult,
     };
-  });
+  }, app.isPackaged);
 
-  ipcMain.handle("backend:health", () => checkBackendHealth());
-  ipcMain.handle("desktop:open-external-url", async (_event, url) => {
+  secureHandle("backend:health", () => checkBackendHealth(), app.isPackaged);
+  secureHandle("desktop:open-external-url", async (_event, url) => {
     if (!url || typeof url !== "string") {
       return { success: false, message: "URL is required." };
     }
@@ -1358,8 +1360,8 @@ function registerIpcHandlers() {
     } catch (error) {
       return { success: false, message: error?.message || "Could not open link." };
     }
-  });
-  ipcMain.handle("desktop:download-url", async (_event, payload = {}) => {
+  }, app.isPackaged);
+  secureHandle("desktop:download-url", async (_event, payload = {}) => {
     const url = typeof payload === "string" ? payload : payload.url;
 
     if (!url || typeof url !== "string") {
@@ -1381,8 +1383,8 @@ function registerIpcHandlers() {
     } catch (error) {
       return { success: false, message: error?.message || "Could not start download." };
     }
-  });
-  ipcMain.handle("desktop:print-html", async (_event, payload = {}) => {
+  }, app.isPackaged);
+  secureHandle("desktop:print-html", async (_event, payload = {}) => {
     const html = typeof payload.html === "string" ? payload.html : "";
     const title = typeof payload.title === "string" ? payload.title.slice(0, 120) : "PrintEase";
 
@@ -1419,26 +1421,26 @@ function registerIpcHandlers() {
         printWindow.close();
       }
     }
-  });
-  ipcMain.handle("printers:list", () => refreshLocalPrinterResult("printers:list"));
-  ipcMain.handle("printers:select", selectDesktopPrinter);
-  ipcMain.handle("printers:diagnose", async () => {
+  }, app.isPackaged);
+  secureHandle("printers:list", () => refreshLocalPrinterResult("printers:list"), app.isPackaged);
+  secureHandle("printers:select", selectDesktopPrinter, app.isPackaged);
+  secureHandle("printers:diagnose", async () => {
     const result = await diagnosePrinters();
     console.log("[DESKTOP PRINTER DIAGNOSTICS]", JSON.stringify(result, null, 2));
     await reportPrinterDiagnostic("printers:diagnose", result);
     return result;
-  });
+  }, app.isPackaged);
 
-  ipcMain.handle("printers:test-print", (_event, payload = {}) => {
+  secureHandle("printers:test-print", (_event, payload = {}) => {
     const printerName = (typeof payload === "string" ? payload : payload?.printerName) || agentSession.selectedPrinterName;
     return testPrint(printerName);
-  });
+  }, app.isPackaged);
 
-  ipcMain.handle("printing:stop", () => stopPrinting());
-  ipcMain.handle("printer:diagnoseWindowsHelper", () => diagnoseWindowsPrintHelper());
-  ipcMain.handle("agent:status", () => sanitizeAgentSession());
-  ipcMain.handle("agent:start-pairing", startAgentPairing);
-  ipcMain.handle("agent:open-approval-url", async (_event, url) => {
+  secureHandle("printing:stop", () => stopPrinting(), app.isPackaged);
+  secureHandle("printer:diagnoseWindowsHelper", () => diagnoseWindowsPrintHelper(), app.isPackaged);
+  secureHandle("agent:status", () => sanitizeAgentSession(), app.isPackaged);
+  secureHandle("agent:start-pairing", startAgentPairing, app.isPackaged);
+  secureHandle("agent:open-approval-url", async (_event, url) => {
     if (!url || typeof url !== "string") {
       return { success: false, message: "Approval URL is required." };
     }
@@ -1460,34 +1462,34 @@ function registerIpcHandlers() {
     } catch (error) {
       return { success: false, message: error?.message || "Could not open approval URL." };
     }
-  });
-  ipcMain.handle("agent:confirm-pairing", confirmAgentPairing);
-  ipcMain.handle("agent:heartbeat", async () => {
+  }, app.isPackaged);
+  secureHandle("agent:confirm-pairing", confirmAgentPairing, app.isPackaged);
+  secureHandle("agent:heartbeat", async () => {
     const result = await sendAgentHeartbeat();
     if (result.success) startHeartbeatLoop();
     return result;
-  });
-  ipcMain.handle("agent:sync-printers", syncAgentPrinters);
-  ipcMain.handle("agent:poll-once", pollAgentOnce);
-  ipcMain.handle("agent:start-polling", startAgentPolling);
-  ipcMain.handle("agent:stop-polling", stopAgentPolling);
-  ipcMain.handle("updater:check", () => checkForUpdates());
-  ipcMain.handle("updater:status", () => getUpdateStatus());
-  ipcMain.handle("updater:install", () => installUpdateNow());
-  ipcMain.handle("desktopAuth:get", () => getStoredDesktopAuth());
-  ipcMain.handle("desktopAuth:set", setStoredDesktopAuth);
-  ipcMain.handle("desktopAuth:clear", () => clearStoredDesktopAuth());
-  ipcMain.handle("desktopAgent:get", () => getStoredDesktopAgent());
-  ipcMain.handle("desktopAgent:set", setStoredDesktopAgent);
-  ipcMain.handle("desktopAgent:clear", () => clearStoredDesktopAgent());
-  ipcMain.handle("desktopAgent:device-identity", async () => {
+  }, app.isPackaged);
+  secureHandle("agent:sync-printers", syncAgentPrinters, app.isPackaged);
+  secureHandle("agent:poll-once", pollAgentOnce, app.isPackaged);
+  secureHandle("agent:start-polling", startAgentPolling, app.isPackaged);
+  secureHandle("agent:stop-polling", stopAgentPolling, app.isPackaged);
+  secureHandle("updater:check", () => checkForUpdates(), app.isPackaged);
+  secureHandle("updater:status", () => getUpdateStatus(), app.isPackaged);
+  secureHandle("updater:install", () => installUpdateNow(), app.isPackaged);
+  secureHandle("desktopAuth:get", () => getStoredDesktopAuth(), app.isPackaged);
+  secureHandle("desktopAuth:set", setStoredDesktopAuth, app.isPackaged);
+  secureHandle("desktopAuth:clear", () => clearStoredDesktopAuth(), app.isPackaged);
+  secureHandle("desktopAgent:get", () => getStoredDesktopAgent(), app.isPackaged);
+  secureHandle("desktopAgent:set", setStoredDesktopAgent, app.isPackaged);
+  secureHandle("desktopAgent:clear", () => clearStoredDesktopAgent(), app.isPackaged);
+  secureHandle("desktopAgent:device-identity", async () => {
     await ensureDeviceIdentity();
     return {
       success: true,
       deviceId: agentSession.deviceId,
       deviceName: agentSession.deviceName,
     };
-  });
+  }, app.isPackaged);
 }
 
 function isAllowedNavigation(url) {
@@ -1642,6 +1644,22 @@ function createMainWindow() {
 
 app.whenReady().then(async () => {
   writeStartupLog("app-ready");
+  
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        "Content-Security-Policy": [
+          "default-src 'self' app: file:; " +
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
+          "style-src 'self' 'unsafe-inline'; " +
+          "img-src 'self' data: blob: https:; " +
+          "connect-src 'self' https: wss:; " +
+          "font-src 'self' data:;"
+        ]
+      }
+    });
+  });
   await runStartupStep("clear-cache", () => session.defaultSession.clearCache());
   await runStartupStep("register-desktop-protocol", () => registerDesktopProtocol());
   await runStartupStep("set-config-directory", () => setConfigDirectory(app.getPath("userData")));

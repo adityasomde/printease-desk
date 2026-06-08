@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const asar = require("@electron/asar");
 
 const root = path.resolve(process.cwd(), "release");
 
@@ -15,9 +16,12 @@ const forbiddenText = [
   "AGENT_TOKEN_SECRET"
 ];
 
-const requiredFiles = [
+const requiredAppFiles = [
   "main.js",
-  "preload.cjs",
+  "preload.cjs"
+];
+
+const requiredResourceFiles = [
   "frontend-dist/index.html"
 ];
 
@@ -39,6 +43,33 @@ function walk(dir, files = []) {
 
 const files = walk(root);
 let failed = false;
+const appAsarPath = files.find(f => f.replaceAll("\\", "/").endsWith("/resources/app.asar"));
+const appAsarFiles = appAsarPath
+  ? asar.listPackage(appAsarPath).map(file => file.replace(/^\/+/, ""))
+  : [];
+
+function hasLooseFile(suffix) {
+  return files.some(f => f.replaceAll("\\", "/").endsWith(suffix));
+}
+
+function hasAppFile(suffix) {
+  return appAsarFiles.some(f => f === suffix || f.endsWith(`/${suffix}`)) || hasLooseFile(suffix);
+}
+
+function readAppFile(suffix) {
+  const loosePath = files.find(f => {
+    const normalized = f.replaceAll("\\", "/");
+    return normalized.endsWith(`/resources/app/${suffix}`) || normalized.endsWith(`/resources/app.asar.unpacked/${suffix}`);
+  }) || files.find(f => f.replaceAll("\\", "/").endsWith(suffix));
+  if (loosePath) return fs.readFileSync(loosePath, "utf8");
+
+  if (appAsarPath) {
+    const asarEntry = appAsarFiles.find(f => f === suffix) || appAsarFiles.find(f => f.endsWith(`/${suffix}`));
+    if (asarEntry) return asar.extractFile(appAsarPath, asarEntry).toString("utf8");
+  }
+
+  return "";
+}
 
 for (const file of files) {
   const normalized = file.replaceAll("\\", "/");
@@ -64,17 +95,22 @@ for (const file of files) {
   }
 }
 
-for (const required of requiredFiles) {
-  const isFound = files.some(f => f.replaceAll("\\", "/").endsWith(required));
-  if (!isFound && !required.includes("frontend-dist")) {
+for (const required of requiredAppFiles) {
+  if (!hasAppFile(required)) {
     console.error(`Required file missing: ${required}`);
     failed = true;
   }
 }
 
-const mainPath = files.find(f => f.replaceAll("\\", "/").endsWith("main.js"));
-if (mainPath) {
-  const mainCode = fs.readFileSync(mainPath, "utf8");
+for (const required of requiredResourceFiles) {
+  if (!hasLooseFile(required)) {
+    console.error(`Required resource missing: ${required}`);
+    failed = true;
+  }
+}
+
+const mainCode = readAppFile("main.js");
+if (mainCode) {
   if (!mainCode.includes("sandbox: true")) {
     console.error(`sandbox: true not found in main.js. Please enable it for security.`);
     failed = true;

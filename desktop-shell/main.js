@@ -159,6 +159,34 @@ function getDesktopAppUrl() {
   return `${DESKTOP_PROTOCOL_ORIGIN}/index.html`;
 }
 
+function getFrontendBundleDiagnostics() {
+  const indexPath = getProductionIndexPath();
+  const frontendRoot = path.dirname(indexPath);
+  const assetsPath = path.join(frontendRoot, "assets");
+  let assetSample = [];
+
+  try {
+    if (fs.existsSync(assetsPath)) {
+      assetSample = fs.readdirSync(assetsPath).slice(0, 12);
+    }
+  } catch (error) {
+    assetSample = [`Could not read assets: ${error.message || error}`];
+  }
+
+  return {
+    isPackaged: app.isPackaged,
+    appPath: app.getAppPath(),
+    resourcesPath: process.resourcesPath,
+    indexPath,
+    indexExists: fs.existsSync(indexPath),
+    frontendRoot,
+    assetsPath,
+    assetsExists: fs.existsSync(assetsPath),
+    assetSample,
+    protocolUrl: getDesktopAppUrl(),
+  };
+}
+
 function isPathInside(parentPath, childPath) {
   const relative = path.relative(parentPath, childPath);
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
@@ -254,6 +282,9 @@ function getDevServerErrorHtml() {
 
 async function loadFrontend(window) {
   const localIndex = getProductionIndexPath();
+  const bundleDiagnostics = getFrontendBundleDiagnostics();
+  console.log("[DESKTOP FRONTEND BUNDLE]", bundleDiagnostics);
+  writeStartupLog("frontend-bundle", bundleDiagnostics);
 
   if (app.isPackaged) {
     try {
@@ -1563,6 +1594,28 @@ function createMainWindow() {
     writeStartupLog("render-process-gone", details || {});
     console.error("[DESKTOP RENDER PROCESS GONE]", details);
   });
+  mainWindow.webContents.on("did-start-loading", () => {
+    writeStartupLog("did-start-loading", {
+      url: mainWindow?.webContents.getURL(),
+    });
+    console.log("[DESKTOP LOAD START]", mainWindow?.webContents.getURL());
+  });
+  mainWindow.webContents.on("dom-ready", () => {
+    writeStartupLog("dom-ready", {
+      url: mainWindow?.webContents.getURL(),
+    });
+    console.log("[DESKTOP DOM READY]", mainWindow?.webContents.getURL());
+
+    if (process.env.PE_DEBUG_RENDERER === "1") {
+      mainWindow?.webContents.openDevTools({ mode: "detach" });
+    }
+  });
+  mainWindow.webContents.on("did-stop-loading", () => {
+    writeStartupLog("did-stop-loading", {
+      url: mainWindow?.webContents.getURL(),
+    });
+    console.log("[DESKTOP LOAD STOP]", mainWindow?.webContents.getURL());
+  });
   mainWindow.webContents.on("unresponsive", () => {
     writeStartupLog("renderer-unresponsive");
     console.warn("[DESKTOP RENDERER UNRESPONSIVE]");
@@ -1571,10 +1624,16 @@ function createMainWindow() {
     writeStartupLog("main-window-closed");
     mainWindow = null;
   });
-  mainWindow.webContents.on("console-message", (_event, _level, message) => {
-    if (String(message).startsWith("[DESKTOP PRELOAD]")) {
-      console.log(message);
-    }
+  mainWindow.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+    const payload = {
+      level,
+      message: String(message),
+      line,
+      sourceId,
+    };
+    writeStartupLog("renderer-console-message", payload);
+    const prefix = level >= 2 ? "[DESKTOP RENDERER CONSOLE ERROR]" : "[DESKTOP RENDERER CONSOLE]";
+    console.log(prefix, payload);
   });
   mainWindow.webContents.on("will-navigate", (event, url) => {
     if (!isAllowedNavigation(url)) {
@@ -1662,11 +1721,11 @@ app.whenReady().then(async () => {
         ...details.responseHeaders,
         "Content-Security-Policy": [
           "default-src 'self' app: file:; " +
-          "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
-          "style-src 'self' 'unsafe-inline'; " +
-          "img-src 'self' data: blob: https:; " +
-          "connect-src 'self' https: wss:; " +
-          "font-src 'self' data:;"
+          "script-src 'self' app: file: 'unsafe-inline' 'unsafe-eval'; " +
+          "style-src 'self' app: file: 'unsafe-inline'; " +
+          "img-src 'self' app: file: data: blob: https:; " +
+          "connect-src 'self' app: file: https: wss:; " +
+          "font-src 'self' app: file: data:;"
         ]
       }
     });

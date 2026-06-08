@@ -8,6 +8,7 @@ files:
   - package.json
   - agent/**/*
   - config/**/*
+  - security/**/*
   - ipc/**/*
   - printer/**/*
   - local/**/*

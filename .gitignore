@@ -159,3 +159,11 @@ backend/
 # Local helper scripts with machine-specific paths
 sync-frontend-from-mvp.sh
 local-*.sh
+
+# Certificates, Keys, and local release checks
+*.pem
+*.pfx
+*.p12
+*.key
+*.crt
+desktop-shell/release-checks/

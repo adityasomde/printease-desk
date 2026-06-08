@@ -8,7 +8,9 @@ function normalizeApiBaseUrl(url) {
 const configuredApiUrl = normalizeApiBaseUrl(import.meta.env.VITE_API_URL);
 let API_BASE_URL = PRODUCTION_API_BASE_URL;
 
-if (configuredApiUrl && configuredApiUrl !== PRODUCTION_API_BASE_URL) {
+if (import.meta.env.DEV) {
+  API_BASE_URL = "http://localhost:3000";
+} else if (configuredApiUrl && configuredApiUrl !== PRODUCTION_API_BASE_URL) {
   console.warn(
     `[API CONFIG] Ignoring untrusted backend URL "${configuredApiUrl}". ` +
       "PrintEase frontend is pinned to the official Render backend."

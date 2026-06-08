@@ -22,6 +22,7 @@ import { calculateTotalAmount, countSelectedPages, getPricePerPage } from "./uti
 import { clearStoredAuth, getStoredAuth, isDesktop, onPrintersUpdated, saveStoredAuth } from "./utils/desktopBridge";
 import { apiRequest } from "./services/api";
 import { loadRazorpayCheckout } from "./utils/razorpay";
+import { saveOrderToLocalHistory } from "./utils/localHistory";
 import {
   clearSupabaseUrlSession,
   getSupabaseUser,
@@ -1319,6 +1320,9 @@ export default function App() {
       const nextOrder = normalizeOrder(orderData.order, centres);
       setOrder(nextOrder);
       setBackendPrice(orderData.price || null);
+      
+      saveOrderToLocalHistory(nextOrder, defaultPrintOptions, orderData.price, uploadedDocuments);
+
       if (orderData.orderAccessToken) {
         setOrderAccessToken(orderData.orderAccessToken);
         localStorage.setItem("printease_order_access_token", orderData.orderAccessToken);
@@ -1330,7 +1334,17 @@ export default function App() {
       setDocumentFiles([]);
       navigate("payment");
     } catch (error) {
-      setPaymentError(error.message || "Could not upload document and calculate final price.");
+      if (error.status === 403 && error.details?.code === 'LOGIN_REQUIRED_FOR_MORE_THAN_5_PAGES') {
+        const confirmLogin = window.confirm("You can only print up to 5 pages as a guest. Please log in to print larger documents.");
+        if (confirmLogin) {
+          setPostAuthRedirect("upload");
+          navigate("auth");
+        } else {
+          setPaymentError(error.message);
+        }
+      } else {
+        setPaymentError(error.message || "Could not upload document and calculate final price.");
+      }
     } finally {
       setPaymentLoading(false);
     }

@@ -3,6 +3,7 @@ import { Calendar, ChevronDown, Download, FileText, Filter, IndianRupee, Printer
 import Card from "../components/Card";
 import StatusBadge from "../components/StatusBadge";
 import { createDocumentSignedDownload, getUserHistory } from "../services/api";
+import { getLocalHistory } from "../utils/localHistory";
 
 function formatDateTime(value) {
   if (!value) return "-";
@@ -134,7 +135,7 @@ function EmptyState({ currentUser }) {
       <p className="mx-auto mt-2 max-w-md text-sm text-slate-600">
         {currentUser
           ? "Your completed and pending print orders will appear here after you upload documents and create an order."
-          : "Guest users cannot view history. Login to see your previous print orders, payments, and settings."}
+          : "You haven't made any print orders yet. Orders you place as a guest will appear here temporarily."}
       </p>
     </Card>
   );
@@ -182,6 +183,45 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
   }, [currentUser, lastUpdatedAt]);
 
   const historyOrders = Array.isArray(historyData?.orders) ? historyData.orders : [];
+  const localOrders = getLocalHistory().map((order) => ({
+    id: order.id,
+    order_code: order.orderCode || order.id,
+    created_at: order.createdAt,
+    status: order.status,
+    payment_status: order.paymentStatus,
+    payment_method: order.paymentMethod || "Unknown",
+    amount: order.amount,
+    pages: order.printConfigSnapshot?.printablePages || 1,
+    copies: order.printConfigSnapshot?.copies || 1,
+    hub: { name: "Local Centre", id: order.centreId },
+    document: {
+      file_name: order.documentName || "Uploaded Document",
+      file_type: "application/pdf",
+      original_pages: 1,
+      page_range: "all",
+      printable_pages: order.printConfigSnapshot?.printablePages || 1,
+      copies: order.printConfigSnapshot?.copies || 1,
+      charged_pages: 1,
+    },
+    documents: order.files || [],
+    print_config: {
+      paper_size: order.printConfigSnapshot?.paperSize || "A4",
+      color_mode: order.printConfigSnapshot?.colorMode || "black_white",
+      sides: order.printConfigSnapshot?.sides === "two_sided_long_edge" || order.printConfigSnapshot?.sides === "double" ? "Double-sided" : "Single-sided",
+      orientation: order.printConfigSnapshot?.orientation || "auto",
+      copies: order.printConfigSnapshot?.copies || 1,
+      page_range: order.printConfigSnapshot?.pages?.mode === "custom" ? order.printConfigSnapshot.pages.range : "all",
+      scaling: order.printConfigSnapshot?.scale?.mode || "original",
+      pages_per_sheet: order.printConfigSnapshot?.pagesPerSheet || 1,
+      margins: order.printConfigSnapshot?.margins?.mode || "default",
+      quality_dpi: order.printConfigSnapshot?.quality?.dpi || 300,
+      watermark: order.printConfigSnapshot?.watermark || { enabled: false },
+    },
+    payment: { status: order.paymentStatus, method: "Unknown", amount: order.amount },
+    timeline: [{ label: "Order created locally", time: order.createdAt }],
+    isLocal: true,
+  }));
+
   const fallbackOrders = currentUser?.role === "user" && !historyData
     ? orders.map((order) => ({
         id: order.backendId || order.id,
@@ -209,7 +249,8 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
         timeline: [{ label: "Order created", time: order.createdAt || order.date }],
       }))
     : [];
-  const visibleSource = historyOrders.length || historyData ? historyOrders : fallbackOrders;
+
+  const visibleSource = historyOrders.length || historyData ? historyOrders : [...fallbackOrders, ...localOrders];
 
   const summary = historyData?.summary || {
     total_orders: visibleSource.length,
@@ -386,7 +427,7 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
     );
   }
 
-  if (!currentUser || currentUser.role !== "user") {
+  if ((!currentUser || currentUser.role !== "user") && visibleSource.length === 0) {
     return <EmptyState currentUser={null} />;
   }
 

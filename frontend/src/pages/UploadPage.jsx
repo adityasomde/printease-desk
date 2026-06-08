@@ -697,6 +697,11 @@ export default function UploadPage({
             </div>
           )}
 
+          <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
+            <p className="font-semibold">Privacy Notice</p>
+            <p className="mt-1">Uploaded files and order details are stored securely online for 15 days, after which they are permanently deleted from our servers.</p>
+          </div>
+
           <div className="flex gap-2 md:block">
             {!selectedCentre && (
               <button onClick={() => navigate("centre", { state: { autoStartScanner: true, fromUpload: true } })} className="flex-1 rounded-2xl border bg-white px-2 py-3 text-sm font-semibold hover:bg-slate-50 md:mt-6 md:w-full md:px-4 md:text-base">

@@ -60,11 +60,8 @@ export default function PaymentPage({
   const upiQrUrl = selectedCentre?.upiQrImageUrl || "";
 
   const handlePaymentClick = () => {
-    if (!currentUser && paymentMethod === "manual" && selectedPageCount > 5) {
-      startLogin("user");
-      return;
-    }
-    if (!currentUser && paymentMethod !== "manual") {
+    const printablePages = backendPrice?.printablePageCount || (selectedPageCount * (copies || 1));
+    if (!currentUser && printablePages > 5) {
       startLogin("user");
       return;
     }

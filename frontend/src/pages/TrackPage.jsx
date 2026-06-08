@@ -71,6 +71,9 @@ export default function TrackPage({
         <Row label="Order ID" value={order.id} />
         <Row label="Centre" value={order.centre} />
         <Row label="Document" value={order.document} />
+        <Row label="Copies" value={order.copies || order.printConfigSnapshot?.copies || 1} />
+        <Row label="Color" value={String(order.printConfigSnapshot?.colorMode || order.colorType).toLowerCase() === 'color' ? 'Color' : 'Black & White'} />
+        <Row label="Sides" value={String(order.printConfigSnapshot?.sides || order.sideType).toLowerCase().includes('double') || String(order.printConfigSnapshot?.sides || order.sideType).toLowerCase().includes('two') ? 'Double-sided' : 'Single-sided'} />
         <Row label={paymentPending ? "Amount Due" : "Amount Paid"} value={"₹" + order.amount} />
         <Row label="Payment" value={order.paymentStatus || "Pending"} />
         <Row label="Pickup Code" value={order.pickupCode} />

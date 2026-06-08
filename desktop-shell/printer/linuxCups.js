@@ -319,13 +319,50 @@ export async function printFile({ printerName, filePath, copies = 1, options = {
   const safeCopies = Math.max(1, Math.min(Number(optionCopies || copies) || 1, 99));
 
   try {
-    const { stdout, stderr } = await runCommand("lp", [
+    const args = [
       "-d",
       validation.printer.printerName,
       "-n",
       String(safeCopies),
-      filePath,
-    ]);
+    ];
+
+    const pages = options.pages?.range || options.selectedPages || options.printOptions?.pages?.range;
+    if (pages && String(pages).toLowerCase() !== "all") {
+      args.push("-P", String(pages));
+    }
+
+    const colorMode = options.colorMode || options.printOptions?.colorMode;
+    if (colorMode === "color") {
+      args.push("-o", "ColorModel=Color");
+    } else if (colorMode === "bw" || colorMode === "black_white" || colorMode === "monochrome") {
+      args.push("-o", "ColorModel=Gray");
+    }
+
+    const sides = options.sides || options.printOptions?.sides;
+    if (sides === "two_sided_long_edge") {
+      args.push("-o", "sides=two-sided-long-edge");
+    } else if (sides === "two_sided_short_edge") {
+      args.push("-o", "sides=two-sided-short-edge");
+    } else if (sides === "one_sided" || sides === "single") {
+      args.push("-o", "sides=one-sided");
+    }
+
+    const paperSize = options.paperSize || options.printOptions?.paperSize;
+    if (paperSize) {
+      args.push("-o", `media=${paperSize}`);
+    }
+
+    const orientation = options.orientation || options.printOptions?.orientation;
+    if (orientation === "landscape") {
+      args.push("-o", "landscape");
+    } else if (orientation === "portrait") {
+      args.push("-o", "portrait");
+    }
+
+    args.push("-o", "fit-to-page");
+    args.push(filePath);
+
+    const { stdout, stderr } = await runCommand("lp", args);
 
     return {
       success: true,

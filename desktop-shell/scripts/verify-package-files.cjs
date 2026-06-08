@@ -64,10 +64,6 @@ for (const file of files) {
   }
 }
 
-}
-
-let mainJsFound = false;
-
 for (const required of requiredFiles) {
   const isFound = files.some(f => f.replaceAll("\\", "/").endsWith(required));
   if (!isFound && !required.includes("frontend-dist")) {

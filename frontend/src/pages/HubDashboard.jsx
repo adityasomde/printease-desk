@@ -4,7 +4,7 @@ import Card from "../components/Card";
 import Metric from "../components/Metric";
 import StatusBadge from "../components/StatusBadge";
 import { hubStatusOptions } from "../data/demoData";
-import { apiRequest, collectCashPayment, createDocumentSignedDownload, getHubAgentSummary, getOrderDocuments, pairAgent, sendOrderToAgent } from "../services/api";
+import { apiRequest, collectManualPayment, createDocumentSignedDownload, getHubAgentSummary, getOrderDocuments, pairAgent, sendOrderToAgent } from "../services/api";
 
 function normalizeStatus(status) {
   return String(status || "").toLowerCase().replace(/\s+/g, "_");
@@ -333,7 +333,7 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
     setPairingMessage("");
 
     try {
-      const data = await collectCashPayment(orderId, { autoPrintAfterCollection });
+      const data = await collectManualPayment(orderId, { autoPrintAfterCollection, method: "cash" });
       setPairingMessage(data.message || "Payment collected.");
       await Promise.all([refreshAgentStatus(), refreshOrders?.()]);
     } catch (error) {

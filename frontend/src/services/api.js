@@ -215,14 +215,7 @@ export function listHubPrintJobs() {
   return apiRequest("/api/hub-agents/print-jobs");
 }
 
-export function collectCashPayment(orderId, options = {}) {
-  return apiRequest(`/api/orders/${orderId}/collect-payment`, {
-    method: "POST",
-    body: JSON.stringify({
-      autoPrintAfterCollection: options.autoPrintAfterCollection !== false,
-    }),
-  });
-}
+
 
 export function createManualPaymentRequest(printOrderId) {
   return apiRequest("/api/payments/manual-request", {
@@ -231,10 +224,10 @@ export function createManualPaymentRequest(printOrderId) {
   });
 }
 
-export function collectManualPayment(orderId, method = "cash", transactionNote = "") {
+export function collectManualPayment(orderId, { method = "cash", transactionNote = "", autoPrintAfterCollection = true } = {}) {
   return apiRequest(`/api/orders/${orderId}/collect-payment`, {
     method: "POST",
-    body: JSON.stringify({ method, transactionNote }),
+    body: JSON.stringify({ method, transactionNote, autoPrintAfterCollection }),
   });
 }
 

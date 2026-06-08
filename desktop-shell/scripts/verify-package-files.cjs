@@ -45,7 +45,7 @@ const files = walk(root);
 let failed = false;
 const appAsarPath = files.find(f => f.replaceAll("\\", "/").endsWith("/resources/app.asar"));
 const appAsarFiles = appAsarPath
-  ? asar.listPackage(appAsarPath).map(file => file.replace(/^\/+/, ""))
+  ? asar.listPackage(appAsarPath).map(file => file.replaceAll("\\", "/").replace(/^\/+/, ""))
   : [];
 
 function hasLooseFile(suffix) {

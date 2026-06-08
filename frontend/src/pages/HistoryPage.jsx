@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Calendar, ChevronDown, Download, Eye, FileText, Filter, IndianRupee, Printer, RefreshCw, Search, Store, X, Info } from "lucide-react";
+import { Calendar, CheckCircle2, ChevronDown, Download, Eye, FileText, Filter, IndianRupee, MapPin, Printer, RefreshCw, Search, Settings2, Store, X, Info } from "lucide-react";
 import Card from "../components/Card";
 import StatusBadge from "../components/StatusBadge";
 import { createDocumentSignedDownload, getUserHistory } from "../services/api";
@@ -120,10 +120,22 @@ function SummaryCard({ title, value, icon }) {
 
 function DetailLine({ label: itemLabel, value }) {
   return (
-    <div className="rounded-xl bg-slate-50 px-3 py-2">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{itemLabel}</p>
-      <p className="mt-1 text-sm font-semibold text-slate-800">{value || "-"}</p>
+    <div className="rounded-xl border border-slate-100 bg-white px-3 py-2.5">
+      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{itemLabel}</p>
+      <p className="mt-1 text-sm font-semibold leading-snug text-slate-800">{value ?? "-"}</p>
     </div>
+  );
+}
+
+function DetailPanel({ title, icon, children }) {
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="mb-3 flex items-center gap-2">
+        <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-950 text-white">{icon}</span>
+        <h4 className="text-sm font-extrabold text-slate-950">{title}</h4>
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -322,128 +334,162 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
   function renderOrderDetails(order) {
     const config = order.print_config || {};
     const documents = order.documents?.length ? order.documents : [order.document].filter(Boolean);
+    const paymentStatus = order.payment?.status || order.payment_status;
+    const paymentMethodLabel = label(order.payment?.method || order.payment_method || "Not recorded");
+    const createdAt = formatDateTime(order.created_at);
 
     return (
-      <div className="grid gap-4 border-t bg-slate-50/50 p-3 lg:grid-cols-[1.1fr_1fr]">
-        <section className="space-y-4">
-          <div>
-            <h4 className="text-sm font-bold text-slate-900">Document Details</h4>
-            <div className="mt-2 grid gap-3">
-              {documents.map((document, index) => (
-                <div key={document.id || document.document_id || `${order.id}-${index}`} className="rounded-xl border bg-white p-3">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <p className="font-semibold text-sm">{document.file_name || "Document"}</p>
-                      <p className="mt-1 text-[11px] text-slate-500">
-                        {document.file_type || "PDF"} • Original {document.original_pages || "-"} pages • Range {document.page_range || "all"}
-                      </p>
-                      <p className="mt-0.5 text-[11px] text-slate-500">
-                        Printable {document.printable_pages || "-"} • Copies {document.copies || 1} • Charged pages {document.charged_pages || "-"}
-                      </p>
+      <div className="border-t bg-slate-50 p-3 sm:p-4">
+        <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Order sheet</p>
+              <h4 className="mt-1 text-xl font-extrabold text-slate-950">{order.order_code || order.id}</h4>
+              <p className="mt-1 text-sm text-slate-500">Created {createdAt}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <StatusBadge color={printStatusColor(order.status)}>{label(order.status) || "Order"}</StatusBadge>
+              <StatusBadge color={paymentColor(paymentStatus)}>{label(paymentStatus) || "Payment"}</StatusBadge>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <DetailLine label="Documents" value={`${documents.length || 1} file${documents.length === 1 ? "" : "s"}`} />
+            <DetailLine label="Printable pages" value={order.pages || order.document?.printable_pages || "-"} />
+            <DetailLine label="Copies" value={order.copies || config.copies || 1} />
+            <DetailLine label="Total paid/requested" value={`₹${order.payment?.amount ?? order.amount ?? 0}`} />
+          </div>
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.85fr)]">
+          <div className="space-y-4">
+            <DetailPanel title="Documents And Print Settings" icon={<FileText size={17} />}>
+              <div className="space-y-3">
+                {documents.map((document, index) => {
+                  const documentKey = document.id || document.document_id || `${order.id}-${index}`;
+                  const settings = buildDocumentSettings(document, config);
+                  return (
+                    <article key={documentKey} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                        <div className="min-w-0">
+                          <div className="flex items-start gap-3">
+                            <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-slate-700 shadow-sm">
+                              <FileText size={17} />
+                            </span>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-extrabold text-slate-950">{document.file_name || `Document ${index + 1}`}</p>
+                              <p className="mt-1 text-xs font-semibold text-slate-500">
+                                {document.file_type || "PDF"} · {document.original_pages || "-"} original pages · Range {document.page_range || "all"}
+                              </p>
+                              <p className="mt-1 text-xs text-slate-500">
+                                Printable {document.printable_pages || "-"} · Copies {document.copies || 1} · Charged {document.charged_pages || document.printable_pages || "-"}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex shrink-0 flex-wrap gap-2">
+                          <button
+                            type="button"
+                            disabled={!document.document_id}
+                            onClick={() => downloadDocument(document, "view")}
+                            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-400"
+                          >
+                            <Eye size={15} /> View
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!document.document_id}
+                            onClick={() => downloadDocument(document, "download")}
+                            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-400"
+                          >
+                            <Download size={15} /> Download
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-4">
+                        {settings.map(([settingLabel, value]) => (
+                          <DetailLine key={`${documentKey}-${settingLabel}`} label={settingLabel} value={value} />
+                        ))}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </DetailPanel>
+
+            <DetailPanel title="Order Progress" icon={<CheckCircle2 size={17} />}>
+              <div className="space-y-3">
+                {(order.timeline || []).map((item, index) => (
+                  <div key={`${item.label}-${item.time}-${index}`} className="grid grid-cols-[24px_minmax(0,1fr)] gap-3">
+                    <div className="flex flex-col items-center">
+                      <span className="mt-1 h-3 w-3 rounded-full bg-slate-950" />
+                      {index < (order.timeline || []).length - 1 && <span className="mt-1 h-full min-h-8 w-px bg-slate-200" />}
                     </div>
-                    <div className="flex flex-wrap items-center gap-2 mt-3 sm:mt-0">
-                      <button
-                        type="button"
-                        disabled={!document.document_id}
-                        onClick={() => downloadDocument(document, "view")}
-                        className="inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
-                      >
-                        <Eye size={15} /> View
-                      </button>
-                      <button
-                        type="button"
-                        disabled={!document.document_id}
-                        onClick={() => downloadDocument(document, "download")}
-                        className="inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
-                      >
-                        <Download size={15} /> Download
-                      </button>
+                    <div className="rounded-xl bg-slate-50 px-3 py-2">
+                      <p className="text-sm font-bold text-slate-900">{item.label}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">{formatDateTime(item.time)}</p>
                     </div>
                   </div>
-                  <div className="mt-3 border-t pt-3">
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Settings used</p>
-                    <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-3">
-                      {buildDocumentSettings(document, config).map(([settingLabel, value]) => (
-                        <DetailLine key={`${document.id || document.document_id || index}-${settingLabel}`} label={settingLabel} value={value} />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+                {!order.timeline?.length && <p className="rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-500">Timeline is not available for this order yet.</p>}
+              </div>
+            </DetailPanel>
           </div>
 
-          <div>
-            <h4 className="text-sm font-bold text-slate-900">Status Timeline</h4>
-            <div className="mt-2 space-y-2">
-              {(order.timeline || []).map((item, index) => (
-                <div key={`${item.label}-${item.time}-${index}`} className="flex gap-3">
-                  <span className="mt-1 h-3 w-3 rounded-full bg-slate-900" />
-                  <div>
-                    <p className="text-xs font-semibold text-slate-800">{item.label}</p>
-                    <p className="text-[11px] text-slate-500">{formatDateTime(item.time)}</p>
-                  </div>
-                </div>
-              ))}
-              {!order.timeline?.length && <p className="text-sm text-slate-500">Timeline is not available for this order yet.</p>}
-            </div>
-          </div>
-        </section>
+          <aside className="space-y-4">
+            <DetailPanel title="Payment" icon={<IndianRupee size={17} />}>
+              <div className="grid grid-cols-2 gap-2">
+                <DetailLine label="Method" value={paymentMethodLabel} />
+                <DetailLine label="Status" value={label(paymentStatus)} />
+                <DetailLine label="Amount" value={`₹${order.payment?.amount ?? order.amount ?? 0}`} />
+                <DetailLine label="Paid at" value={formatDateTime(order.payment?.paid_at)} />
+              </div>
+              <div className="mt-2">
+                <DetailLine label="Transaction reference" value={order.payment?.transaction_id || "Not recorded"} />
+              </div>
+            </DetailPanel>
 
-        <section className="space-y-4">
-          <div>
-            <h4 className="text-sm font-bold text-slate-900">Print Settings Used</h4>
-            <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 lg:grid-cols-3">
-              <DetailLine label="Paper" value={config.paper_size || "A4"} />
-              <DetailLine label="Color" value={label(config.color_mode || "black_white")} />
-              <DetailLine label="Sides" value={config.sides || (config.duplex ? "Double-sided" : "Single-sided")} />
-              <DetailLine label="Orientation" value={label(config.orientation || "auto")} />
-              <DetailLine label="Copies" value={config.copies || order.copies || 1} />
-              <DetailLine label="Page range" value={config.page_range || order.document?.page_range || "all"} />
-              <DetailLine label="Scaling" value={label(config.scaling || "original")} />
-              <DetailLine label="DPI" value={config.quality_dpi || 300} />
-            </div>
-          </div>
+            <DetailPanel title="Print Centre" icon={<MapPin size={17} />}>
+              <div className="grid grid-cols-2 gap-2">
+                <DetailLine label="Shop" value={order.hub?.name || "Print Hub"} />
+                <DetailLine label="Centre code" value={order.hub?.code || "-"} />
+                <DetailLine label="Printer" value={order.print_job?.printer_name || "Not recorded"} />
+                <DetailLine label="Agent" value={order.print_job?.agent_id || "Not recorded"} />
+              </div>
+            </DetailPanel>
 
-          <div>
-            <h4 className="text-sm font-bold text-slate-900">Payment</h4>
-            <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 lg:grid-cols-3">
-              <DetailLine label="Method" value={order.payment?.method || order.payment_method} />
-              <DetailLine label="Status" value={order.payment?.status || order.payment_status} />
-              <DetailLine label="Amount" value={`₹${order.payment?.amount ?? order.amount ?? 0}`} />
-              <DetailLine label="Paid at" value={formatDateTime(order.payment?.paid_at)} />
-              <DetailLine label="Transaction" value={order.payment?.transaction_id || "Not available"} />
-            </div>
-          </div>
+            <DetailPanel title="Order Defaults" icon={<Settings2 size={17} />}>
+              <div className="grid grid-cols-2 gap-2">
+                <DetailLine label="Paper" value={config.paper_size || "A4"} />
+                <DetailLine label="Color" value={label(config.color_mode || "black_white")} />
+                <DetailLine label="Sides" value={config.sides || (config.duplex ? "Double-sided" : "Single-sided")} />
+                <DetailLine label="Orientation" value={label(config.orientation || "auto")} />
+                <DetailLine label="Page range" value={config.page_range || order.document?.page_range || "all"} />
+                <DetailLine label="DPI" value={config.quality_dpi || 300} />
+              </div>
+            </DetailPanel>
 
-          <div>
-            <h4 className="text-sm font-bold text-slate-900">Hub / Shop</h4>
-            <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 lg:grid-cols-3">
-              <DetailLine label="Hub" value={order.hub?.name} />
-              <DetailLine label="Code" value={order.hub?.code} />
-              <DetailLine label="Printer" value={order.print_job?.printer_name || "Not recorded"} />
-              <DetailLine label="Agent" value={order.print_job?.agent_id || "Not recorded"} />
+            <div className="grid gap-2">
+              <button
+                type="button"
+                onClick={() => onReprintOrder?.(order)}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-sm font-bold text-white shadow-sm hover:bg-slate-800"
+              >
+                <RefreshCw size={16} /> Reprint with these settings
+              </button>
+              <button
+                type="button"
+                disabled
+                className="inline-flex cursor-not-allowed items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-400"
+                title="Receipt PDF generation is not available yet."
+              >
+                <Download size={16} /> Receipt coming later
+              </button>
             </div>
-          </div>
-
-          <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={() => onReprintOrder?.(order)}
-              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-            >
-              <RefreshCw size={15} /> Reprint same settings
-            </button>
-            <button
-              type="button"
-              disabled
-              className="inline-flex cursor-not-allowed items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold text-slate-400"
-              title="Receipt PDF generation is not available yet."
-            >
-              <Download size={15} /> Download receipt
-            </button>
-          </div>
-        </section>
+          </aside>
+        </div>
       </div>
     );
   }

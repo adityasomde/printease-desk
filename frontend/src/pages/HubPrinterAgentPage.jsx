@@ -34,6 +34,12 @@ function shortId(value) {
   return String(value).slice(0, 8);
 }
 
+function label(value) {
+  return String(value || "-")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 function formatDateTime(value) {
   if (!value) return "Not seen yet";
   const date = new Date(value);
@@ -252,7 +258,7 @@ export default function HubPrinterAgentPage({ navigate }) {
                       <h4 className="font-bold">{agentLabel(agent)}</h4>
                       <p className="mt-1 text-xs text-slate-500">ID {shortId(agent.id)} · {agent.platform || "unknown"} · v{agent.version || "N/A"}</p>
                     </div>
-                    <StatusBadge>{agent.liveStatus || agent.status}</StatusBadge>
+                    <StatusBadge>{label(agent.liveStatus || agent.status)}</StatusBadge>
                   </div>
                   <div className="mt-4 grid gap-2 text-sm text-slate-600 sm:grid-cols-2">
                     <p>Last seen: {formatDateTime(agent.lastSeenAt)}</p>
@@ -319,7 +325,7 @@ export default function HubPrinterAgentPage({ navigate }) {
                     <h4 className="font-bold">{printer.displayName || printer.printerName}</h4>
                     <p className="mt-1 text-sm text-slate-600">{printer.rawStatus || printer.status || "unknown"}</p>
                   </div>
-                  <StatusBadge>{printer.isDefault ? "default" : printer.status || "local"}</StatusBadge>
+                  <StatusBadge>{label(printer.isDefault ? "default" : printer.status || "local")}</StatusBadge>
                 </div>
               </div>
             ))}
@@ -345,7 +351,7 @@ export default function HubPrinterAgentPage({ navigate }) {
                       <h4 className="font-bold">{printer.printerName}</h4>
                       <p className="mt-1 text-sm text-slate-600">{agentLabel(agent)} · {printer.systemPrinterId || "system printer"}</p>
                     </div>
-                    <StatusBadge>{printer.condition || printer.status || "unknown"}</StatusBadge>
+                    <StatusBadge>{label(printer.condition || printer.status || "unknown")}</StatusBadge>
                   </div>
                   <div className="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-2">
                     <p>{printer.isDefault ? "Default printer" : "Not default"}</p>
@@ -393,7 +399,7 @@ export default function HubPrinterAgentPage({ navigate }) {
                     <tr key={job.id} className="border-b">
                       <td className="py-3 font-semibold">{shortId(job.id)}</td>
                       <td>{shortId(job.orderId)}</td>
-                      <td><StatusBadge>{job.status}</StatusBadge></td>
+                      <td><StatusBadge>{label(job.status)}</StatusBadge></td>
                       <td>{job.printerName || "Unassigned"}</td>
                       <td>{agentLabel(agent)}</td>
                       <td className="max-w-[220px] text-rose-700">{job.failureReasonText || "-"}</td>

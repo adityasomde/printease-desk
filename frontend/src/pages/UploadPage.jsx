@@ -697,10 +697,6 @@ export default function UploadPage({
             </div>
           )}
 
-          <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
-            <p className="font-semibold">Privacy Notice</p>
-            <p className="mt-1">Uploaded files and order details are stored securely online for 15 days, after which they are permanently deleted from our servers.</p>
-          </div>
 
           <div className="flex gap-2 md:block">
             {!selectedCentre && (

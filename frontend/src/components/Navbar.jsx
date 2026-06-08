@@ -70,7 +70,7 @@ export default function Navbar({
             <NavButton active={page === "home"} icon={<Home size={16} />} onClick={() => navigate("home")}>Home</NavButton>
             <NavButton active={page === "centre"} icon={<QrCode size={16} />} onClick={() => navigate("centre")}>Centre Code</NavButton>
             {currentUser?.role === "user" && (
-              <NavButton active={page === "history"} icon={<History size={16} />} onClick={() => navigate("history")}>My Prints</NavButton>
+              <NavButton active={page === "history"} icon={<History size={16} />} onClick={() => navigate("history")}>Print History</NavButton>
             )}
             {currentUser?.role === "user" && (
               <NavButton active={page === "userDashboard"} icon={<User size={16} />} onClick={() => navigate("userDashboard")}>User Dashboard</NavButton>
@@ -120,7 +120,7 @@ export default function Navbar({
                     )}
                     <MenuItem icon={<User size={16} />} onClick={openProfile}>Profile</MenuItem>
                     {desktopAvailable && <MenuItem icon={<Printer size={16} />} onClick={() => navigate("desktopAgent")}>Desktop Agent</MenuItem>}
-                    {currentUser.role === "user" && <MenuItem icon={<History size={16} />} onClick={() => navigate("history")}>My Prints</MenuItem>}
+                    {currentUser.role === "user" && <MenuItem icon={<History size={16} />} onClick={() => navigate("history")}>Print History</MenuItem>}
                     <MenuItem icon={<LogOut size={16} />} onClick={logout}>Logout</MenuItem>
                   </>
                 )}
@@ -136,12 +136,24 @@ export default function Navbar({
           <MobileNavButton label="Scan" active={page === "centre"} icon={<QrCode size={18} />} onClick={() => navigate("centre")} />
           <MobileNavButton label="Upload" active={page === "upload"} icon={<Upload size={18} />} onClick={() => navigate("upload")} />
           <MobileNavButton
-            label={currentUser?.role === "hub" ? "Hub" : currentUser ? "Prints" : "Login"}
+            label={currentUser?.role === "hub" ? "Hub" : currentUser ? "History" : "Login"}
             active={page === "hubDashboard" || page === "userDashboard" || page === "history"}
             icon={currentUser?.role === "hub" ? <Building2 size={18} /> : <History size={18} />}
             onClick={() => navigate(currentUser?.role === "hub" ? "hubDashboard" : currentUser ? "history" : "auth")}
           />
-          <MobileNavButton label="Profile" active={profileOpen} icon={<User size={18} />} onClick={() => setProfileOpen(!profileOpen)} />
+          <MobileNavButton
+            label="Profile"
+            active={page === "profile" || profileOpen}
+            icon={<User size={18} />}
+            onClick={() => {
+              if (currentUser) {
+                openProfile();
+                setProfileOpen(false);
+              } else {
+                setProfileOpen(!profileOpen);
+              }
+            }}
+          />
         </div>
       </nav>
     </>

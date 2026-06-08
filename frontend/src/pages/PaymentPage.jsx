@@ -131,7 +131,13 @@ export default function PaymentPage({
               <button
                 key={option.id}
                 type="button"
-                onClick={() => setPaymentMethod?.(option.id)}
+                onClick={() => {
+                  if (!currentUser && option.id !== "manual") {
+                    startLogin("user");
+                  } else {
+                    setPaymentMethod?.(option.id);
+                  }
+                }}
                 className={`rounded-2xl border p-4 text-left transition ${
                   active ? "border-slate-900 bg-slate-900 text-white shadow-lg" : "bg-white hover:border-slate-400 hover:shadow-sm"
                 }`}

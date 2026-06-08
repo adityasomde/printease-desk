@@ -10,6 +10,12 @@ function normalizeStatus(status) {
   return String(status || "").toLowerCase().replace(/\s+/g, "_");
 }
 
+function label(value) {
+  return String(value || "-")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 function displayStatus(status) {
   const normalized = normalizeStatus(status);
   const labels = {
@@ -669,7 +675,7 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
             <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
               <p>
                 Primary device: <b>{primaryAgent?.agentName || primaryAgent?.deviceId || "Not paired"}</b>{" "}
-                <StatusBadge>{agentStatus}</StatusBadge>
+                <StatusBadge>{label(agentStatus)}</StatusBadge>
               </p>
               <p className="mt-2">Default printer: <b>{defaultPrinter?.printerName || "Not selected"}</b></p>
               <p className="mt-2">Last seen: {formatDateTime(primaryAgent?.lastSeenAt)}</p>
@@ -801,7 +807,7 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
                     <td className="px-2 py-4 whitespace-nowrap font-medium">{item.pages} × {item.copies}</td>
                     <td className="px-2 py-4 whitespace-nowrap font-semibold">₹{item.amount}</td>
                     <td className="w-24 max-w-[6rem] px-2 py-4">
-                      <StatusBadge color="green">{item.paymentStatus}</StatusBadge>
+                      <StatusBadge color="green">{label(item.paymentStatus)}</StatusBadge>
                       {cancelledBeforePayment && (
                         <p className="mt-1 text-xs font-semibold text-rose-600">Cancelled before payment.</p>
                       )}
@@ -853,7 +859,7 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
                     </td>
                     <td className="px-2 py-4">
                       <div className="flex flex-col gap-2">
-                        {job && <StatusBadge>{displayStatus(job.status)}</StatusBadge>}
+                        {job && <StatusBadge>{label(displayStatus(job.status))}</StatusBadge>}
                         {job && normalizeStatus(job.status) !== "failed" && <p className="text-xs text-slate-500">{displayStatus(job.status)} in desktop queue</p>}
                         {job?.failureReasonText && <p className="text-xs font-semibold text-rose-600">{job.failureReasonText}</p>}
                         {cancelledBeforePayment && (

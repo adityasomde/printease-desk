@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Calendar, ChevronDown, Download, FileText, Filter, IndianRupee, Printer, RefreshCw, Search, Store, X } from "lucide-react";
+import { Calendar, ChevronDown, Download, Eye, FileText, Filter, IndianRupee, Printer, RefreshCw, Search, Store, X, Info } from "lucide-react";
 import Card from "../components/Card";
 import StatusBadge from "../components/StatusBadge";
 import { createDocumentSignedDownload, getUserHistory } from "../services/api";
@@ -155,6 +155,7 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
   const [paymentMethod, setPaymentMethod] = useState("all");
   const [hubFilter, setHubFilter] = useState("all");
   const [downloadError, setDownloadError] = useState("");
+  const [documentPreview, setDocumentPreview] = useState(null);
 
   useEffect(() => {
     if (!currentUser || currentUser.role !== "user") {
@@ -288,12 +289,22 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
     });
   }, [dateFrom, dateTo, hubFilter, paymentMethod, search, status, visibleSource]);
 
-  async function downloadDocument(document) {
+  async function downloadDocument(document, mode = "download") {
     if (!document?.document_id) return;
     setDownloadError("");
     try {
       const data = await createDocumentSignedDownload(document.document_id);
-      if (data.signedUrl) window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+      if (!data.signedUrl) throw new Error("Signed document link was not returned.");
+      
+      if (mode === "view") {
+        setDocumentPreview({
+          url: data.signedUrl,
+          name: document.file_name || "Document preview",
+        });
+        return;
+      }
+      
+      window.open(data.signedUrl, "_blank", "noopener,noreferrer");
     } catch (err) {
       setDownloadError(err.message || "Could not create signed download link.");
     }
@@ -313,35 +324,45 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
     const documents = order.documents?.length ? order.documents : [order.document].filter(Boolean);
 
     return (
-      <div className="grid gap-5 border-t bg-slate-50/70 p-4 lg:grid-cols-[1.1fr_1fr]">
+      <div className="grid gap-4 border-t bg-slate-50/50 p-3 lg:grid-cols-[1.1fr_1fr]">
         <section className="space-y-4">
           <div>
-            <h4 className="font-bold text-slate-950">Document Details</h4>
-            <div className="mt-3 grid gap-3">
+            <h4 className="text-sm font-bold text-slate-900">Document Details</h4>
+            <div className="mt-2 grid gap-3">
               {documents.map((document, index) => (
-                <div key={document.id || document.document_id || `${order.id}-${index}`} className="rounded-2xl border bg-white p-4">
+                <div key={document.id || document.document_id || `${order.id}-${index}`} className="rounded-xl border bg-white p-3">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
-                      <p className="font-semibold">{document.file_name || "Document"}</p>
-                      <p className="mt-1 text-xs text-slate-500">
+                      <p className="font-semibold text-sm">{document.file_name || "Document"}</p>
+                      <p className="mt-1 text-[11px] text-slate-500">
                         {document.file_type || "PDF"} • Original {document.original_pages || "-"} pages • Range {document.page_range || "all"}
                       </p>
-                      <p className="mt-1 text-xs text-slate-500">
+                      <p className="mt-0.5 text-[11px] text-slate-500">
                         Printable {document.printable_pages || "-"} • Copies {document.copies || 1} • Charged pages {document.charged_pages || "-"}
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      disabled={!document.document_id}
-                      onClick={() => downloadDocument(document)}
-                      className="inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
-                    >
-                      <Download size={15} /> View / Download
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2 mt-3 sm:mt-0">
+                      <button
+                        type="button"
+                        disabled={!document.document_id}
+                        onClick={() => downloadDocument(document, "view")}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                      >
+                        <Eye size={15} /> View
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!document.document_id}
+                        onClick={() => downloadDocument(document, "download")}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                      >
+                        <Download size={15} /> Download
+                      </button>
+                    </div>
                   </div>
-                  <div className="mt-4 border-t pt-4">
-                    <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Settings used for this document</p>
-                    <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-3">
+                  <div className="mt-3 border-t pt-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Settings used</p>
+                    <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-3">
                       {buildDocumentSettings(document, config).map(([settingLabel, value]) => (
                         <DetailLine key={`${document.id || document.document_id || index}-${settingLabel}`} label={settingLabel} value={value} />
                       ))}
@@ -353,14 +374,14 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
           </div>
 
           <div>
-            <h4 className="font-bold text-slate-950">Status Timeline</h4>
-            <div className="mt-3 space-y-3">
+            <h4 className="text-sm font-bold text-slate-900">Status Timeline</h4>
+            <div className="mt-2 space-y-2">
               {(order.timeline || []).map((item, index) => (
                 <div key={`${item.label}-${item.time}-${index}`} className="flex gap-3">
                   <span className="mt-1 h-3 w-3 rounded-full bg-slate-900" />
                   <div>
-                    <p className="text-sm font-semibold">{item.label}</p>
-                    <p className="text-xs text-slate-500">{formatDateTime(item.time)}</p>
+                    <p className="text-xs font-semibold text-slate-800">{item.label}</p>
+                    <p className="text-[11px] text-slate-500">{formatDateTime(item.time)}</p>
                   </div>
                 </div>
               ))}
@@ -371,8 +392,8 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
 
         <section className="space-y-4">
           <div>
-            <h4 className="font-bold text-slate-950">Print Settings Used</h4>
-            <div className="mt-3 grid grid-cols-2 gap-3">
+            <h4 className="text-sm font-bold text-slate-900">Print Settings Used</h4>
+            <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 lg:grid-cols-3">
               <DetailLine label="Paper" value={config.paper_size || "A4"} />
               <DetailLine label="Color" value={label(config.color_mode || "black_white")} />
               <DetailLine label="Sides" value={config.sides || (config.duplex ? "Double-sided" : "Single-sided")} />
@@ -385,8 +406,8 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
           </div>
 
           <div>
-            <h4 className="font-bold text-slate-950">Payment</h4>
-            <div className="mt-3 grid grid-cols-2 gap-3">
+            <h4 className="text-sm font-bold text-slate-900">Payment</h4>
+            <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 lg:grid-cols-3">
               <DetailLine label="Method" value={order.payment?.method || order.payment_method} />
               <DetailLine label="Status" value={order.payment?.status || order.payment_status} />
               <DetailLine label="Amount" value={`₹${order.payment?.amount ?? order.amount ?? 0}`} />
@@ -396,8 +417,8 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
           </div>
 
           <div>
-            <h4 className="font-bold text-slate-950">Hub / Shop</h4>
-            <div className="mt-3 grid grid-cols-2 gap-3">
+            <h4 className="text-sm font-bold text-slate-900">Hub / Shop</h4>
+            <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 lg:grid-cols-3">
               <DetailLine label="Hub" value={order.hub?.name} />
               <DetailLine label="Code" value={order.hub?.code} />
               <DetailLine label="Printer" value={order.print_job?.printer_name || "Not recorded"} />
@@ -435,10 +456,17 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-3xl font-extrabold tracking-tight text-slate-950">My Prints</h2>
+          <h2 className="text-3xl font-extrabold tracking-tight text-slate-950">Print History</h2>
           <p className="mt-2 text-sm text-slate-600">View your previous orders, payment details, and print settings.</p>
         </div>
         {lastUpdatedAt && <p className="text-xs font-semibold text-slate-500">Last refreshed {new Date(lastUpdatedAt).toLocaleTimeString()}</p>}
+      </div>
+
+      <div className="rounded-md bg-blue-50 p-4 border border-blue-100 flex items-start gap-3">
+        <Info className="h-5 w-5 text-blue-500 mt-0.5 flex-shrink-0" />
+        <p className="text-sm text-blue-700">
+          <strong>Privacy Notice:</strong> For your security, all uploaded documents and server records are permanently deleted after 15 days. Your print history will remain visible here in your browser's local storage until you clear it.
+        </p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -500,13 +528,17 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="text-lg font-extrabold">{order.order_code || order.id}</h3>
-                    <StatusBadge color={printStatusColor(order.status)}>{order.status || "Order"}</StatusBadge>
-                    <StatusBadge color={paymentColor(order.payment?.status || order.payment_status)}>{order.payment?.status || order.payment_status || "Payment"}</StatusBadge>
+                    <StatusBadge color={printStatusColor(order.status)}>{label(order.status) || "Order"}</StatusBadge>
+                    {label(order.payment?.status || order.payment_status) !== label(order.status) && (
+                      <StatusBadge color={paymentColor(order.payment?.status || order.payment_status)}>
+                        {label(order.payment?.status || order.payment_status) || "Payment"}
+                      </StatusBadge>
+                    )}
                   </div>
-                  <p className="mt-2 font-semibold text-slate-800">{order.document?.file_name || "Uploaded document"}</p>
-                  <p className="mt-1 text-sm text-slate-500">{formatDateTime(order.created_at)}</p>
-                  <p className="mt-2 text-sm text-slate-600">{getOrderPrintableSummary(order)}</p>
-                  <p className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+                  <p className="mt-1.5 font-semibold text-sm text-slate-800">{order.document?.file_name || `${order.documents?.length || 1} uploaded document${order.documents?.length !== 1 ? 's' : ''}`}</p>
+                  <p className="mt-1 text-[11px] text-slate-500">{formatDateTime(order.created_at)}</p>
+                  <p className="mt-1 text-[11px] text-slate-600">{getOrderPrintableSummary(order)}</p>
+                  <p className="mt-1.5 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
                     <Store size={15} /> {order.hub?.name || "Print Hub"} • ₹{order.amount || 0} • {order.payment_method || order.payment?.method || "Payment"}
                   </p>
                 </div>
@@ -552,6 +584,25 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
               </button>
             </div>
             {renderOrderDetails(mobileDetailOrder)}
+          </div>
+        </div>
+      )}
+
+      {documentPreview && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm sm:p-6 lg:p-8">
+          <div className="flex h-full w-full max-w-5xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b bg-white p-4">
+              <div>
+                <h3 className="font-bold">{documentPreview.name}</h3>
+                <p className="text-xs text-slate-500">Document Preview</p>
+              </div>
+              <button type="button" onClick={() => setDocumentPreview(null)} className="rounded-full border bg-slate-50 p-2 hover:bg-slate-100" aria-label="Close preview">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="flex-1 bg-slate-100 p-2 sm:p-4">
+              <iframe title={documentPreview.name} src={documentPreview.url} className="h-full w-full rounded-2xl border bg-white shadow-sm" />
+            </div>
           </div>
         </div>
       )}

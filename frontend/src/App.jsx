@@ -1515,52 +1515,80 @@ export default function App() {
     navigate("track");
   }
 
-  function reprintWithSameSettings(historyOrder) {
+  async function reprintWithSameSettings(historyOrder) {
     if (!currentUser || currentUser.role !== "user" || !historyOrder) return;
 
-    const config = historyOrder.print_config || {};
-    const document = historyOrder.document || {};
     const nextCentre = centres.find((centre) => (
       centre.id === historyOrder.hub?.id ||
       centre.code === historyOrder.hub?.code ||
       centre.name === historyOrder.hub?.name
     ));
 
-    if (nextCentre) setSelectedCentre(nextCentre);
-    setDocumentFile(null);
-    setDocumentFiles([]);
-    setMultiFileConfigs([]);
-    setDocumentName(document.file_name || historyOrder.documentName || "");
-    setPages(Number(document.original_pages || historyOrder.pages || 1));
-    setSelectedPages(config.page_range && config.page_range !== "all" ? config.page_range : "");
-    setCopies(Number(config.copies || document.copies || historyOrder.copies || 1));
-    setColorType(config.color_mode === "color" ? "color" : "bw");
-    setSideType(config.duplex ? "double" : "single");
-    setPaperSize(config.paper_size || "A4");
-    setPagesPerSheet(Number(config.pages_per_sheet || 1));
-    setOrientation(config.orientation || "auto");
-    setPrintDpi(Number(config.quality_dpi || 300));
-    setScaleMode(config.scaling || "original");
-    setMarginMode(config.margins || "default");
-    setWatermark(Boolean(config.watermark?.enabled));
-    setWatermarkType(config.watermark?.type || "order_code");
-    setWatermarkText(config.watermark?.text || "");
-    setWatermarkPosition(config.watermark?.position || "bottom_right");
-    setWatermarkOpacity(Number(config.watermark?.opacity || 0.18));
-    setWatermarkFontSize(Number(config.watermark?.fontSize || 18));
-    setWatermarkRotation(Number(config.watermark?.rotation || 45));
-    setBackendPrice(null);
+    if (!nextCentre) {
+      alert("The printing centre for this order is no longer available.");
+      return;
+    }
+
+    setPaymentLoading(true);
     setPaymentError("");
-    setOrder(null);
-    setPendingPayment(null);
-    setUpiQr(null);
-    navigate("upload", {
-      state: {
-        reprintDraft: true,
-        sourceOrderId: historyOrder.id,
-        message: "Review these copied settings, upload the document again, then place a new order.",
-      },
-    });
+
+    try {
+      const documents = historyOrder.documents?.length ? historyOrder.documents : [historyOrder.document].filter(Boolean);
+      if (!documents.length || !documents[0].document_id) {
+        throw new Error("Source document not available. Please start a new order.");
+      }
+
+      const orderData = await apiRequest("/api/orders", {
+        method: "POST",
+        body: JSON.stringify({
+          centreCode: nextCentre.code,
+          documentIds: documents.map((d) => d.document_id),
+          files: documents.map((d) => {
+            const printOptions = d.print_options || historyOrder.print_config?.raw || {};
+            return {
+              documentId: d.document_id,
+              documentName: d.file_name,
+              selectedPages: d.page_range,
+              copies: d.copies,
+              colorType: printOptions.colorMode || "black_white",
+              sideType: printOptions.sides || "one_sided",
+              paperSize: printOptions.paperSize || "A4",
+              pagesPerSheet: printOptions.pagesPerSheet || 1,
+              orientation: printOptions.orientation || "auto",
+              printDpi: printOptions.quality?.dpi || 300,
+              scaleMode: printOptions.scale?.mode || "original",
+              marginMode: printOptions.margins?.mode || "default",
+              watermarkEnabled: Boolean(printOptions.watermark?.enabled),
+              printOptions: printOptions
+            };
+          }),
+        }),
+      });
+
+      if (!orderData.success) throw new Error(orderData.message || "Failed to recreate order");
+
+      const createdOrder = normalizeOrder(orderData.order, centres);
+      setOrder(createdOrder);
+      setOrders((prev) => upsertOrder(prev, createdOrder));
+      setLastOrdersUpdatedAt(new Date().toISOString());
+
+      setSelectedCentre(nextCentre);
+      setPendingPayment({
+        id: `manual-${createdOrder.backendId || createdOrder.id}`,
+        orderId: createdOrder.backendId || createdOrder.id,
+        amount: createdOrder.amount,
+        method: "MANUAL_UPI_OR_CASH",
+        status: "pending",
+        createdAt: new Date().toISOString(),
+      });
+      setUpiQr(nextCentre?.upiQrImageUrl ? { imageUrl: nextCentre.upiQrImageUrl } : null);
+      
+      navigate("track");
+    } catch (err) {
+      alert(err.message || "Could not reprint order. You may need to upload the file again.");
+    } finally {
+      setPaymentLoading(false);
+    }
   }
 
   async function startRazorpayForExistingOrder(existingOrder = order) {

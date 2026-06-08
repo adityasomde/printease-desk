@@ -25,8 +25,9 @@
     "dist:appimage": "npm_config_loglevel=error electron-builder --linux AppImage --publish never && node scripts/create-linux-blockmaps.cjs"
   },
   "devDependencies": {
-    "electron": "^33.0.0",
-    "electron-builder": "^26.8.1"
+    "electron": "^42.3.3",
+    "electron-builder": "^26.8.1",
+    "tmp": "^0.2.7"
   },
   "dependencies": {
     "electron-updater": "^6.8.3"

@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PrintEase Desktop Release Builder</title>
+  <!-- Google Fonts Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-main: #0b0f19;
+      --bg-card: rgba(22, 29, 49, 0.7);
+      --bg-terminal: #05070c;
+      --border-color: rgba(255, 255, 255, 0.08);
+      --border-focus: #3b82f6;
+      
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --text-accent: #38bdf8;
+      
+      --color-success: #10b981;
+      --color-error: #ef4444;
+      --color-warning: #f59e0b;
+      --color-info: #3b82f6;
+      --color-pending: #475569;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Header styling */
+    header {
+      background: rgba(15, 23, 42, 0.8);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--border-color);
+      padding: 1rem 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .header-title {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .header-title h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+    }
+
+    .badge-dev {
+      background: rgba(59, 130, 246, 0.15);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      color: var(--color-info);
+      padding: 0.2rem 0.5rem;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .meta-info {
+      display: flex;
+      gap: 1.5rem;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .meta-item strong {
+      color: var(--text-main);
+    }
+
+    /* Main layout */
+    .container {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* Left panel: Builder controls & safety gates */
+    .left-panel {
+      flex: 3;
+      overflow-y: auto;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+      border-right: 1px solid var(--border-color);
+    }
+
+    /* Right panel: Terminal logs & Report status */
+    .right-panel {
+      flex: 2;
+      display: flex;
+      flex-direction: column;
+      background-color: var(--bg-terminal);
+      overflow: hidden;
+    }
+
+    .section-title {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--text-accent);
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 0.5rem;
+    }
+
+    /* Cards generic */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 1.25rem;
+      backdrop-filter: blur(8px);
+    }
+
+    /* Steps grid */
+    .steps-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .step-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      transition: all 0.2s ease;
+    }
+
+    .step-item:hover {
+      background: rgba(255, 255, 255, 0.04);
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+
+    .step-info {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+
+    .step-num-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+
+    .step-desc {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .step-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    /* Badges */
+    .badge {
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .badge-pending { background: rgba(71, 85, 105, 0.2); border: 1px solid rgba(71, 85, 105, 0.4); color: var(--text-muted); }
+    .badge-running { background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); color: var(--color-warning); animation: pulse 1.5s infinite; }
+    .badge-success { background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.4); color: var(--color-success); }
+    .badge-failed { background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: var(--color-error); }
+
+    @keyframes pulse {
+      0% { opacity: 0.6; }
+      50% { opacity: 1; }
+      100% { opacity: 0.6; }
+    }
+
+    /* Buttons */
+    .btn {
+      font-family: inherit;
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 0.4rem 0.8rem;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .btn-primary {
+      background: var(--color-info);
+      color: white;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: #2563eb;
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: var(--border-color);
+      color: var(--text-main);
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .btn-danger {
+      background: rgba(239, 68, 68, 0.2);
+      border-color: rgba(239, 68, 68, 0.4);
+      color: var(--color-error);
+    }
+
+    .btn-danger:hover:not(:disabled) {
+      background: rgba(239, 68, 68, 0.3);
+    }
+
+    .btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    /* Terminal Window styling */
+    .terminal-header {
+      background: #0d131f;
+      padding: 0.75rem 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .terminal-header span {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .terminal-header span::before {
+      content: "";
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      background-color: var(--color-warning);
+      border-radius: 50%;
+    }
+
+    .terminal-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      line-height: 1.5;
+      color: #cbd5e1;
+    }
+
+    .terminal-line {
+      margin-bottom: 0.25rem;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    .line-info { color: #38bdf8; }
+    .line-warning { color: #f59e0b; }
+    .line-error { color: #ef4444; }
+    .line-stdout { color: #cbd5e1; }
+    .line-stderr { color: #f87171; }
+
+    /* Safety Gates panel */
+    .gates-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.75rem;
+      margin-top: 0.5rem;
+    }
+
+    .gate-card {
+      background: rgba(255, 255, 255, 0.015);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 0.75rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .gate-label {
+      font-size: 0.8rem;
+      font-weight: 500;
+    }
+
+    .gate-status {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .gate-pass { color: var(--color-success); }
+    .gate-fail { color: var(--color-error); }
+
+    /* Checklist checkboxes styling */
+    .checklist-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+
+    .checklist-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      font-size: 0.85rem;
+      cursor: pointer;
+      padding: 0.35rem 0;
+    }
+
+    .checklist-item input[type="checkbox"] {
+      margin-top: 0.2rem;
+      cursor: pointer;
+    }
+
+    /* Final Publish recommendation box */
+    .publish-box {
+      margin-top: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .status-alert {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+      color: #fca5a5;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .status-alert.alert-success {
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+      color: #a7f3d0;
+    }
+
+    .notes-textarea {
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 0.75rem;
+      color: var(--text-main);
+      font-family: inherit;
+      font-size: 0.85rem;
+      width: 100%;
+      height: 60px;
+      resize: none;
+    }
+
+    .notes-textarea:focus {
+      outline: none;
+      border-color: var(--border-focus);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- App Header -->
+  <header>
+    <div class="header-title">
+      <h1>PrintEase Desktop Release Builder</h1>
+      <span class="badge-dev">Local Dev Helper</span>
+    </div>
+    <div class="meta-info">
+      <div class="meta-item">Version: <strong id="meta-version">Loading...</strong></div>
+      <div class="meta-item">Git Commit: <strong id="meta-commit">Loading...</strong></div>
+      <div class="meta-item">Platform: <strong id="meta-platform">Loading...</strong></div>
+    </div>
+  </header>
+
+  <!-- Main Split Pane -->
+  <div class="container">
+
+    <!-- Left Controls Panel -->
+    <div class="left-panel">
+
+      <!-- Release Mode Configuration -->
+      <div class="card">
+        <h2 class="section-title">Target Release Mode</h2>
+        <div style="display: flex; gap: 1.5rem; margin-top: 0.5rem; font-size: 0.9rem;">
+          <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+            <input type="radio" name="release-mode" value="linux-only" checked onchange="changeReleaseMode('linux-only')">
+            Linux-only Release
+          </label>
+          <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+            <input type="radio" name="release-mode" value="windows-only" onchange="changeReleaseMode('windows-only')">
+            Windows-only Release
+          </label>
+          <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+            <input type="radio" name="release-mode" value="dual" onchange="changeReleaseMode('dual')">
+            Dual (Linux & Windows)
+          </label>
+        </div>
+      </div>
+
+      <div id="wine-warning-banner" class="status-alert" style="display: none; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3); color: #fef08a;">
+        <span>⚠️</span> <strong>Windows Build Skipped/Failed:</strong> Wine or required build runtime is unavailable on this host. Use <em>Linux-only Release</em> mode if you are targeting Linux.
+      </div>
+
+      <!-- Step-by-Step Release Tasks -->
+      <div class="card">
+        <h2 class="section-title">
+          <span>Release Execution Sequence</span>
+          <button class="btn btn-secondary" style="font-size: 0.75rem; padding: 0.2rem 0.5rem;" onclick="resetAllStatuses()">Reset Statuses</button>
+        </h2>
+        <div class="steps-list">
+
+          <!-- Step 1 -->
+          <div class="step-item" id="step-clean">
+            <div class="step-info">
+              <span class="step-num-title">1. Clean build directories</span>
+              <span class="step-desc">Wipes release, frontend/dist and frontend-dist directories</span>
+            </div>
+            <div class="step-actions">
+              <span class="badge badge-pending" id="status-clean">Pending</span>
+              <button class="btn btn-secondary" onclick="triggerCommand('clean')">Clean</button>
+            </div>
+          </div>
+
+          <!-- Step 2 -->
+          <div class="step-item" id="step-build-frontend">
+            <div class="step-info">
+              <span class="step-num-title">2. Build frontend production assets</span>
+              <span class="step-desc">Compiles React client application under /frontend</span>
+            </div>
+            <div class="step-actions">
+              <span class="badge badge-pending" id="status-build-frontend">Pending</span>
+              <button class="btn btn-secondary" id="btn-build-frontend" onclick="triggerCommand('build-frontend')">Build</button>
+            </div>
+          </div>
+
+          <!-- Step 3 -->
+          <div class="step-item" id="step-sync-frontend">
+            <div class="step-info">
+              <span class="step-num-title">3. Sync frontend assets</span>
+              <span class="step-desc">Copies compiled files to desktop-shell/frontend-dist</span>
+            </div>
+            <div class="step-actions">
+              <span class="badge badge-pending" id="status-sync-frontend">Pending</span>
+              <button class="btn btn-secondary" id="btn-sync-frontend" onclick="triggerCommand('sync-frontend')">Sync</button>
+            </div>
+          </div>
+
+          <!-- Step 4 -->
+          <div class="step-item" id="step-verify-html">
+            <div class="step-info">
+              <span class="step-num-title">4. Verify index.html assets paths</span>
+              <span class="step-desc">Checks that paths are relative (./assets/) to prevent blank screen</span>
+            </div>
+            <div class="step-actions">
+              <span class="badge badge-pending" id="status-verify-html">Pending</span>
+              <button class="btn btn-secondary" id="btn-verify-html" onclick="runHtmlVerification()">Verify Paths</button>
+            </div>
+          </div>
+
+          <!-- Step 5 -->
+          <div class="step-item" id="step-build-linux-unpacked">
+            <div class="step-info">
+              <span class="step-num-title">5. Build Linux unpacked package</span>
+              <span class="step-desc">Unpacks AppImage content under release/linux-unpacked</span>
+            </div>
+            <div class="step-actions">
+              <span class="badge badge-pending" id="status-build-linux-unpacked">Pending</span>
+              <button class="btn btn-secondary" id="btn-build-linux-unpacked" onclick="triggerCommand('build-linux-unpacked')">Build Unpacked</button>
+            </div>
+          </div>
+
+          <!-- Step 6 -->
+          <div class="step-item" id="step-verify-linux-package">
+            <div class="step-info">
+              <span class="step-num-title">6. Verify Linux package contents</span>
+              <span class="step-desc">Runs automated checker & validates driver presence/exclusions</span>
+            </div>
+            <div class="step-actions">
+              <span class="badge badge-pending" id="status-verify-linux-package">Pending</span>
+              <button class="btn btn-secondary" id="btn-verify-linux-package" onclick="triggerVerifyPlatform('linux')">Verify Package</button>
+            </div>
+          </div>
+
+          <!-- Step 7 -->
+          <div class="step-item" id="step-launch-linux-unpacked">
+            <div class="step-info">
+              <span class="step-num-title">7. Launch Linux Unpacked Application (Debug Mode)</span>
+              <span class="step-desc">Opens app locally with PE_DEBUG_RENDERER=1 for manual validation</span>
+            </div>
+            <div class="step-actions">
+              <span class="badge badge-pending" id="status-launch-linux-unpacked">Pending</span>
+              <button class="btn btn-primary" id="btn-launch-linux-unpacked" onclick="triggerCommand('launch-linux-unpacked')">Launch App</button>
+            </div>
+          </div>
+
+          <!-- Step 8 -->
+          <div class="step-item" id="step-build-windows-unpacked">
+            <div class="step-info">
+              <span class="step-num-title">8. Build Windows unpacked package</span>
+              <span class="step-desc">Unpacks Windows installer bundle under release/win-unpacked</span>
+            </div>
+            <div class="step-actions">
+              <span class="badge badge-pending" id="status-build-windows-unpacked">Pending</span>
+              <button class="btn btn-secondary" id="btn-build-windows-unpacked" onclick="triggerCommand('build-windows-unpacked')">Build Unpacked</button>
+            </div>
+          </div>
+
+          <!-- Step 9 -->
+          <div class="step-item" id="step-verify-windows-package">
+            <div class="step-info">
+              <span class="step-num-title">9. Verify Windows package contents</span>
+              <span class="step-desc">Validates SumatraPDF inclusion and Linux script exclusions</span>
+            </div>
+            <div class="step-actions">
+              <span class="badge badge-pending" id="status-verify-windows-package">Pending</span>
+              <button class="btn btn-secondary" id="btn-verify-windows-package" onclick="triggerVerifyPlatform('win32')">Verify Package</button>
+            </div>
+          </div>
+
+          <!-- Step 10 -->
+          <div class="step-item" id="step-build-linux-dist">
+            <div class="step-info">
+              <span class="step-num-title">10. Build Final Linux Installer Artifact</span>
+              <span class="step-desc">Produces final .AppImage and .deb files under release/</span>
+            </div>
+            <div class="step-actions">
+              <span class="badge badge-pending" id="status-build-linux-dist">Pending</span>
+              <button class="btn btn-secondary" id="btn-build-linux-dist" disabled onclick="triggerCommand('build-linux-dist')">Dist Linux</button>
+            </div>
+          </div>
+
+          <!-- Step 11 -->
+          <div class="step-item" id="step-build-windows-dist">
+            <div class="step-info">
+              <span class="step-num-title">11. Build Final Windows Installer Artifact</span>
+              <span class="step-desc">Produces final Setup.exe NSIS installer under release/</span>
+            </div>
+            <div class="step-actions">
+              <span class="badge badge-pending" id="status-build-windows-dist">Pending</span>
+              <button class="btn btn-secondary" id="btn-build-windows-dist" disabled onclick="triggerCommand('build-windows-dist')">Dist Windows</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Safety Gates Checks Panel -->
+      <div class="card">
+        <h2 class="section-title">Safety Gates Diagnostics (Automated Checks)</h2>
+        <div class="gates-grid">
+          <div class="gate-card">
+            <span class="gate-label">Frontend Assets Build Passed</span>
+            <span class="gate-status" id="gate-frontend-build"><span class="gate-fail">✕ PENDING</span></span>
+          </div>
+          <div class="gate-card">
+            <span class="gate-label">Assets Folder Exists & Populated</span>
+            <span class="gate-status" id="gate-frontend-assets-exist"><span class="gate-fail">✕ PENDING</span></span>
+          </div>
+          <div class="gate-card">
+            <span class="gate-label">Relative Asset Paths Check (./assets/)</span>
+            <span class="gate-status" id="gate-frontend-html-relative"><span class="gate-fail">✕ PENDING</span></span>
+          </div>
+          <div class="gate-card">
+            <span class="gate-label">Linux IPC Security (ipcSecurity.js)</span>
+            <span class="gate-status" id="gate-linux-ipc-security"><span class="gate-fail">✕ PENDING</span></span>
+          </div>
+          <div class="gate-card">
+            <span class="gate-label">Linux URL Validator (urlValidator.js)</span>
+            <span class="gate-status" id="gate-linux-url-validator"><span class="gate-fail">✕ PENDING</span></span>
+          </div>
+          <div class="gate-card">
+            <span class="gate-label">Linux CUPS Printer Drivers Included</span>
+            <span class="gate-status" id="gate-linux-printers-included"><span class="gate-fail">✕ PENDING</span></span>
+          </div>
+          <div class="gate-card">
+            <span class="gate-label">Linux Win-Driver Excluded</span>
+            <span class="gate-status" id="gate-linux-win-excluded"><span class="gate-fail">✕ PENDING</span></span>
+          </div>
+          <div class="gate-card">
+            <span class="gate-label">Windows IPC Security (ipcSecurity.js)</span>
+            <span class="gate-status" id="gate-win-ipc-security"><span class="gate-fail">✕ PENDING</span></span>
+          </div>
+          <div class="gate-card">
+            <span class="gate-label">Windows URL Validator (urlValidator.js)</span>
+            <span class="gate-status" id="gate-win-url-validator"><span class="gate-fail">✕ PENDING</span></span>
+          </div>
+          <div class="gate-card">
+            <span class="gate-label">Windows SumatraPDF/Drivers Included</span>
+            <span class="gate-status" id="gate-win-printers-included"><span class="gate-fail">✕ PENDING</span></span>
+          </div>
+          <div class="gate-card">
+            <span class="gate-label">Windows Linux-Driver Excluded</span>
+            <span class="gate-status" id="gate-win-linux-excluded"><span class="gate-fail">✕ PENDING</span></span>
+          </div>
+          <div class="gate-card">
+            <span class="gate-label">Package Verification Script Passed</span>
+            <span class="gate-status" id="gate-cli-verification"><span class="gate-fail">✕ PENDING</span></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Manual Testing Checklist -->
+      <div class="card">
+        <h2 class="section-title">Manual Unpacked App Validation</h2>
+        <div class="checklist-list">
+          <label class="checklist-item">
+            <input type="checkbox" id="chk-manually-launched" onchange="validateChecklist()">
+            <div>
+              <strong>Launch Triggered:</strong> Linux unpacked app launched with PE_DEBUG_RENDERER=1.
+            </div>
+          </label>
+          <label class="checklist-item">
+            <input type="checkbox" id="chk-ui-opened" onchange="validateChecklist()">
+            <div>
+              <strong>UI Opened Correctly:</strong> The Electron wrapper loaded and rendered UI elements (no blank white screen).
+            </div>
+          </label>
+          <label class="checklist-item">
+            <input type="checkbox" id="chk-dashboard-loaded" onchange="validateChecklist()">
+            <div>
+              <strong>Dashboard Page Loaded:</strong> System loaded local dashboard and connected to core APIs correctly.
+            </div>
+          </label>
+          <label class="checklist-item">
+            <input type="checkbox" id="chk-printer-page" onchange="validateChecklist()">
+            <div>
+              <strong>Printer Page Functional:</strong> Opened printer page and verified print settings and active queue.
+            </div>
+          </label>
+          <label class="checklist-item">
+            <input type="checkbox" id="chk-no-blank" onchange="validateChecklist()">
+            <div>
+              <strong>No Renderer Crashes:</strong> Switched between routes multiple times, no blank-outs or renderer crashes.
+            </div>
+          </label>
+          <label class="checklist-item">
+            <input type="checkbox" id="chk-logs-clean" onchange="validateChecklist()">
+            <div>
+              <strong>Logs Checked:</strong> Developer stdout/stderr terminal logs show no did-fail-load or render-process-gone errors.
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Publish Action Report Generation -->
+      <div class="card">
+        <h2 class="section-title">Publish Sign-Off</h2>
+        <div class="publish-box">
+          <div class="status-alert" id="publish-status-box">
+            <span>⚠️</span> <strong id="publish-status-text">NOT SIGNED OFF: Safety checks and manual validation checklist pending.</strong>
+          </div>
+          <div>
+            <label style="font-size: 0.85rem; font-weight: 500; display: block; margin-bottom: 0.35rem;">Developer Notes / Change Log (included in report)</label>
+            <textarea id="report-notes" class="notes-textarea" placeholder="e.g. Hotfix for blank page crash. Included security module inclusions and printer driver filters. Unpacked runs correctly on Ubuntu x64."></textarea>
+          </div>
+          <div style="display: flex; gap: 1rem; align-items: center;">
+            <button class="btn btn-primary" id="btn-generate-report" disabled onclick="generateReport()">
+              12. Generate Release Checklist Report
+            </button>
+            <button class="btn btn-secondary" onclick="openReleaseDirectory()">
+              Open Release folder
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Right Logs Panel -->
+    <div class="right-panel">
+      <div class="terminal-header">
+        <span>Execution Terminal Output Logs</span>
+        <div style="display: flex; gap: 0.5rem;">
+          <button class="btn btn-secondary" style="font-size: 0.75rem; padding: 0.2rem 0.5rem;" onclick="clearLogs()">Clear</button>
+          <button class="btn btn-secondary" style="font-size: 0.75rem; padding: 0.2rem 0.5rem;" onclick="copyLogs()">Copy</button>
+        </div>
+      </div>
+      <div class="terminal-body" id="log-console">
+        <div class="terminal-line line-info">[SYSTEM] Release Builder GUI initialized successfully. Ready to run commands.</div>
+        <div class="terminal-line line-info">[SYSTEM] Note: Local release helper. No automated publishing will occur.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

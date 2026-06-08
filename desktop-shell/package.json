@@ -22,7 +22,8 @@
     "dist:win": "cross-env PE_TARGET_PLATFORM=win32 electron-builder --config electron-builder.win.yml --win nsis --publish never",
     "verify:package": "node scripts/verify-package-files.cjs",
     "dist:linux": "cross-env PE_TARGET_PLATFORM=linux npm_config_loglevel=error electron-builder --config electron-builder.linux.yml --linux AppImage deb --publish never && node scripts/create-linux-blockmaps.cjs",
-    "dist:appimage": "cross-env PE_TARGET_PLATFORM=linux npm_config_loglevel=error electron-builder --config electron-builder.linux.yml --linux AppImage --publish never && node scripts/create-linux-blockmaps.cjs"
+    "dist:appimage": "cross-env PE_TARGET_PLATFORM=linux npm_config_loglevel=error electron-builder --config electron-builder.linux.yml --linux AppImage --publish never && node scripts/create-linux-blockmaps.cjs",
+    "release:gui": "node tools/release-gui/start.cjs"
   },
   "devDependencies": {
     "cross-env": "^10.1.0",

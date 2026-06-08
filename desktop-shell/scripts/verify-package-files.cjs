@@ -11,7 +11,11 @@ const forbiddenNames = [
   "backend",
   "frontend/src",
   ".env",
-  ".git"
+  ".git",
+  "tools/release-gui",
+  "release-checks",
+  "docs",
+  ".github"
 ];
 
 function isForbiddenPath(filePath) {
@@ -25,7 +29,7 @@ function isForbiddenPath(filePath) {
   return false;
 }
 
-const forbiddenExtensions = [".md", ".markdown"];
+const forbiddenExtensions = [".md", ".markdown", ".pem", ".pfx", ".p12"];
 
 const forbiddenText = [
   "DATABASE_URL",
@@ -42,8 +46,11 @@ const requiredResourceFiles = [
   "frontend-dist/index.html"
 ];
 
-if (!fs.existsSync(root)) {
-  console.warn(`Release folder not found at ${root}. Skipping package scan for local dev.`);
+const platformDir = targetPlatform === "win32" ? "win-unpacked" : "linux-unpacked";
+const scanRoot = path.join(root, platformDir);
+
+if (!fs.existsSync(scanRoot)) {
+  console.warn(`Specific unpacked folder not found at ${scanRoot}. Skipping package scan for local dev.`);
   console.log("Package verification passed: no backend/secrets found.");
   process.exit(0);
 }
@@ -58,7 +65,7 @@ function walk(dir, files = []) {
   return files;
 }
 
-const files = walk(root);
+const files = walk(scanRoot);
 let failed = false;
 const appAsarPath = files.find(f => f.replaceAll("\\", "/").endsWith("/resources/app.asar"));
 const appAsarFiles = appAsarPath

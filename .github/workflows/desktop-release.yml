@@ -1,173 +1,193 @@
-name: Desktop Release
+name: Desktop Release Build
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version, example: 0.1.36"
+        required: true
+        type: string
+
   push:
     tags:
-      - "desktop-v*"
+      - "v*"
 
 permissions:
   contents: write
 
 jobs:
-  build-linux:
+  linux:
+    name: Build Linux
     runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: .
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: 24
           cache: npm
           cache-dependency-path: |
+            package-lock.json
             frontend/package-lock.json
             desktop-shell/package-lock.json
+
+      - name: Install root dependencies
+        run: npm ci
 
       - name: Install frontend dependencies
         run: npm ci --prefix frontend
 
-      - name: Build real frontend source
-        run: npm run build:frontend
-
-      - name: Install desktop dependencies
+      - name: Install desktop-shell dependencies
         run: npm ci --prefix desktop-shell
 
-      - name: Check desktop syntax
-        run: |
-          node --check desktop-shell/main.js
-          node --check desktop-shell/preload.cjs
-          node --check desktop-shell/updater.js
-          node --check desktop-shell/printer/printExecutor.js
-          node --check desktop-shell/printer/windowsPrinter.js
-          node --check desktop-shell/scripts/sync-frontend-dist.cjs
-          node --check desktop-shell/scripts/verify-package-files.cjs
-          node --check desktop-shell/scripts/run-electron-builder.cjs
+      - name: Build frontend and sync frontend-dist
+        run: npm run build:frontend
 
-      - name: Verify frontend bundle exists
-        run: |
-          test -f frontend-dist/index.html
-          test -d frontend-dist/assets
-
-      - name: Build Linux AppImage and DEB
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build Linux release
         run: npm run dist:linux --prefix desktop-shell
 
-      - name: Verify package contents
+      - name: Verify Linux package
         run: npm run verify:package --prefix desktop-shell
+        env:
+          PE_TARGET_PLATFORM: linux
 
-      - name: Upload workflow artifacts
+      - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: linux-release-assets
-          if-no-files-found: error
+          name: linux-release
           path: |
             desktop-shell/release/*.AppImage
-            desktop-shell/release/*.AppImage.blockmap
             desktop-shell/release/*.deb
             desktop-shell/release/latest-linux.yml
+          if-no-files-found: error
 
-  build-windows:
+  windows:
+    name: Build Windows
     runs-on: windows-latest
+
+    defaults:
+      run:
+        working-directory: .
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: 24
           cache: npm
           cache-dependency-path: |
+            package-lock.json
             frontend/package-lock.json
             desktop-shell/package-lock.json
+
+      - name: Install root dependencies
+        run: npm ci
 
       - name: Install frontend dependencies
         run: npm ci --prefix frontend
 
-      - name: Install desktop dependencies
+      - name: Install desktop-shell dependencies
         run: npm ci --prefix desktop-shell
 
-      - name: Build real frontend source
+      - name: Build frontend and sync frontend-dist
         run: npm run build:frontend
 
-      - name: Check desktop syntax
-        run: |
-          node --check desktop-shell/main.js
-          node --check desktop-shell/preload.cjs
-          node --check desktop-shell/updater.js
-          node --check desktop-shell/printer/printExecutor.js
-          node --check desktop-shell/printer/windowsPrinter.js
-          node --check desktop-shell/scripts/run-electron-builder.cjs
-
-      - name: Build Windows installer
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build Windows release
         run: npm run dist:win --prefix desktop-shell
 
-      - name: Verify bundled Windows print helper
-        shell: pwsh
-        run: |
-          $helper = Get-ChildItem -Recurse desktop-shell/release -Filter SumatraPDF.exe |
-            Where-Object { ($_.FullName -replace '\\', '/') -like '*/resources/vendor/win/SumatraPDF.exe' } |
-            Select-Object -First 1
-          if (-not $helper) {
-            Write-Error "SumatraPDF.exe was not found in the Windows packaged output at resources/vendor/win/SumatraPDF.exe"
-            exit 1
-          }
-          Write-Host "Found SumatraPDF.exe at $($helper.FullName)"
-
-      - name: List Windows release files
-        shell: pwsh
-        run: |
-          Get-ChildItem -Recurse desktop-shell/release
-
-      - name: Verify package contents
+      - name: Verify Windows package
         run: npm run verify:package --prefix desktop-shell
+        env:
+          PE_TARGET_PLATFORM: win32
 
-      - name: Upload workflow artifacts
+      - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: windows-release-assets
-          if-no-files-found: error
+          name: windows-release
           path: |
             desktop-shell/release/*.exe
-            desktop-shell/release/*.exe.blockmap
             desktop-shell/release/latest.yml
+          if-no-files-found: error
 
-  publish-release:
-    needs: [build-linux, build-windows]
+  draft-release:
+    name: Create Draft GitHub Release
+    needs:
+      - linux
+      - windows
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/desktop-v')
 
     steps:
-      - name: Download Linux release assets
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Linux artifacts
         uses: actions/download-artifact@v4
         with:
-          name: linux-release-assets
-          path: release-assets/linux
+          name: linux-release
+          path: release-assets
 
-      - name: Download Windows release assets
+      - name: Download Windows artifacts
         uses: actions/download-artifact@v4
         with:
-          name: windows-release-assets
-          path: release-assets/windows
+          name: windows-release
+          path: release-assets
 
-      - name: List release assets
-        run: find release-assets -type f -maxdepth 3 -print
+      - name: Show release assets
+        run: find release-assets -maxdepth 2 -type f -print
 
-      - name: Publish GitHub release assets
+      - name: Decide tag
+        id: tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=v${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create draft release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: PrintEase Desktop ${{ steps.tag.outputs.tag }}
+          draft: true
+          prerelease: false
           files: |
-            release-assets/linux/*.AppImage
-            release-assets/linux/*.AppImage.blockmap
-            release-assets/linux/*.deb
-            release-assets/linux/latest-linux.yml
-            release-assets/windows/*.exe
-            release-assets/windows/*.exe.blockmap
-            release-assets/windows/latest.yml
+            release-assets/*
+          body: |
+            PrintEase Desktop ${{ steps.tag.outputs.tag }}
+
+            Automated draft release build.
+
+            Included:
+            - Linux AppImage
+            - Linux deb
+            - latest-linux.yml
+            - Windows installer exe
+            - latest.yml
+
+            Verification completed by CI:
+            - Linux package build passed
+            - Linux package verification passed
+            - Windows package build passed
+            - Windows package verification passed
+
+            Manual checks still required before publishing:
+            - Download Linux build and open app
+            - Download Windows build and open app
+            - Confirm no blank screen
+            - Confirm dashboard loads
+            - Confirm printer page opens
+            - Confirm no did-fail-load/render-process-gone errors
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

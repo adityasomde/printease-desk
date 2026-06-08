@@ -7,6 +7,12 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { backendRequest } from "./heartbeat.js";
 import { printFile, stopPrinting } from "../printer/printExecutor.js";
+import { 
+  normalizeJobFiles, 
+  validateJobFile, 
+  getExpectedFileHash, 
+  getSafeFileName 
+} from "./jobFiles.js";
 
 export async function getNextJob({ agentToken } = {}) {
   if (!agentToken) {
@@ -73,44 +79,11 @@ export async function markJobStatus({ agentToken, jobId, status, reasonCode, rea
   }
 }
 
-function extensionForPrintFile(file) {
-  if (file?.fileType === "application/pdf") return ".pdf";
-  return ".bin";
-}
 
-function fileNameForPrintFile(job, file, index = 0) {
-  const base = file?.documentId || file?.fileName || `${job?.jobId || "job"}-${index + 1}`;
-  return String(base).replace(/[^a-z0-9._-]/gi, "_");
-}
 
 async function calculateSha256(filePath) {
   const buffer = await readFile(filePath);
   return createHash("sha256").update(buffer).digest("hex");
-}
-
-function normalizeJobFiles(job) {
-  const files = Array.isArray(job?.files)
-    ? job.files.filter((file) => file?.fileUrl)
-    : [];
-
-  if (files.length) {
-    return files.map((file, index) => ({
-      ...file,
-      index,
-      fileSha256: file.fileSha256 || file.fileHash,
-      copies: file.copies || file.printOptions?.copies || job.copies || 1,
-      printOptions: file.printOptions || job.printOptions || {},
-    }));
-  }
-
-  return [{
-    index: 0,
-    fileUrl: job?.fileUrl,
-    fileSha256: job?.fileSha256 || job?.fileHash,
-    fileType: job?.fileType,
-    copies: job?.copies || 1,
-    printOptions: job?.printOptions || {},
-  }].filter((file) => file.fileUrl);
 }
 
 async function getRemoteJobStatus({ agentToken, jobId } = {}) {
@@ -144,10 +117,10 @@ async function assertJobStillPrintable({ agentToken, jobId } = {}) {
 export async function downloadJobFile(job, file = null) {
   const printFileItem = file || normalizeJobFiles(job)[0] || {};
 
-  if (!printFileItem.fileUrl) {
+  if (!validateJobFile(printFileItem)) {
     return {
       success: false,
-      message: "Print job does not include a signed file URL.",
+      message: "Print job does not include a valid signed file URL.",
     };
   }
 
@@ -160,12 +133,13 @@ export async function downloadJobFile(job, file = null) {
   }
 
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "printease-job-"));
-  const filePath = path.join(tempDir, `${fileNameForPrintFile(job, printFileItem, printFileItem.index)}${extensionForPrintFile(printFileItem)}`);
+  const safeName = getSafeFileName(printFileItem);
+  const filePath = path.join(tempDir, safeName);
 
   try {
     await pipeline(Readable.fromWeb(response.body), createWriteStream(filePath));
 
-    const expectedHash = printFileItem.fileSha256 || printFileItem.fileHash;
+    const expectedHash = getExpectedFileHash(printFileItem);
     if (expectedHash) {
       const actualHash = await calculateSha256(filePath);
       if (actualHash !== expectedHash) {

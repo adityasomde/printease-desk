@@ -34,7 +34,7 @@
   },
   "productName": "PrintEase Desktop",
   "description": "PrintEase Desktop app and local printer agent",
-  "homepage": "https://github.com/adityasomde/printease-desk",
+  "homepage": "https://github.com/Chaitanyavmundhe/printease-desk",
   "build": {
     "appId": "com.printease.desktop",
     "productName": "PrintEase Desktop",
@@ -93,7 +93,7 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "adityasomde",
+        "owner": "Chaitanyavmundhe",
         "repo": "printease-desk"
       }
     ],

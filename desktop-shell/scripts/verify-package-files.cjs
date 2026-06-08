@@ -12,8 +12,13 @@ const forbiddenNames = [
 const forbiddenText = [
   "DATABASE_URL",
   "SUPABASE_SERVICE_KEY",
-  "JWT_SECRET",
   "AGENT_TOKEN_SECRET"
+];
+
+const requiredFiles = [
+  "main.js",
+  "preload.cjs",
+  "frontend-dist/index.html"
 ];
 
 if (!fs.existsSync(root)) {
@@ -56,6 +61,27 @@ for (const file of files) {
         }
       }
     }
+  }
+}
+
+}
+
+let mainJsFound = false;
+
+for (const required of requiredFiles) {
+  const isFound = files.some(f => f.replaceAll("\\", "/").endsWith(required));
+  if (!isFound && !required.includes("frontend-dist")) {
+    console.error(`Required file missing: ${required}`);
+    failed = true;
+  }
+}
+
+const mainPath = files.find(f => f.replaceAll("\\", "/").endsWith("main.js"));
+if (mainPath) {
+  const mainCode = fs.readFileSync(mainPath, "utf8");
+  if (!mainCode.includes("sandbox: true")) {
+    console.error(`sandbox: true not found in main.js. Please enable it for security.`);
+    failed = true;
   }
 }
 

@@ -1,110 +1,23 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { Calendar, CheckCircle2, ChevronDown, Download, Eye, FileText, Filter, IndianRupee, MapPin, Printer, RefreshCw, Search, Settings2, Store, X, Info } from "lucide-react";
 import Card from "../components/Card";
 import StatusBadge from "../components/StatusBadge";
 import { createDocumentSignedDownload, getUserHistory } from "../services/api";
 import { getLocalHistory } from "../utils/localHistory";
+import { onOrderChanged } from "../utils/appEvents";
+import {
+  filterAndSortHistory,
+  computeSummary,
+  getStatusColor,
+  getStatusLabel as label,
+  formatDateTime,
+  formatDate,
+  getOrderPrintableSummary,
+  buildDocumentSettings
+} from "../utils/historySelectors";
 
-function formatDateTime(value) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function formatDate(value) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
-}
-
-function label(value) {
-  return String(value || "-")
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
-function paymentColor(status) {
-  const value = String(status || "").toLowerCase();
-  if (value.includes("paid") || value.includes("collected") || value.includes("verified")) return "green";
-  if (value.includes("failed") || value.includes("refund")) return "red";
-  return "amber";
-}
-
-function printStatusColor(status) {
-  const value = String(status || "").toLowerCase();
-  if (value.includes("collected") || value.includes("printed") || value.includes("ready")) return "green";
-  if (value.includes("failed") || value.includes("cancelled")) return "red";
-  return "slate";
-}
-
-function getOrderSearchText(order) {
-  return [
-    order.order_code,
-    order.status,
-    order.payment_status,
-    order.payment_method,
-    order.hub?.name,
-    order.hub?.code,
-    order.document?.file_name,
-    ...(order.documents || []).map((file) => file.file_name),
-  ].filter(Boolean).join(" ").toLowerCase();
-}
-
-function getOrderPrintableSummary(order) {
-  const config = order.print_config || {};
-  const document = order.document || {};
-  return [
-    config.paper_size || "A4",
-    label(config.color_mode || "black_white"),
-    config.sides || (config.duplex ? "Double-sided" : "Single-sided"),
-    `${document.printable_pages || order.pages || 0} pages`,
-    `${document.copies || order.copies || 1} copy`,
-  ].join(" • ");
-}
-
-function getPageRangeFromOptions(options, fallback = "all") {
-  const pages = options?.pages || {};
-  if (pages.mode === "custom") return pages.range || fallback || "custom";
-  return fallback || "all";
-}
-
-function getSidesLabel(options, fallback = "") {
-  const sides = options?.sides || fallback;
-  if (sides === "two_sided_long_edge" || sides === "double") return "Double-sided";
-  if (sides === "two_sided_short_edge") return "Double-sided short edge";
-  return "Single-sided";
-}
-
-function getWatermarkLabel(options) {
-  const watermark = options?.watermark || {};
-  if (!watermark.enabled) return "No";
-  return watermark.type ? `Yes • ${label(watermark.type)}` : "Yes";
-}
-
-function buildDocumentSettings(document, orderConfig) {
-  const options = document?.print_options || {};
-  return [
-    ["Paper", options.paperSize || orderConfig.paper_size || "A4"],
-    ["Color", label(options.colorMode || orderConfig.color_mode || "black_white")],
-    ["Sides", getSidesLabel(options, orderConfig.sides)],
-    ["Orientation", label(options.orientation || orderConfig.orientation || "auto")],
-    ["Copies", options.copies || document?.copies || orderConfig.copies || 1],
-    ["Page range", getPageRangeFromOptions(options, document?.page_range || orderConfig.page_range || "all")],
-    ["Pages/sheet", options.pagesPerSheet || orderConfig.pages_per_sheet || 1],
-    ["DPI", options.quality?.dpi || orderConfig.quality_dpi || 300],
-    ["Scaling", label(options.scale?.mode || orderConfig.scaling || "original")],
-    ["Margins", label(options.margins?.mode || orderConfig.margins || "default")],
-    ["Watermark", getWatermarkLabel(options.watermark ? options : { watermark: orderConfig.watermark })],
-  ];
-}
+const paymentColor = (status) => getStatusColor("payment", status);
+const printStatusColor = (status) => getStatusColor("print", status);
 
 function SummaryCard({ title, value, icon }) {
   return (
@@ -153,7 +66,7 @@ function EmptyState({ currentUser }) {
   );
 }
 
-export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, onOpenPayment, onReprintOrder }) {
+export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, onOpenPayment, onReprintOrder, onReprintWithSettings }) {
   const [historyData, setHistoryData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -168,32 +81,52 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
   const [hubFilter, setHubFilter] = useState("all");
   const [downloadError, setDownloadError] = useState("");
   const [documentPreview, setDocumentPreview] = useState(null);
+  const [historyStale, setHistoryStale] = useState(false);
+  const lastFetchTime = useRef(0);
 
-  useEffect(() => {
+  const loadHistory = (force = false) => {
     if (!currentUser || currentUser.role !== "user") {
       setHistoryData(null);
       return;
     }
 
-    let ignore = false;
     setLoading(true);
     setError("");
 
-    getUserHistory()
+    getUserHistory({ force, userId: currentUser.id })
       .then((data) => {
-        if (!ignore) setHistoryData(data);
+        setHistoryData(data);
+        lastFetchTime.current = Date.now();
+        setHistoryStale(false);
       })
       .catch((err) => {
-        if (!ignore) setError(err.message || "Could not load print history.");
+        setError(err.message || "Could not load print history.");
       })
       .finally(() => {
-        if (!ignore) setLoading(false);
+        setLoading(false);
       });
+  };
 
-    return () => {
-      ignore = true;
+  useEffect(() => {
+    loadHistory(false);
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    const handleFocus = () => {
+      const isExpired = Date.now() - lastFetchTime.current > 120000;
+      if (historyStale || isExpired) {
+        loadHistory(false);
+      }
     };
-  }, [currentUser, lastUpdatedAt]);
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [currentUser?.id, historyStale]);
+
+  useEffect(() => {
+    return onOrderChanged(() => {
+      setHistoryStale(true);
+    });
+  }, [currentUser?.id]);
 
   const historyOrders = Array.isArray(historyData?.orders) ? historyData.orders : [];
   const localOrders = getLocalHistory().map((order) => ({
@@ -265,12 +198,9 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
 
   const visibleSource = historyOrders.length || historyData ? historyOrders : [...fallbackOrders, ...localOrders];
 
-  const summary = historyData?.summary || {
-    total_orders: visibleSource.length,
-    total_pages_printed: visibleSource.reduce((sum, order) => sum + Number(order.pages || 0) * Number(order.copies || 1), 0),
-    total_amount_spent: visibleSource.reduce((sum, order) => sum + Number(order.amount || 0), 0),
-    last_print_date: visibleSource[0]?.created_at || null,
-  };
+  const summary = useMemo(() => {
+    return historyData?.summary || computeSummary(visibleSource);
+  }, [historyData, visibleSource]);
 
   const hubs = useMemo(() => {
     return [...new Set(visibleSource.map((order) => order.hub?.name).filter(Boolean))].sort();
@@ -285,21 +215,16 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
   }, [visibleSource]);
 
   const filteredOrders = useMemo(() => {
-    const searchText = search.trim().toLowerCase();
-    const fromTime = dateFrom ? new Date(`${dateFrom}T00:00:00`).getTime() : null;
-    const toTime = dateTo ? new Date(`${dateTo}T23:59:59`).getTime() : null;
-
-    return visibleSource.filter((order) => {
-      const createdTime = new Date(order.created_at).getTime();
-      if (searchText && !getOrderSearchText(order).includes(searchText)) return false;
-      if (fromTime && Number.isFinite(createdTime) && createdTime < fromTime) return false;
-      if (toTime && Number.isFinite(createdTime) && createdTime > toTime) return false;
-      if (status !== "all" && order.status !== status) return false;
-      if (paymentMethod !== "all" && (order.payment_method || order.payment?.method) !== paymentMethod) return false;
-      if (hubFilter !== "all" && order.hub?.name !== hubFilter) return false;
-      return true;
+    return filterAndSortHistory(visibleSource, {
+      search,
+      dateFrom,
+      dateTo,
+      status,
+      paymentMethod,
+      hubFilter,
+      sortBy: "newest"
     });
-  }, [dateFrom, dateTo, hubFilter, paymentMethod, search, status, visibleSource]);
+  }, [visibleSource, search, dateFrom, dateTo, status, paymentMethod, hubFilter]);
 
   async function downloadDocument(document, mode = "download") {
     if (!document?.document_id) return;
@@ -477,7 +402,14 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
                 onClick={() => onReprintOrder?.(order)}
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-sm font-bold text-white shadow-sm hover:bg-slate-800"
               >
-                <RefreshCw size={16} /> Reprint with these settings
+                <RefreshCw size={16} /> Reprint exact settings
+              </button>
+              <button
+                type="button"
+                onClick={() => onReprintWithSettings?.(order)}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-900 shadow-sm hover:bg-slate-50"
+              >
+                <Settings2 size={16} /> Reprint with changes
               </button>
               <button
                 type="button"
@@ -500,12 +432,22 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
         <div>
-          <h2 className="text-3xl font-extrabold tracking-tight text-slate-950">Print History</h2>
-          <p className="mt-2 text-sm text-slate-600">View your previous orders, payment details, and print settings.</p>
+          <h2 className="text-2xl font-black tracking-tight lg:text-3xl">Print History</h2>
+          <p className="mt-1 text-sm text-slate-500">View your previous orders, payment details, and print settings.</p>
         </div>
-        {lastUpdatedAt && <p className="text-xs font-semibold text-slate-500">Last refreshed {new Date(lastUpdatedAt).toLocaleTimeString()}</p>}
+        <div className="flex items-center gap-2 text-sm text-slate-500">
+          <RefreshCw size={14} className={loading ? "animate-spin text-slate-900" : ""} />
+          <span>Last refreshed {formatDateTime(historyData?.summary?.last_print_date || new Date())}</span>
+          <button
+            onClick={() => loadHistory(true)}
+            disabled={loading}
+            className="ml-2 rounded border px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            Refresh
+          </button>
+        </div>
       </div>
 
       <div className="rounded-md bg-blue-50 p-4 border border-blue-100 flex items-start gap-3">
@@ -604,8 +546,11 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
                   >
                     View Details
                   </button>
-                  <button type="button" onClick={() => onReprintOrder?.(order)} className="rounded-xl border px-3 py-2 text-sm font-semibold hover:bg-slate-50">
-                    Reprint
+                  <button type="button" onClick={() => onReprintOrder?.(order)} className="rounded-xl border px-3 py-2 text-[11px] font-semibold hover:bg-slate-50">
+                    Reprint exactly
+                  </button>
+                  <button type="button" onClick={() => onReprintWithSettings?.(order)} className="rounded-xl border px-3 py-2 text-[11px] font-semibold hover:bg-slate-50">
+                    Reprint with changes
                   </button>
                 </div>
               </div>

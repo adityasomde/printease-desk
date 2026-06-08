@@ -1,4 +1,5 @@
 const PRODUCTION_API_BASE_URL = "https://printease-backend-byex.onrender.com";
+import { getCachedJson, invalidateCache } from "./requestCache";
 
 function normalizeApiBaseUrl(url) {
   const value = String(url || "").trim().replace(/\/+$/, "");
@@ -266,8 +267,19 @@ export function getOrderDocuments(orderId) {
   return apiRequest(`/api/orders/${encodeURIComponent(orderId)}/documents`);
 }
 
-export function getUserHistory() {
-  return apiRequest("/api/user/history");
+export function getUserHistory({ force = false, userId = "me" } = {}) {
+  return getCachedJson(
+    `user-history:${userId}`,
+    () => apiRequest("/api/user/history"),
+    {
+      ttlMs: 2 * 60 * 1000,
+      force,
+    }
+  );
+}
+
+export function invalidateUserHistory(userId = "me") {
+  invalidateCache(`user-history:${userId}`);
 }
 
 export function createDocumentSignedDownload(documentId) {

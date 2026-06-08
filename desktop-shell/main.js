@@ -4,8 +4,20 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import electron from "electron";
-import { diagnoseWindowsPrintHelper } from "./printer/windowsPrinter.js";
 import { diagnosePrinters, listPrinters, stopPrinting, testPrint } from "./printer/printExecutor.js";
+
+async function diagnoseWindowsPrintHelperSafe() {
+  if (process.platform !== "win32") {
+    return {
+      success: false,
+      platform: process.platform,
+      message: "Windows print helper diagnostics are only available on Windows.",
+    };
+  }
+
+  const module = await import("./printer/windows/windowsPrinter.js");
+  return module.diagnoseWindowsPrintHelper();
+}
 import { confirmPairing, sendHeartbeat, startPairing } from "./agent/heartbeat.js";
 import { processNextJob } from "./agent/jobPoller.js";
 import { syncPrinters } from "./agent/statusReporter.js";
@@ -1436,7 +1448,7 @@ function registerIpcHandlers() {
   }, app.isPackaged);
 
   secureHandle("printing:stop", () => stopPrinting(), app.isPackaged);
-  secureHandle("printer:diagnoseWindowsHelper", () => diagnoseWindowsPrintHelper(), app.isPackaged);
+  secureHandle("printer:diagnoseWindowsHelper", () => diagnoseWindowsPrintHelperSafe(), app.isPackaged);
   secureHandle("agent:status", () => sanitizeAgentSession(), app.isPackaged);
   secureHandle("agent:start-pairing", startAgentPairing, app.isPackaged);
   secureHandle("agent:open-approval-url", async (_event, url) => {

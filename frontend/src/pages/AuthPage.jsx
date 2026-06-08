@@ -15,6 +15,7 @@ export default function AuthPage({
   setShowPassword,
   username,
   setUsername,
+  usernameStatus,
   name,
   setName,
   mobile,
@@ -136,7 +137,17 @@ export default function AuthPage({
               name="username"
               autoComplete="username"
               disabled={authLoading}
-              helperText="Lowercase letters and numbers only. This is your visible PrintEase ID."
+              helperText={
+                usernameStatus === "checking" ? (
+                  <span className="text-blue-500 font-semibold animate-pulse">Checking availability...</span>
+                ) : usernameStatus === "available" ? (
+                  <span className="text-green-600 font-semibold">Username is available!</span>
+                ) : usernameStatus === "taken" ? (
+                  <span className="text-rose-600 font-semibold">Username is already taken.</span>
+                ) : (
+                  "Lowercase letters and numbers only. This is your visible PrintEase ID."
+                )
+              }
             />
 
             {showPasswordFields && (

@@ -1,27 +1,28 @@
-import { Component, useEffect, useMemo, useRef, useState, Suspense, lazy } from "react";
+import { Component, useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { emitOrderChanged } from "./utils/appEvents";
 import Navbar from "./components/Navbar";
 import BackendStatus from "./components/BackendStatus";
 import HomePage from "./pages/HomePage";
 import AuthPage from "./pages/AuthPage";
+import UserDashboard from "./pages/UserDashboard";
 import HubDashboard from "./pages/HubDashboard";
+import ProfilePage from "./pages/ProfilePage";
+import HubPricingPage from "./pages/HubPricingPage";
 import HubPrinterAgentPage from "./pages/HubPrinterAgentPage";
+import ApproveAgentPage from "./pages/ApproveAgentPage";
 import DesktopAgentPage from "./pages/DesktopAgentPage";
-
-const UserDashboard = lazy(() => import("./pages/UserDashboard"));
-const ProfilePage = lazy(() => import("./pages/ProfilePage"));
-const HubPricingPage = lazy(() => import("./pages/HubPricingPage"));
-const ApproveAgentPage = lazy(() => import("./pages/ApproveAgentPage"));
-const CentreCodePage = lazy(() => import("./pages/CentreCodePage"));
-const UploadPage = lazy(() => import("./pages/UploadPage"));
-const PaymentPage = lazy(() => import("./pages/PaymentPage"));
-const TrackPage = lazy(() => import("./pages/TrackPage"));
-const HistoryPage = lazy(() => import("./pages/HistoryPage"));
-const PlatformStatsPage = lazy(() => import("./pages/PlatformStatsPage"));
+import CentreCodePage from "./pages/CentreCodePage";
+import UploadPage from "./pages/UploadPage";
+import PaymentPage from "./pages/PaymentPage";
+import TrackPage from "./pages/TrackPage";
+import HistoryPage from "./pages/HistoryPage";
+import PlatformStatsPage from "./pages/PlatformStatsPage";
 import { initialCentres, initialOrders } from "./data/demoData";
 import { calculateTotalAmount, countSelectedPages, getPricePerPage } from "./utils/price";
+import { countSelectedPagesPreview, estimatePricePreview } from "./utils/printEstimate";
 import { clearStoredAuth, getStoredAuth, isDesktop, onPrintersUpdated, saveStoredAuth } from "./utils/desktopBridge";
-import { apiRequest } from "./services/api";
+import { apiRequest, invalidateUserHistory } from "./services/api";
 import { loadRazorpayCheckout } from "./utils/razorpay";
 import { saveOrderToLocalHistory } from "./utils/localHistory";
 import {
@@ -416,6 +417,9 @@ export default function App() {
   const [name, setName] = useState("");
   const [username, setUsernameState] = useState("");
   const [usernameEdited, setUsernameEdited] = useState(false);
+  const [usernameStatus, setUsernameStatus] = useState(null); // null, 'checking', 'available', 'taken'
+  const usernameCache = useRef({});
+  const usernameAbortController = useRef(null);
   const usernameSuggestionRequest = useRef(0);
   const [hubName, setHubName] = useState("");
   const [hubCode, setHubCode] = useState("");
@@ -428,6 +432,7 @@ export default function App() {
   const [selectedCentre, setSelectedCentre] = useState(null);
   const [documentFile, setDocumentFile] = useState(null);
   const [documentFiles, setDocumentFiles] = useState([]);
+  const [reprintSourceDocuments, setReprintSourceDocuments] = useState([]);
   const [multiFileConfigs, setMultiFileConfigs] = useState({});
   const [documentName, setDocumentName] = useState("");
   const [pages, setPages] = useState(1);
@@ -477,20 +482,18 @@ export default function App() {
       sessionStorage.setItem("printease_session_id", sessionId);
     }
 
-    const pingVisit = () => {
-      apiRequest("/api/stats/visit", { method: "POST", body: JSON.stringify({ sessionId, isPageView: false }) }).catch(() => {});
-    };
-
-    const interval = setInterval(pingVisit, 60000);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    const sessionId = sessionStorage.getItem("printease_session_id");
-    if (sessionId) {
-      apiRequest("/api/stats/visit", { method: "POST", body: JSON.stringify({ sessionId, isPageView: true }) }).catch(() => {});
+    const key = "printease_visit_sent";
+    if (!sessionStorage.getItem(key)) {
+      apiRequest("/api/stats/visit", {
+        method: "POST",
+        body: JSON.stringify({ sessionId, isPageView: false }),
+      })
+        .then(() => {
+          sessionStorage.setItem(key, "1");
+        })
+        .catch(() => {});
     }
-  }, [location.pathname]);
+  }, []);
 
   useEffect(() => {
     let ignore = false;
@@ -637,13 +640,13 @@ export default function App() {
   );
 
   const estimatedSelectedPageCount = useMemo(
-    () => countSelectedPages(selectedPages, pages) || pages,
+    () => countSelectedPagesPreview(selectedPages, pages) || pages,
     [selectedPages, pages]
   );
 
   const totalAmount = useMemo(
     () =>
-      calculateTotalAmount({
+      estimatePricePreview({
         pages: estimatedSelectedPageCount,
         copies,
         pricePerPage,
@@ -722,15 +725,18 @@ export default function App() {
     const bases = getUsernameBaseCandidates(nextName, nextEmail);
     const candidates = [];
 
-    for (const [baseIndex, base] of bases.entries()) {
+    for (const base of bases) {
       candidates.push(base);
-      const maxSerial = baseIndex === 0 ? 9999 : 999;
-      for (let index = 0; index <= maxSerial; index += 1) {
-        candidates.push(`${base}${index}`);
-      }
+      candidates.push(`${base}1`);
+      candidates.push(`${base}2`);
+      candidates.push(`${base}3`);
+      const randDigits = Math.floor(10 + Math.random() * 90);
+      candidates.push(`${base}${randDigits}`);
     }
 
-    for (const candidate of candidates) {
+    const uniqueCandidates = [...new Set(candidates)];
+
+    for (const candidate of uniqueCandidates) {
       try {
         const data = await apiRequest(`/api/auth/username-available?username=${encodeURIComponent(candidate)}`);
         if (usernameSuggestionRequest.current !== requestId || (!force && usernameEdited)) return;
@@ -772,6 +778,66 @@ export default function App() {
     setUsernameState(normalizeUsername(value));
   }
 
+  useEffect(() => {
+    if (authMode !== "register" && authMode !== "profile") {
+      setUsernameStatus(null);
+      return;
+    }
+
+    if (!usernameEdited) {
+      setUsernameStatus(null);
+      return;
+    }
+
+    const cleaned = username.trim().toLowerCase();
+
+    if (cleaned.length < 4) {
+      setUsernameStatus(null);
+      return;
+    }
+
+    if (!/^[a-z0-9]+$/.test(cleaned)) {
+      setUsernameStatus("taken");
+      return;
+    }
+
+    if (usernameCache.current[cleaned] !== undefined) {
+      setUsernameStatus(usernameCache.current[cleaned] ? "available" : "taken");
+      return;
+    }
+
+    setUsernameStatus("checking");
+
+    const timer = setTimeout(async () => {
+      if (usernameAbortController.current) {
+        usernameAbortController.current.abort();
+      }
+      usernameAbortController.current = new AbortController();
+      const { signal } = usernameAbortController.current;
+
+      try {
+        const data = await apiRequest(
+          `/api/auth/username-available?username=${encodeURIComponent(cleaned)}`,
+          { signal }
+        );
+        usernameCache.current[cleaned] = data.available;
+        setUsernameStatus(data.available ? "available" : "taken");
+      } catch (err) {
+        if (err.name === "AbortError") {
+          return;
+        }
+        setUsernameStatus(null);
+      }
+    }, 500);
+
+    return () => {
+      clearTimeout(timer);
+      if (usernameAbortController.current) {
+        usernameAbortController.current.abort();
+      }
+    };
+  }, [username, authMode, usernameEdited]);
+
   function generateStrongPassword() {
     const nextPassword = generateStrongPasswordValue();
     setPassword(nextPassword);
@@ -795,6 +861,7 @@ export default function App() {
     setAuthRole(role);
     setAuthMode("register");
     setUsernameEdited(false);
+    setUsernameStatus(null);
     suggestUniqueUsername(name, email, true);
     setAuthError("");
     navigate("auth");
@@ -809,6 +876,7 @@ export default function App() {
     setAuthMode(mode);
     if (mode === "register" || mode === "profile") {
       setUsernameEdited(false);
+      setUsernameStatus(null);
       suggestUniqueUsername(name, email, true);
     }
     setAuthError("");
@@ -872,6 +940,7 @@ export default function App() {
       const nextOrders = Array.isArray(data.orders) ? data.orders.map((item) => normalizeOrder(item, centreList)) : [];
       setOrders(nextOrders);
       setLastOrdersUpdatedAt(new Date().toISOString());
+      emitOrderChanged();
       return nextOrders;
     } catch (error) {
       return [];
@@ -1052,6 +1121,11 @@ export default function App() {
       return;
     }
 
+    if (authMode === "register" && usernameStatus === "taken") {
+      setAuthError("Username is already taken.");
+      return;
+    }
+
     if (authMode === "login" && !trimmedIdentifier) {
       setAuthError("Enter your username or email.");
       return;
@@ -1207,7 +1281,7 @@ export default function App() {
     }
 
     const filesToUpload = documentFiles.length ? documentFiles : documentFile ? [documentFile] : [];
-    if (!filesToUpload.length) {
+    if (!filesToUpload.length && !reprintSourceDocuments.length) {
       setPaymentError("Please upload a PDF document first.");
       navigate("upload");
       return;
@@ -1219,19 +1293,34 @@ export default function App() {
 
     try {
       const uploadedDocuments = [];
-      for (const file of filesToUpload) {
-        const formData = new FormData();
-        formData.append("document", file);
+      if (filesToUpload.length) {
+        for (const file of filesToUpload) {
+          const formData = new FormData();
+          formData.append("document", file);
 
-        const uploadData = await apiRequest("/api/uploads", {
-          method: "POST",
-          body: formData,
+          const uploadData = await apiRequest("/api/uploads", {
+            method: "POST",
+            body: formData,
+          });
+
+          uploadedDocuments.push(uploadData.document);
+        }
+      } else if (reprintSourceDocuments.length) {
+        reprintSourceDocuments.forEach(doc => {
+          uploadedDocuments.push({
+            id: doc.document_id,
+            fileName: doc.file_name,
+            pageCount: doc.original_pages
+          });
         });
-
-        uploadedDocuments.push(uploadData.document);
       }
 
-      const trustedPageCount = Number(uploadedDocuments[0]?.pageCount) || pages;
+      let totalPagesSum = 0;
+      for (const doc of uploadedDocuments) {
+        if (doc.pageCount) totalPagesSum += Number(doc.pageCount);
+      }
+      const trustedPageCount = totalPagesSum > 0 ? totalPagesSum : pages;
+
       if (trustedPageCount !== pages) {
         setPages(trustedPageCount);
       }
@@ -1261,8 +1350,8 @@ export default function App() {
         body: JSON.stringify({
           centreCode: selectedCentre.code,
           documentIds: uploadedDocuments.map((document) => document.id),
-          files: uploadedDocuments.map((document) => {
-            const config = multiFileConfigs?.[document.fileName] || {
+          files: uploadedDocuments.map((document, index) => {
+            const config = multiFileConfigs?.[index] || {
               selectedPages,
               copies,
               colorType,
@@ -1285,6 +1374,7 @@ export default function App() {
             return {
               documentId: document.id,
               documentName: document.fileName,
+              pages: document.pageCount || config.pages || 1,
               selectedPages: config.selectedPages,
               copies: config.copies,
               colorType: config.colorType,
@@ -1296,11 +1386,11 @@ export default function App() {
               scaleMode: config.scaleMode,
               marginMode: config.marginMode,
               watermarkEnabled: config.watermark,
-              printOptions: multiFileConfigs?.[document.fileName] ? buildPrintOptions(config) : defaultPrintOptions,
+              printOptions: multiFileConfigs?.[index] ? buildPrintOptions(config) : defaultPrintOptions,
             };
           }),
           documentName: uploadedDocuments.length === 1
-            ? uploadedDocuments[0]?.fileName || documentName || filesToUpload[0].name
+            ? uploadedDocuments[0]?.fileName || documentName || filesToUpload[0]?.name
             : `${uploadedDocuments.length} uploaded documents`,
           pages: trustedPageCount,
           selectedPages,
@@ -1323,6 +1413,7 @@ export default function App() {
       setBackendPrice(orderData.price || null);
       
       saveOrderToLocalHistory(nextOrder, defaultPrintOptions, orderData.price, uploadedDocuments);
+      invalidateUserHistory(currentUser?.id || "me");
 
       if (orderData.orderAccessToken) {
         setOrderAccessToken(orderData.orderAccessToken);
@@ -1358,6 +1449,11 @@ export default function App() {
       return;
     }
 
+    if (paymentMethod === "manual" && pendingPayment?.orderId === order.backendId && pendingPayment?.method === "MANUAL_UPI_OR_CASH") {
+      navigate("track");
+      return;
+    }
+
     setPaymentLoading(true);
     setPaymentError("");
 
@@ -1372,6 +1468,8 @@ export default function App() {
         setOrder(requestedOrder);
         setOrders((prev) => upsertOrder(prev, requestedOrder));
         setLastOrdersUpdatedAt(new Date().toISOString());
+        emitOrderChanged();
+        invalidateUserHistory(currentUser?.id || "me");
         setPendingPayment(paymentData.payment || {
           id: `manual-${order.backendId}`,
           orderId: order.backendId,
@@ -1416,6 +1514,8 @@ export default function App() {
         setOrder(requestedOrder);
         setOrders((prev) => upsertOrder(prev, requestedOrder));
         setLastOrdersUpdatedAt(new Date().toISOString());
+      emitOrderChanged();
+        invalidateUserHistory(currentUser?.id || "me");
       }
 
       if (paymentMethod === "razorpay" && paymentData.razorpay?.orderId) {
@@ -1451,6 +1551,8 @@ export default function App() {
               setOrder(verifiedOrder);
               setOrders((prev) => upsertOrder(prev, verifiedOrder));
               setLastOrdersUpdatedAt(new Date().toISOString());
+      emitOrderChanged();
+              invalidateUserHistory(currentUser?.id || "me");
               setPendingPayment(null);
               setUpiQr(null);
               navigate("track");
@@ -1516,6 +1618,55 @@ export default function App() {
     navigate("track");
   }
 
+  function reprintWithSettings(historyOrder) {
+    if (!currentUser || currentUser.role !== "user" || !historyOrder) return;
+
+    const config = historyOrder.print_config || {};
+    const document = historyOrder.document || {};
+    const nextCentre = centres.find((centre) => (
+      centre.id === historyOrder.hub?.id ||
+      centre.code === historyOrder.hub?.code ||
+      centre.name === historyOrder.hub?.name
+    ));
+
+    if (nextCentre) setSelectedCentre(nextCentre);
+    
+    const docs = historyOrder.documents?.length ? historyOrder.documents : [historyOrder.document].filter(Boolean);
+    setReprintSourceDocuments(docs);
+    
+    setDocumentFile(null);
+    setDocumentFiles([]);
+    setMultiFileConfigs({});
+    
+    setDocumentName(document.file_name || historyOrder.documentName || "");
+    setPages(Number(document.original_pages || historyOrder.pages || 1));
+    setSelectedPages(config.page_range && config.page_range !== "all" ? config.page_range : "");
+    setCopies(Number(config.copies || document.copies || historyOrder.copies || 1));
+    setColorType(config.color_mode === "color" ? "color" : "bw");
+    setSideType(config.duplex ? "double" : "single");
+    setPaperSize(config.paper_size || "A4");
+    setPagesPerSheet(Number(config.pages_per_sheet || 1));
+    setOrientation(config.orientation || "auto");
+    setPrintDpi(Number(config.quality_dpi || 300));
+    setScaleMode(config.scaling || "original");
+    setMarginMode(config.margins || "default");
+    setWatermark(Boolean(config.watermark?.enabled));
+    setWatermarkType(config.watermark?.type || "order_code");
+    setWatermarkText(config.watermark?.text || "");
+    setWatermarkPosition(config.watermark?.position || "bottom_right");
+    setWatermarkOpacity(Number(config.watermark?.opacity || 0.18));
+    setWatermarkFontSize(Number(config.watermark?.fontSize || 18));
+    setWatermarkRotation(Number(config.watermark?.rotation || 45));
+    
+    setBackendPrice(null);
+    setPaymentError("");
+    setOrder(null);
+    setPendingPayment(null);
+    setUpiQr(null);
+    
+    navigate("upload");
+  }
+
   async function reprintWithSameSettings(historyOrder) {
     if (!currentUser || currentUser.role !== "user" || !historyOrder) return;
 
@@ -1551,8 +1702,8 @@ export default function App() {
               documentName: d.file_name,
               selectedPages: d.page_range,
               copies: d.copies,
-              colorType: printOptions.colorMode || "black_white",
-              sideType: printOptions.sides || "one_sided",
+              colorType: printOptions.colorMode === "color" ? "color" : "bw",
+              sideType: printOptions.duplex || printOptions.sides?.startsWith("two_sided") ? "double" : "single",
               paperSize: printOptions.paperSize || "A4",
               pagesPerSheet: printOptions.pagesPerSheet || 1,
               orientation: printOptions.orientation || "auto",
@@ -1572,6 +1723,8 @@ export default function App() {
       setOrder(createdOrder);
       setOrders((prev) => upsertOrder(prev, createdOrder));
       setLastOrdersUpdatedAt(new Date().toISOString());
+      emitOrderChanged();
+      invalidateUserHistory(currentUser?.id || "me");
 
       setSelectedCentre(nextCentre);
       setPendingPayment({
@@ -1614,6 +1767,8 @@ export default function App() {
         setOrder(requestedOrder);
         setOrders((prev) => upsertOrder(prev, requestedOrder));
         setLastOrdersUpdatedAt(new Date().toISOString());
+      emitOrderChanged();
+        invalidateUserHistory(currentUser?.id || "me");
       }
       await loadRazorpayCheckout();
 
@@ -1646,6 +1801,8 @@ export default function App() {
             setOrder(nextOrder);
             setOrders((prev) => upsertOrder(prev, nextOrder));
             setLastOrdersUpdatedAt(new Date().toISOString());
+      emitOrderChanged();
+            invalidateUserHistory(currentUser?.id || "me");
             setPendingPayment(null);
             setUpiQr(null);
           } catch (error) {
@@ -1692,6 +1849,8 @@ export default function App() {
         setOrder(requestedOrder);
         setOrders((prev) => upsertOrder(prev, requestedOrder));
         setLastOrdersUpdatedAt(new Date().toISOString());
+      emitOrderChanged();
+        invalidateUserHistory(currentUser?.id || "me");
       }
     } catch (error) {
       setPaymentError(error.message || "Could not create UPI QR.");
@@ -1713,6 +1872,8 @@ export default function App() {
       setOrder(verifiedOrder);
       setOrders(prev => upsertOrder(prev, verifiedOrder));
       setLastOrdersUpdatedAt(new Date().toISOString());
+      emitOrderChanged();
+      invalidateUserHistory(currentUser?.id || "me");
       setPendingPayment(null);
       setUpiQr(null);
     } catch (error) {
@@ -1734,6 +1895,8 @@ export default function App() {
         const savedOrder = normalizeOrder(data.order, centres);
         setOrders((prev) => upsertOrder(prev, savedOrder));
         setLastOrdersUpdatedAt(new Date().toISOString());
+      emitOrderChanged();
+        invalidateUserHistory(currentUser?.id || "me");
         if (order?.id === orderId || order?.backendId === existingOrder.backendId) setOrder(savedOrder);
         return;
       }
@@ -1744,13 +1907,14 @@ export default function App() {
 
     setOrders((prev) => prev.map((item) => (item.id === orderId ? { ...item, status: nextStatus } : item)));
     setLastOrdersUpdatedAt(new Date().toISOString());
+    emitOrderChanged();
     if (order?.id === orderId) setOrder((prev) => ({ ...prev, status: nextStatus }));
   }
 
   useEffect(() => {
     if (!currentUser) return;
 
-    const shouldPollHistory = page === "history";
+    const shouldPollHistory = false; // Never poll user history page
     const shouldPollTrack = page === "track" && order?.backendId;
     if (!shouldPollHistory && !shouldPollTrack) return;
 
@@ -1827,9 +1991,8 @@ export default function App() {
         <BackendStatus />
 
         <RouteErrorBoundary>
-          <Suspense fallback={<div className="p-8 text-center font-semibold text-slate-500">Loading page...</div>}>
-            <Routes>
-              <Route
+          <Routes>
+            <Route
               path={ROUTES.home}
               element={
                 <HomePage
@@ -1863,6 +2026,7 @@ export default function App() {
                 setShowPassword={setShowPassword}
                 username={username}
                 setUsername={updateUsername}
+                usernameStatus={usernameStatus}
                 name={name}
                 setName={updateName}
                 mobile={mobile}
@@ -1951,7 +2115,7 @@ export default function App() {
           />
           <Route path={ROUTES.desktopAgent} element={<DesktopAgentPage currentUser={currentUser} />} />
           <Route path={ROUTES.centre} element={<CentreCodePage centreCode={centreCode} setCentreCode={setCentreCode} handleCentreCode={handleCentreCode} selectCentreByCode={selectCentreByCode} centres={prioritizedCentres} selectCentreAndUpload={selectCentreAndUpload} lookupLoading={centreLookupLoading} lookupError={centreLookupError} autoStartScanner={Boolean(location.state?.autoStartScanner)} />} />
-          <Route path={ROUTES.upload} element={<UploadPage currentUser={currentUser} startLogin={startLogin} selectedCentre={selectedCentre} documentFile={documentFile} setDocumentFile={setDocumentFile} documentFiles={documentFiles} setDocumentFiles={setDocumentFiles} multiFileConfigs={multiFileConfigs} setMultiFileConfigs={setMultiFileConfigs} documentName={documentName} setDocumentName={setDocumentName} pages={pages} setPages={setPages} selectedPages={selectedPages} setSelectedPages={setSelectedPages} copies={copies} setCopies={setCopies} colorType={colorType} setColorType={setColorType} sideType={sideType} setSideType={setSideType} paperSize={paperSize} setPaperSize={setPaperSize} pagesPerSheet={pagesPerSheet} setPagesPerSheet={setPagesPerSheet} orientation={orientation} setOrientation={setOrientation} printDpi={printDpi} setPrintDpi={setPrintDpi} scaleMode={scaleMode} setScaleMode={setScaleMode} marginMode={marginMode} setMarginMode={setMarginMode} watermark={watermark} setWatermark={setWatermark} watermarkType={watermarkType} setWatermarkType={setWatermarkType} watermarkText={watermarkText} setWatermarkText={setWatermarkText} watermarkPosition={watermarkPosition} setWatermarkPosition={setWatermarkPosition} watermarkOpacity={watermarkOpacity} setWatermarkOpacity={setWatermarkOpacity} watermarkFontSize={watermarkFontSize} setWatermarkFontSize={setWatermarkFontSize} watermarkRotation={watermarkRotation} setWatermarkRotation={setWatermarkRotation} pricePerPage={pricePerPage} estimatedSelectedPageCount={estimatedSelectedPageCount} totalAmount={totalAmount} backendPrice={backendPrice} preparePayment={preparePayment} paymentLoading={paymentLoading} paymentError={paymentError} navigate={navigate} />} />
+          <Route path={ROUTES.upload} element={<UploadPage currentUser={currentUser} startLogin={startLogin} selectedCentre={selectedCentre} documentFile={documentFile} setDocumentFile={setDocumentFile} documentFiles={documentFiles} setDocumentFiles={setDocumentFiles} reprintSourceDocuments={reprintSourceDocuments} setReprintSourceDocuments={setReprintSourceDocuments} multiFileConfigs={multiFileConfigs} setMultiFileConfigs={setMultiFileConfigs} documentName={documentName} setDocumentName={setDocumentName} pages={pages} setPages={setPages} selectedPages={selectedPages} setSelectedPages={setSelectedPages} copies={copies} setCopies={setCopies} colorType={colorType} setColorType={setColorType} sideType={sideType} setSideType={setSideType} paperSize={paperSize} setPaperSize={setPaperSize} pagesPerSheet={pagesPerSheet} setPagesPerSheet={setPagesPerSheet} orientation={orientation} setOrientation={setOrientation} printDpi={printDpi} setPrintDpi={setPrintDpi} scaleMode={scaleMode} setScaleMode={setScaleMode} marginMode={marginMode} setMarginMode={setMarginMode} watermark={watermark} setWatermark={setWatermark} watermarkType={watermarkType} setWatermarkType={setWatermarkType} watermarkText={watermarkText} setWatermarkText={setWatermarkText} watermarkPosition={watermarkPosition} setWatermarkPosition={setWatermarkPosition} watermarkOpacity={watermarkOpacity} setWatermarkOpacity={setWatermarkOpacity} watermarkFontSize={watermarkFontSize} setWatermarkFontSize={setWatermarkFontSize} watermarkRotation={watermarkRotation} setWatermarkRotation={setWatermarkRotation} pricePerPage={pricePerPage} estimatedSelectedPageCount={estimatedSelectedPageCount} totalAmount={totalAmount} backendPrice={backendPrice} preparePayment={preparePayment} paymentLoading={paymentLoading} paymentError={paymentError} navigate={navigate} />} />
           <Route
             path={ROUTES.payment}
             element={
@@ -1980,12 +2144,11 @@ export default function App() {
               />
             }
           />
-            <Route path={ROUTES.history} element={<HistoryPage orders={orders} currentUser={currentUser} lastUpdatedAt={lastOrdersUpdatedAt} onOpenPayment={openPaymentRequest} onReprintOrder={reprintWithSameSettings} />} />
+            <Route path={ROUTES.history} element={<HistoryPage orders={orders} currentUser={currentUser} lastUpdatedAt={lastOrdersUpdatedAt} onOpenPayment={openPaymentRequest} onReprintOrder={reprintWithSameSettings} onReprintWithSettings={reprintWithSettings} />} />
             <Route path={ROUTES.orderHistory} element={<Navigate to={ROUTES.history} replace />} />
             <Route path={ROUTES.usageHistory} element={<Navigate to={ROUTES.history} replace />} />
             <Route path="*" element={<Navigate to={ROUTES.home} replace />} />
-            </Routes>
-          </Suspense>
+          </Routes>
         </RouteErrorBoundary>
       </main>
     </div>

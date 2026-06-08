@@ -127,6 +127,8 @@ node_modules/
 
 # generated desktop/frontend build output
 release/
+!scripts/release/
+!scripts/release/**
 out/
 build/
 .cache/

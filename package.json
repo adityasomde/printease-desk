@@ -15,6 +15,10 @@
     "dist:win": "npm run build:frontend && npm run dist:win --prefix desktop-shell",
     "dist:appimage": "npm run build:frontend && npm run dist:appimage --prefix desktop-shell",
     "verify:package": "npm run verify:package --prefix desktop-shell",
-    "release:ci-note": "echo Push tag vX.Y.Z or run Desktop Release Build from GitHub Actions"
+    "release:prepare": "node scripts/release/prepare-version.cjs",
+    "release:test:linux": "node scripts/release/test-linux.cjs",
+    "release:linux": "node scripts/release/build-linux.cjs",
+    "release:tag": "node scripts/release/tag-release.cjs",
+    "release:help": "node scripts/release/help.cjs"
   }
 }

@@ -1,8 +1,12 @@
-import { useCallback, useMemo } from "react";
-import { Search } from "lucide-react";
+import { lazy, Suspense, useCallback, useMemo, useState } from "react";
+import { Search, Map } from "lucide-react";
 import Card from "../components/Card";
 import CentrePriceCard from "../components/CentrePriceCard";
 import CentreScannerTile from "../components/CentreScannerTile";
+
+// Lazy-load the map modal — only downloaded when user clicks "Map" for the first time.
+// This keeps the desktop bundle untouched since DesktopAgentPage never imports this component.
+const CentreMapModal = lazy(() => import("../components/CentreMapModal"));
 
 export default function CentreCodePage({
   centreCode,
@@ -15,6 +19,8 @@ export default function CentreCodePage({
   lookupError,
   autoStartScanner = false,
 }) {
+  const [mapOpen, setMapOpen] = useState(false);
+
   const handleScan = useCallback(async (code) => {
     setCentreCode(code);
     await selectCentreByCode(code);
@@ -32,6 +38,15 @@ export default function CentreCodePage({
         .includes(query)
     );
   }, [centreCode, centres]);
+
+  const mappableCentres = useMemo(
+    () => centres.filter((c) => c.locationEnabled && c.latitude != null && c.longitude != null),
+    [centres]
+  );
+
+  function openMapForCentre() {
+    setMapOpen(true);
+  }
 
   return (
     <div className="space-y-8">
@@ -64,13 +79,23 @@ export default function CentreCodePage({
                 className="w-full rounded-2xl border bg-slate-50 py-4 pl-14 pr-6 text-lg outline-none focus:bg-white focus:ring-2 focus:ring-slate-300 transition-all"
               />
             </div>
-            <button
-              onClick={handleCentreCode}
-              disabled={lookupLoading || !String(centreCode).trim()}
-              className="inline-flex w-full sm:w-fit items-center justify-center gap-2 rounded-2xl bg-slate-900 px-8 py-4 font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50"
-            >
-              Search Online
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={handleCentreCode}
+                disabled={lookupLoading || !String(centreCode).trim()}
+                className="inline-flex flex-1 sm:flex-none items-center justify-center gap-2 rounded-2xl bg-slate-900 px-8 py-4 font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50"
+              >
+                Search Online
+              </button>
+              {mappableCentres.length > 0 && (
+                <button
+                  onClick={openMapForCentre}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 font-semibold text-emerald-700 hover:bg-emerald-100 transition"
+                >
+                  <Map size={18} /> View Map
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -79,13 +104,29 @@ export default function CentreCodePage({
       </Card>
 
       <div>
-        <div className="mb-4">
-          <h3 className="text-xl font-bold">Centre List With Prices</h3>
-          <p className="text-sm text-slate-600">Frequently used centres appear first.</p>
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h3 className="text-xl font-bold">Centre List With Prices</h3>
+            <p className="text-sm text-slate-600">Frequently used centres appear first.</p>
+          </div>
+          {mappableCentres.length > 0 && (
+            <button
+              onClick={openMapForCentre}
+              className="hidden sm:flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 transition"
+            >
+              <Map size={15} />
+              {mappableCentres.length} centre{mappableCentres.length !== 1 ? "s" : ""} on map
+            </button>
+          )}
         </div>
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {filteredCentres.map((centre) => (
-            <CentrePriceCard key={centre.id} centre={centre} onUpload={() => selectCentreAndUpload(centre)} />
+            <CentrePriceCard
+              key={centre.id}
+              centre={centre}
+              onUpload={() => selectCentreAndUpload(centre)}
+              onOpenMap={openMapForCentre}
+            />
           ))}
         </div>
         {filteredCentres.length === 0 && (
@@ -96,6 +137,17 @@ export default function CentreCodePage({
           </div>
         )}
       </div>
+
+      {/* Lazy-loaded map modal — only rendered when opened */}
+      {mapOpen && (
+        <Suspense fallback={null}>
+          <CentreMapModal
+            centres={filteredCentres.length > 0 ? filteredCentres : centres}
+            onClose={() => setMapOpen(false)}
+            onSelectCentre={(centre) => selectCentreAndUpload(centre)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

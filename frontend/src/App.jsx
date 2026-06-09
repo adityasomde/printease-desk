@@ -201,6 +201,14 @@ function normalizeCentre(centre) {
     colorDouble: pricing.colorDouble ?? centre.colorDouble ?? 3,
     watermarkCharge: pricing.watermarkCharge ?? centre.watermarkCharge ?? 2,
     printerOnline: centre.printerOnline ?? centre.isOnline ?? false,
+    // Location fields (safe to be undefined/null when not provided)
+    locationEnabled: centre.locationEnabled ?? false,
+    latitude: centre.latitude ?? null,
+    longitude: centre.longitude ?? null,
+    addressText: centre.addressText ?? null,
+    area: centre.area ?? null,
+    city: centre.city ?? null,
+    mapUpdatedAt: centre.mapUpdatedAt ?? null,
   };
 }
 

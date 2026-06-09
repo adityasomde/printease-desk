@@ -13,6 +13,7 @@
     "security/",
     "printer/",
     "local/",
+    "assets/",
     "package.json"
   ],
   "scripts": {
@@ -55,7 +56,8 @@
       "printer/**/*",
       "local/**/*",
       "updater.js",
-      "scripts/**/*"
+      "scripts/**/*",
+      "assets/**/*"
     ],
     "extraResources": [
       {
@@ -83,6 +85,7 @@
           ]
         }
       ],
+      "icon": "build/icon.png",
       "artifactName": "PrintEase-Desktop-Setup-${version}.${ext}"
     },
     "nsis": {

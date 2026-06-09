@@ -14,6 +14,7 @@ files:
   - local/**/*
   - updater.js
   - scripts/**/*
+  - assets/**/*
   - "!printer/linux/**/*"
   - "!**/*.md"
   - "!**/docs/**/*"
@@ -44,6 +45,7 @@ win:
     - target: nsis
       arch:
         - x64
+  icon: "build/icon.png"
   artifactName: "PrintEase-Desktop-Setup-${version}.${ext}"
 nsis:
   oneClick: false

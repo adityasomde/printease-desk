@@ -1,12 +1,12 @@
 import { User, QrCode, History, Home, Building2, Printer, LogOut, Menu, X, Settings, Plus, Store, Upload } from "lucide-react";
+import logo from '../assets/logo.png';
 
 function NavButton({ children, icon, active, onClick }) {
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition ${
-        active ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
-      }`}
+      className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition ${active ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
+        }`}
     >
       {icon}
       {children}
@@ -30,9 +30,8 @@ function MobileNavButton({ label, icon, active, onClick }) {
   return (
     <button
       onClick={onClick}
-      className={`flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[11px] font-semibold ${
-        active ? "bg-slate-900 text-white" : "text-slate-600"
-      }`}
+      className={`flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[11px] font-semibold ${active ? "bg-slate-900 text-white" : "text-slate-600"
+        }`}
     >
       {icon}
       <span className="max-w-full truncate">{label}</span>
@@ -55,15 +54,9 @@ export default function Navbar({
   return (
     <>
       <header className="sticky top-0 z-50 border-b bg-white/90 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
-          <button onClick={() => navigate("home")} className="flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-900 text-white">
-              <Printer size={22} />
-            </div>
-            <div className="text-left">
-              <h1 className="text-lg font-bold">PrintEase</h1>
-              <p className="text-xs text-slate-500">Scan. Upload. Pay. Print.</p>
-            </div>
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-2">
+          <button onClick={() => navigate("home")} className="flex items-center ml-[-8px] mr-8">
+            <img src={logo} alt="PrintEase" className="h-[68px] w-auto object-contain" />
           </button>
 
           <nav className="hidden items-center gap-2 md:flex">

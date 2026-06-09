@@ -885,8 +885,8 @@ export default function HubHistoryPage({ currentHub, hubOrders, updateOrderStatu
         </div>
 
         {/* Orders Table */}
-        <div className="mt-6 max-h-[460px] overflow-y-auto overflow-x-auto border rounded-2xl">
-          <table className="w-full min-w-[840px] table-fixed text-left text-sm border-collapse">
+        <div className="mt-6 max-h-[720px] overflow-y-auto overflow-x-auto border rounded-2xl">
+          <table className="w-full min-w-[1100px] table-fixed text-left text-sm border-collapse">
             <thead className="sticky top-0 bg-white z-10 shadow-sm border-b">
               <tr className="border-b text-xs uppercase tracking-wide text-slate-500 bg-slate-50">
                 <th className="w-24 px-2 py-3">Order</th>

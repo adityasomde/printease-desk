@@ -251,3 +251,11 @@ export function clearStoredAgent() {
 export function getDeviceIdentity() {
   return callDesktopAgent("getDeviceIdentity", "getDeviceIdentity", "Could not load desktop device identity.");
 }
+
+/**
+ * Open a URL in the system's default external browser via Electron shell.openExternal.
+ * Safe URLs only (https:// or http://).
+ */
+export function openExternalUrl(url) {
+  return callDesktop("openExternalUrl", "Could not open external URL.", url);
+}

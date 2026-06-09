@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link2, Printer, RefreshCw, Send, Wifi, X, ShieldCheck, Loader2 } from "lucide-react";
 import Card from "../components/Card";
+import HubLocationCard from "../components/HubLocationCard";
 import { registerDesktopAgent } from "../services/api";
 import {
   checkBackendHealth,
@@ -1005,6 +1006,11 @@ export default function DesktopAgentPage({ currentUser = null }) {
           </div>
         )}
       </Card>
+
+      {/* Hub Location Visibility — lightweight card, no map library */}
+      {isHubAccount && (
+        <HubLocationCard currentCentre={null} />
+      )}
     </div>
   );
 }

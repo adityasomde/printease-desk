@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { BarChart3, Copy, Download, Eye, FileText, IndianRupee, Link2, PauseCircle, Printer, QrCode, RefreshCw, Send, ShieldCheck, Wifi, X, XCircle, Search, Filter, ArrowUpDown } from "lucide-react";
+import { BarChart3, Copy, Download, Eye, FileText, IndianRupee, Link2, PauseCircle, Printer, QrCode, RefreshCw, Send, Settings, ShieldCheck, Wifi, X, XCircle, Search, Filter, ArrowUpDown } from "lucide-react";
+import HubOrderConfigModal from "../components/HubOrderConfigModal";
 import Card from "../components/Card";
 import Metric from "../components/Metric";
 import StatusBadge from "../components/StatusBadge";
@@ -165,6 +166,7 @@ export default function HubHistoryPage({ currentHub, hubOrders, updateOrderStatu
   const [collectingOrderId, setCollectingOrderId] = useState("");
   const [statusActionId, setStatusActionId] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
+  const [configModalOpen, setConfigModalOpen] = useState(false);
   
   // Advanced filters state
   const [orderSearch, setOrderSearch] = useState("");
@@ -456,6 +458,26 @@ export default function HubHistoryPage({ currentHub, hubOrders, updateOrderStatu
       setAgentError(error.message || "Could not load order documents.");
     } finally {
       setDocumentsLoading(false);
+    }
+  }
+
+  async function handleSaveConfig(payload) {
+    const orderId = documentModalOrder.backendId || documentModalOrder.id;
+    try {
+      const data = await apiRequest(`/api/hubs/orders/${orderId}/configuration`, {
+        method: "PATCH",
+        body: JSON.stringify(payload)
+      });
+      if (typeof refreshOrders === "function") {
+        await refreshOrders();
+      }
+      if (data.order) {
+        setDocumentModalOrder(prev => ({ ...prev, ...data.order }));
+      }
+      const docsData = await getOrderDocuments(orderId);
+      setOrderDocuments(Array.isArray(docsData.documents) ? docsData.documents : []);
+    } catch (error) {
+      throw new Error(error.message || "Failed to update configuration");
     }
   }
 
@@ -1109,6 +1131,30 @@ export default function HubHistoryPage({ currentHub, hubOrders, updateOrderStatu
               </button>
             </div>
 
+            {(() => {
+              const isManualPayment = ["draft", "pending", "collected"].includes(String(documentModalOrder.paymentStatus || "").toLowerCase());
+              const isClosed = ["printed", "completed", "cancelled"].includes(String(documentModalOrder.status || "").toLowerCase());
+              const hasActiveJobs = Boolean(documentModalOrder.job || (documentModalOrder.printJobs && documentModalOrder.printJobs.length > 0));
+              const canConfigure = isManualPayment && !isClosed && !hasActiveJobs && !documentModalOrder.configLockedAt;
+
+              if (!canConfigure) return null;
+
+              return (
+                <div className="mt-4 flex items-center justify-between rounded-2xl bg-indigo-50 p-4 dark:bg-indigo-950/20">
+                  <div className="text-xs text-indigo-700 dark:text-indigo-300 font-medium">
+                    Need to correct settings or copies for manual payment?
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setConfigModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-indigo-500 transition shadow-sm"
+                  >
+                    <Settings size={14} /> Adjust Print Settings
+                  </button>
+                </div>
+              );
+            })()}
+
             <div className="mt-5 grid gap-3">
               {documentsLoading && <p className="text-sm text-slate-500">Loading documents...</p>}
               {!documentsLoading && orderDocuments.length === 0 && <p className="text-sm text-slate-500">No documents found.</p>}
@@ -1161,6 +1207,17 @@ export default function HubHistoryPage({ currentHub, hubOrders, updateOrderStatu
             </div>
           </div>
         </div>
+      )}
+
+      {documentModalOrder && (
+        <HubOrderConfigModal
+          isOpen={configModalOpen}
+          onClose={() => setConfigModalOpen(false)}
+          order={documentModalOrder}
+          files={orderDocuments}
+          pricing={currentHub?.pricing || {}}
+          onSave={handleSaveConfig}
+        />
       )}
     </div>
   );

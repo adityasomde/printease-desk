@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { BarChart3, Copy, Download, Eye, FileText, IndianRupee, Link2, PauseCircle, Printer, QrCode, RefreshCw, Send, ShieldCheck, Wifi, X, XCircle } from "lucide-react";
+import { BarChart3, Copy, Download, Eye, FileText, IndianRupee, Link2, PauseCircle, Printer, QrCode, RefreshCw, Send, Settings, ShieldCheck, Wifi, X, XCircle } from "lucide-react";
+import HubOrderConfigModal from "../components/HubOrderConfigModal";
 import Card from "../components/Card";
 import Metric from "../components/Metric";
 import StatusBadge from "../components/StatusBadge";
@@ -166,6 +167,7 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
   const [collectingOrderId, setCollectingOrderId] = useState("");
   const [statusActionId, setStatusActionId] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
+  const [configModalOpen, setConfigModalOpen] = useState(false);
   const [orderSearch, setOrderSearch] = useState("");
   const [centreLinkCopied, setCentreLinkCopied] = useState(false);
   const [globalAutoPrintAfterCash, setGlobalAutoPrintAfterCash] = useState(() => {
@@ -409,6 +411,46 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
       setAgentError(error.message || "Could not load order documents.");
     } finally {
       setDocumentsLoading(false);
+    }
+  }
+
+  async function openConfiguration(order) {
+    const orderId = order.backendId || order.id;
+    setDocumentModalOrder(order);
+    setOrderDocuments([]);
+    setDocumentPreview(null);
+    setDocumentsLoading(true);
+    setAgentError("");
+    setConfigModalOpen(true);
+
+    try {
+      const data = await getOrderDocuments(orderId);
+      setOrderDocuments(Array.isArray(data.documents) ? data.documents : []);
+    } catch (error) {
+      setAgentError(error.message || "Could not load order documents.");
+      setConfigModalOpen(false);
+    } finally {
+      setDocumentsLoading(false);
+    }
+  }
+
+  async function handleSaveConfig(payload) {
+    const orderId = documentModalOrder.backendId || documentModalOrder.id;
+    try {
+      const data = await apiRequest(`/api/hubs/orders/${orderId}/configuration`, {
+        method: "PATCH",
+        body: JSON.stringify(payload)
+      });
+      if (typeof refreshOrders === "function") {
+        await refreshOrders();
+      }
+      if (data.order) {
+        setDocumentModalOrder(prev => ({ ...prev, ...data.order }));
+      }
+      const docsData = await getOrderDocuments(orderId);
+      setOrderDocuments(Array.isArray(docsData.documents) ? docsData.documents : []);
+    } catch (error) {
+      throw new Error(error.message || "Failed to update configuration");
     }
   }
 
@@ -791,6 +833,10 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
                 const paymentVerified = isPaymentVerified(item);
                 const orderCancelled = isOrderCancelled(item);
                 const cancelledBeforePayment = orderCancelled && !paymentVerified;
+                const isManualPayment = ["draft", "pending", "collected"].includes(String(item.paymentStatus || "").toLowerCase());
+                const isClosed = ["printed", "completed", "cancelled"].includes(String(item.status || "").toLowerCase());
+                const hasActiveJobs = Boolean(job || (item.printJobs && item.printJobs.length > 0));
+                const canConfigure = isManualPayment && !isClosed && !hasActiveJobs && !item.configLockedAt;
 
                 return (
                   <tr key={item.id} className="align-top odd:bg-white even:bg-slate-50">
@@ -803,13 +849,24 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
                     </td>
                     <td className="px-2 py-4">
                       <p className="truncate" title={item.document}>{item.document}</p>
-                      <button
-                        type="button"
-                        onClick={() => openDocuments(item)}
-                        className="mt-2 inline-flex items-center justify-center gap-1.5 rounded-xl border px-2 py-1.5 text-xs font-semibold"
-                      >
-                        <FileText size={13} /> View / Download
-                      </button>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => openDocuments(item)}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-xl border px-2 py-1.5 text-xs font-semibold"
+                        >
+                          <FileText size={13} /> View / Download
+                        </button>
+                        {canConfigure && (
+                          <button
+                            type="button"
+                            onClick={() => openConfiguration(item)}
+                            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-2 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition shadow-sm"
+                          >
+                            <Settings size={13} /> Configure
+                          </button>
+                        )}
+                      </div>
                     </td>
                     <td className="px-2 py-4 whitespace-nowrap font-medium">{item.pages} × {item.copies}</td>
                     <td className="px-2 py-4 whitespace-nowrap font-semibold">₹{item.amount}</td>
@@ -1017,6 +1074,30 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
               </button>
             </div>
 
+            {(() => {
+              const isManualPayment = ["draft", "pending", "collected"].includes(String(documentModalOrder.paymentStatus || "").toLowerCase());
+              const isClosed = ["printed", "completed", "cancelled"].includes(String(documentModalOrder.status || "").toLowerCase());
+              const hasActiveJobs = Boolean(documentModalOrder.job || (documentModalOrder.printJobs && documentModalOrder.printJobs.length > 0));
+              const canConfigure = isManualPayment && !isClosed && !hasActiveJobs && !documentModalOrder.configLockedAt;
+
+              if (!canConfigure) return null;
+
+              return (
+                <div className="mt-4 flex items-center justify-between rounded-2xl bg-indigo-50 p-4 dark:bg-indigo-950/20">
+                  <div className="text-xs text-indigo-700 dark:text-indigo-300 font-medium">
+                    Need to correct settings or copies for manual payment?
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setConfigModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-indigo-500 transition shadow-sm"
+                  >
+                    <Settings size={14} /> Adjust Print Settings
+                  </button>
+                </div>
+              );
+            })()}
+
             <div className="mt-5 grid gap-3">
               {documentsLoading && <p className="text-sm text-slate-500">Loading documents...</p>}
               {!documentsLoading && orderDocuments.length === 0 && <p className="text-sm text-slate-500">No documents found.</p>}
@@ -1069,6 +1150,18 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
             </div>
           </div>
         </div>
+      )}
+
+      {documentModalOrder && (
+        <HubOrderConfigModal
+          isOpen={configModalOpen}
+          onClose={() => setConfigModalOpen(false)}
+          order={documentModalOrder}
+          files={orderDocuments}
+          pricing={currentHub?.pricing || {}}
+          onSave={handleSaveConfig}
+          isLoading={documentsLoading}
+        />
       )}
     </div>
   );

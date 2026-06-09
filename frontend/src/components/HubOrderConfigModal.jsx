@@ -1,0 +1,453 @@
+import React, { useState, useEffect } from "react";
+import { X, FileText, Settings2, ShieldAlert, Sparkles, Loader2 } from "lucide-react";
+
+// Client-side pricing calculation mirroring the backend logic
+export function calculatePrintPricingLocal({
+  pricing,
+  originalPageCount,
+  selectedPagesMode,
+  selectedPagesRange,
+  copies,
+  colorMode,
+  sides,
+  pagesPerSheet = 1,
+  watermarkEnabled = false
+}) {
+  const copyCount = Math.max(1, parseInt(copies || 1, 10));
+  
+  let selectedPageCount = originalPageCount;
+  if (selectedPagesMode === "custom" && selectedPagesRange) {
+    try {
+      const parts = selectedPagesRange.split(",").map(p => p.trim()).filter(Boolean);
+      let count = 0;
+      const parsedPages = new Set();
+      
+      for (const part of parts) {
+        if (/^\d+$/.test(part)) {
+          const pNum = parseInt(part, 10);
+          if (pNum >= 1 && pNum <= originalPageCount) {
+            parsedPages.add(pNum);
+          }
+        } else {
+          const match = part.match(/^(\d+)\s*-\s*(\d+)$/);
+          if (match) {
+            const start = parseInt(match[1], 10);
+            const end = parseInt(match[2], 10);
+            if (start <= end && start >= 1 && end <= originalPageCount) {
+              for (let page = start; page <= end; page++) {
+                parsedPages.add(page);
+              }
+            }
+          }
+        }
+      }
+      if (parsedPages.size > 0) {
+        selectedPageCount = parsedPages.size;
+      }
+    } catch (e) {
+      // Fail-silent fallback to full pages
+    }
+  }
+
+  const printablePageCount = selectedPageCount * copyCount;
+  const sheetCount = Math.ceil(printablePageCount / pagesPerSheet);
+  const physicalSheetCount = (sides === "two_sided_long_edge" || sides === "two_sided_short_edge")
+    ? Math.ceil(sheetCount / 2)
+    : sheetCount;
+
+  let pricePerPage = 1;
+  const isColor = colorMode === "color";
+  const isDouble = sides === "two_sided_long_edge" || sides === "two_sided_short_edge";
+
+  if (!isColor && !isDouble) pricePerPage = pricing.bwSingle ?? 1;
+  else if (!isColor && isDouble) pricePerPage = pricing.bwDouble ?? 1.5;
+  else if (isColor && !isDouble) pricePerPage = pricing.colorSingle ?? 2;
+  else pricePerPage = pricing.colorDouble ?? 3;
+
+  const base = printablePageCount * pricePerPage;
+  const watermarkCharge = watermarkEnabled ? (pricing.watermarkCharge ?? 2) : 0;
+  const totalAmount = base + watermarkCharge;
+
+  return {
+    selectedPageCount,
+    printablePageCount,
+    sheetCount,
+    physicalSheetCount,
+    pricePerPage,
+    watermarkCharge,
+    totalAmount,
+    totalAmountPaise: Math.round(totalAmount * 100)
+  };
+}
+
+export default function HubOrderConfigModal({
+  isOpen,
+  onClose,
+  order,
+  files = [],
+  pricing = {},
+  onSave,
+  isLoading = false
+}) {
+  const [formFiles, setFormFiles] = useState([]);
+  const [note, setNote] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  // Prevent background scrolling when open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isOpen]);
+
+  // Load and prefill file options
+  useEffect(() => {
+    if (isOpen && Array.isArray(files)) {
+      const initial = files.map(file => {
+        const printOptions = file.printOptions || {};
+        return {
+          id: file.id,
+          fileName: file.fileName,
+          originalPageCount: file.originalPageCount || file.pageCount || 1,
+          copies: file.copies || 1,
+          colorMode: printOptions.colorMode || "black_white",
+          sides: printOptions.sides || "one_sided",
+          paperSize: printOptions.paperSize || "A4",
+          pagesMode: printOptions.pages?.mode || "all",
+          pagesRange: printOptions.pages?.range || "",
+          watermarkEnabled: Boolean(printOptions.watermark?.enabled)
+        };
+      });
+      setFormFiles(initial);
+      setNote("");
+      setErrorMsg("");
+    }
+  }, [isOpen, files]);
+
+  if (!isOpen || !order) return null;
+
+  // Handler to update attributes of a single file in the form state
+  const handleUpdateFile = (fileId, key, value) => {
+    setFormFiles(prev =>
+      prev.map(f => (f.id === fileId ? { ...f, [key]: value } : f))
+    );
+  };
+
+  // Compile calculations for each file in the state
+  const calculatedFiles = formFiles.map(file => {
+    const calc = calculatePrintPricingLocal({
+      pricing,
+      originalPageCount: file.originalPageCount,
+      selectedPagesMode: file.pagesMode,
+      selectedPagesRange: file.pagesRange,
+      copies: file.copies,
+      colorMode: file.colorMode,
+      sides: file.sides,
+      watermarkEnabled: file.watermarkEnabled
+    });
+    return { ...file, calc };
+  });
+
+  const totalCalculatedAmount = calculatedFiles.reduce((sum, f) => sum + f.calc.totalAmount, 0);
+  const totalPreviousAmount = Number(order.totalAmountPaise || 0) / 100;
+  const isPriceDifferent = Math.abs(totalCalculatedAmount - totalPreviousAmount) > 0.01;
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setErrorMsg("");
+
+    const payload = {
+      note: note.trim(),
+      files: calculatedFiles.map(f => ({
+        id: f.id,
+        copies: parseInt(f.copies, 10),
+        printOptions: {
+          colorMode: f.colorMode,
+          sides: f.sides,
+          paperSize: f.paperSize,
+          pages: {
+            mode: f.pagesMode,
+            range: f.pagesMode === "custom" ? f.pagesRange : ""
+          },
+          watermark: {
+            enabled: f.watermarkEnabled
+          }
+        }
+      }))
+    };
+
+    try {
+      await onSave(payload);
+      onClose();
+    } catch (err) {
+      setErrorMsg(err.message || "Failed to update configuration.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity duration-300"
+        onClick={onClose}
+      />
+
+      {/* Modal Container */}
+      <form
+        onSubmit={handleSubmit}
+        className="relative z-10 flex h-full max-h-[90vh] w-full max-w-3xl flex-col rounded-3xl border border-slate-200/80 bg-white shadow-2xl transition-all duration-300 dark:border-slate-800/80 dark:bg-slate-900"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 dark:border-slate-800">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-400">
+              <Settings2 className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">
+                Override Print Settings
+              </h3>
+              <p className="text-xs text-slate-400">
+                Configuring Order #{order.orderCode}
+              </p>
+            </div>
+          </div>
+          
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Content Body */}
+        <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50 dark:bg-slate-950/20">
+          {errorMsg && (
+            <div className="mb-4 flex items-center gap-3 rounded-2xl bg-rose-50 p-4 text-sm font-medium text-rose-600 dark:bg-rose-950/20 dark:text-rose-400">
+              <ShieldAlert className="h-5 w-5 shrink-0" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-20 text-slate-500">
+              <Loader2 className="h-10 w-10 animate-spin text-indigo-600 mb-3" />
+              <p className="text-sm font-medium">Loading order details & documents...</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {calculatedFiles.map((file, idx) => (
+                <div
+                  key={file.id}
+                  className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800/80 dark:bg-slate-900"
+                >
+                  <div className="mb-4 flex items-center gap-2 border-b border-slate-100 pb-3 dark:border-slate-800">
+                    <FileText className="h-5 w-5 text-indigo-500 shrink-0" />
+                    <span className="truncate font-semibold text-slate-800 dark:text-slate-100">
+                      File {idx + 1}: {file.fileName}
+                    </span>
+                    <span className="ml-auto text-xs font-semibold text-slate-400">
+                      ({file.originalPageCount} pages original)
+                    </span>
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {/* Copies */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                        Copies
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="99"
+                        value={file.copies}
+                        onChange={(e) => handleUpdateFile(file.id, "copies", e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none transition focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                        required
+                      />
+                    </div>
+
+                    {/* Color Mode */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                        Color Mode
+                      </label>
+                      <select
+                        value={file.colorMode}
+                        onChange={(e) => handleUpdateFile(file.id, "colorMode", e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none transition focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                      >
+                        <option value="black_white">Black & White</option>
+                        <option value="color">Color</option>
+                      </select>
+                    </div>
+
+                    {/* Sides */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                        Double/Single Sided
+                      </label>
+                      <select
+                        value={file.sides}
+                        onChange={(e) => handleUpdateFile(file.id, "sides", e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none transition focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                      >
+                        <option value="one_sided">Single Sided</option>
+                        <option value="two_sided_long_edge">Double Sided (Long Edge)</option>
+                        <option value="two_sided_short_edge">Double Sided (Short Edge)</option>
+                      </select>
+                    </div>
+
+                    {/* Paper Size */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                        Paper Size
+                      </label>
+                      <select
+                        value={file.paperSize}
+                        onChange={(e) => handleUpdateFile(file.id, "paperSize", e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none transition focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                      >
+                        <option value="A4">A4</option>
+                        <option value="A3">A3</option>
+                        <option value="Letter">Letter</option>
+                        <option value="Legal">Legal</option>
+                      </select>
+                    </div>
+
+                    {/* Pages Mode */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                        Page Selection
+                      </label>
+                      <select
+                        value={file.pagesMode}
+                        onChange={(e) => handleUpdateFile(file.id, "pagesMode", e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none transition focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                      >
+                        <option value="all">All Pages</option>
+                        <option value="custom">Custom Range</option>
+                      </select>
+                    </div>
+
+                    {/* Custom Page Range Input */}
+                    {file.pagesMode === "custom" && (
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                          Custom Range (e.g. 1-3,5)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. 1-3, 5"
+                          value={file.pagesRange}
+                          onChange={(e) => handleUpdateFile(file.id, "pagesRange", e.target.value)}
+                          className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none transition focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                          required
+                        />
+                      </div>
+                    )}
+
+                    {/* Watermark checkbox */}
+                    <div className="flex items-center gap-2 sm:col-span-2 mt-2">
+                      <input
+                        type="checkbox"
+                        id={`watermark-${file.id}`}
+                        checked={file.watermarkEnabled}
+                        onChange={(e) => handleUpdateFile(file.id, "watermarkEnabled", e.target.checked)}
+                        className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <label
+                        htmlFor={`watermark-${file.id}`}
+                        className="text-sm font-semibold text-slate-700 dark:text-slate-300 cursor-pointer"
+                      >
+                        Enable Watermark (Adds watermark surcharge)
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* File Pricing Summary */}
+                  <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs font-medium text-slate-500 dark:bg-slate-950/40 dark:text-slate-400 flex flex-wrap gap-x-4 gap-y-1">
+                    <span>Selected: <strong>{file.calc.selectedPageCount}</strong> pgs</span>
+                    <span>Printable: <strong>{file.calc.printablePageCount}</strong> pgs</span>
+                    <span>Sheets: <strong>{file.calc.physicalSheetCount}</strong> sheets</span>
+                    <span className="ml-auto text-indigo-600 dark:text-indigo-400">
+                      File total: <strong>₹{file.calc.totalAmount.toFixed(2)}</strong>
+                    </span>
+                  </div>
+                </div>
+              ))}
+
+              {/* Note/Audit Reason */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Note / Reason for configuration override (Required)
+                </label>
+                <textarea
+                  placeholder="Describe why you are overrides configurations (e.g. User requested double sided, user wanted 2 copies)..."
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  className="w-full h-20 rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none transition focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 resize-none"
+                  required
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-t border-slate-100 px-6 py-4 dark:border-slate-800 gap-4 bg-slate-50/50 dark:bg-slate-900">
+          <div className="text-left">
+            <span className="text-xs text-slate-400 font-medium block">Total Price Summary</span>
+            <div className="flex items-baseline gap-2">
+              <span className="text-xl font-bold text-slate-800 dark:text-slate-100">
+                ₹{totalCalculatedAmount.toFixed(2)}
+              </span>
+              {isPriceDifferent && (
+                <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
+                  <Sparkles className="h-3 w-3" />
+                  Was ₹{totalPreviousAmount.toFixed(2)}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 justify-end">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+              disabled={submitting}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-slate-200"
+              disabled={submitting || !note.trim() || isLoading || formFiles.length === 0}
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Saving Changes
+                </>
+              ) : (
+                "Save Configuration"
+              )}
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  );
+}

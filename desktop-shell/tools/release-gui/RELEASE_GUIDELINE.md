@@ -58,7 +58,8 @@ Before building a release, update the version in:
 - `v30`: Last known working stable release.
 - `v31` - `v35`: Broken/experimental (blank screen issue occurred).
 - `v36`: Hotfix version for the blank screen fix.
-- `v37`: Next normal release.
+- `v37` - `v38`: Stable releases featuring same-tab previews, memory management, and hub navigation swap.
+- `v39`: Current production version 0.1.39 release.
 - *Rule*: If the previous public release was broken, publish the next version as a hotfix (e.g. `v36.0.1` or `v37.0.0`). Do not reuse a broken version number.
 
 ---

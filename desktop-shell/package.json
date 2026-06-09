@@ -1,6 +1,6 @@
 {
   "name": "printease-desktop-shell",
-  "version": "0.1.41",
+  "version": "0.1.42",
   "private": true,
   "type": "module",
   "packageManager": "traversal@0.0.0",
@@ -34,7 +34,8 @@
     "tmp": "^0.2.7"
   },
   "dependencies": {
-    "electron-updater": "^6.8.3"
+    "electron-updater": "^6.8.3",
+    "pdf-lib": "^1.17.1"
   },
   "productName": "PrintEase Desktop",
   "description": "PrintEase Desktop app and local printer agent",

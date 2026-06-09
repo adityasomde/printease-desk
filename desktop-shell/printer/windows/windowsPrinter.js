@@ -5,6 +5,7 @@ import { execFile } from "node:child_process";
 import { createRequire } from "node:module";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
+import { preparePdfForPrinting } from "../pdfPrintPreparation.js";
 
 const require = createRequire(import.meta.url);
 const { app } = require("electron");
@@ -205,28 +206,55 @@ function validatePdf(filePath) {
   }
 }
 
-function buildPrintSettings(options = {}) {
+function buildPrintSettings(options = {}, profile = {}) {
   const settings = [];
+  const printOptions = options.printOptions || {};
 
-  const copies = Number(options.copies || options.printOptions?.copies || 1);
+  const copies = Number(options.copies || printOptions.copies || 1);
   if (copies > 1) settings.push(`${copies}x`);
 
-  const pages = options.pages?.range || options.selectedPages || options.printOptions?.pages?.range;
+  const pages = options.pages?.range || options.selectedPages || printOptions.pages?.range;
   if (pages && String(pages).toLowerCase() !== "all") settings.push(String(pages));
 
-  const colorMode = options.colorMode || options.printOptions?.colorMode;
+  const colorMode = options.colorMode || printOptions.colorMode;
   if (colorMode === "color") settings.push("color");
   if (colorMode === "black_white" || colorMode === "monochrome") settings.push("monochrome");
 
-  const sides = options.sides || options.printOptions?.sides;
-  if (sides === "two_sided_long_edge") settings.push("duplexlong");
-  else if (sides === "two_sided_short_edge") settings.push("duplexshort");
-  else settings.push("simplex");
+  const sideType = printOptions.sideType || options.sides || printOptions.sides;
+  let duplexBinding = printOptions.duplexBinding || 'auto';
+  let orientation = options.orientation || printOptions.orientation || 'auto';
 
-  const paperSize = options.paperSize || options.printOptions?.paperSize;
+  if (orientation === 'auto') {
+    orientation = profile.defaultOrientation || 'portrait';
+  }
+
+  if (sideType === 'single' || sideType === 'one_sided') {
+    settings.push("simplex");
+  } else if (sideType === 'double' || sideType === 'two_sided') {
+    if (duplexBinding === 'auto') {
+      if (orientation === 'landscape') {
+        duplexBinding = profile.landscapeDuplexBinding || profile.defaultDuplexBinding || 'short-edge';
+      } else {
+        duplexBinding = profile.defaultDuplexBinding || 'long-edge';
+      }
+    }
+    
+    if (duplexBinding === "long-edge" || sideType === "two_sided_long_edge") {
+      settings.push("duplexlong");
+    } else if (duplexBinding === "short-edge" || sideType === "two_sided_short_edge") {
+      settings.push("duplexshort");
+    }
+  }
+
+  const paperSize = options.paperSize || printOptions.paperSize;
   if (paperSize) settings.push(`paper=${String(paperSize).toUpperCase()}`);
 
-  if (!settings.length) settings.push("noscale");
+  const scaleMode = printOptions.scaleMode || profile.scaleMode || 'fit-to-page';
+  if (scaleMode === 'fit-to-page' || scaleMode === 'shrink-to-fit') settings.push("shrink");
+  else if (scaleMode === 'actual-size') settings.push("noscale");
+
+  if (!settings.some(s => s === "shrink" || s === "noscale")) settings.push("noscale");
+
   return settings.join(",");
 }
 
@@ -272,21 +300,47 @@ export async function printPdfFile({ filePath, printerName, options = {} } = {})
       };
     }
 
-    const settings = buildPrintSettings(options);
+    const profiles = options.printerProfiles || [];
+    const profile = profiles.find(p => p.osPlatform === 'win32') || options.printerProfile || {};
+    const printOptions = options.printOptions || {};
+
+    let activeFilePath = filePath;
+    let cleanupPdf = () => {};
+    try {
+      const prep = await preparePdfForPrinting(filePath, printOptions, profile);
+      if (prep.tempFilePath) {
+        activeFilePath = prep.tempFilePath;
+        cleanupPdf = prep.cleanup;
+      }
+    } catch (prepError) {
+      console.error("[WINDOWS] PDF Prep failed:", prepError);
+    }
+
+    const settings = buildPrintSettings(options, profile);
     const args = [
       "-silent",
       "-print-to",
       printer.printerName,
       "-print-settings",
       settings,
-      filePath,
+      activeFilePath,
     ];
 
-    const { stdout, stderr } = await execFileAsync(sumatra, args, {
-      timeout: DEFAULT_TIMEOUT_MS,
-      windowsHide: true,
-      maxBuffer: 1024 * 1024,
-    });
+    console.log(`[WINDOWS] Executing: SumatraPDF ${args.join(' ')}`);
+
+    let stdout = "";
+    let stderr = "";
+    try {
+      const result = await execFileAsync(sumatra, args, {
+        timeout: DEFAULT_TIMEOUT_MS,
+        windowsHide: true,
+        maxBuffer: 1024 * 1024,
+      });
+      stdout = result.stdout;
+      stderr = result.stderr;
+    } finally {
+      cleanupPdf();
+    }
 
     return {
       success: true,

@@ -3,6 +3,7 @@ import { mkdtemp, rm, unlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { preparePdfForPrinting } from "../pdfPrintPreparation.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -318,6 +319,25 @@ export async function printFile({ printerName, filePath, copies = 1, options = {
   const optionCopies = options?.copies || options?.printOptions?.copies;
   const safeCopies = Math.max(1, Math.min(Number(optionCopies || copies) || 1, 99));
 
+  // Determine effective profile from available profiles or passed options
+  const profiles = options.printerProfiles || [];
+  const profile = profiles.find(p => p.osPlatform === 'linux') || options.printerProfile || {};
+  const printOptions = options.printOptions || {};
+
+  // Pre-process PDF if required (rotation / page order)
+  let activeFilePath = filePath;
+  let cleanupPdf = () => {};
+  try {
+    const prep = await preparePdfForPrinting(filePath, printOptions, profile);
+    if (prep.tempFilePath) {
+      activeFilePath = prep.tempFilePath;
+      cleanupPdf = prep.cleanup;
+    }
+  } catch (prepError) {
+    console.error("[CUPS] PDF Prep failed:", prepError);
+    // Continue with original file if preparation fails
+  }
+
   try {
     const args = [
       "-d",
@@ -326,41 +346,73 @@ export async function printFile({ printerName, filePath, copies = 1, options = {
       String(safeCopies),
     ];
 
-    const pages = options.pages?.range || options.selectedPages || options.printOptions?.pages?.range;
+    const pages = options.pages?.range || options.selectedPages || printOptions?.pages?.range;
     if (pages && String(pages).toLowerCase() !== "all") {
       args.push("-P", String(pages));
     }
 
-    const colorMode = options.colorMode || options.printOptions?.colorMode;
+    const colorMode = options.colorMode || printOptions?.colorMode;
     if (colorMode === "color") {
       args.push("-o", "ColorModel=Color");
     } else if (colorMode === "bw" || colorMode === "black_white" || colorMode === "monochrome") {
       args.push("-o", "ColorModel=Gray");
     }
 
-    const sides = options.sides || options.printOptions?.sides;
-    if (sides === "two_sided_long_edge") {
-      args.push("-o", "sides=two-sided-long-edge");
-    } else if (sides === "two_sided_short_edge") {
-      args.push("-o", "sides=two-sided-short-edge");
-    } else if (sides === "one_sided" || sides === "single") {
-      args.push("-o", "sides=one-sided");
+    const sideType = printOptions?.sideType || options.sides || printOptions?.sides;
+    let duplexBinding = printOptions?.duplexBinding || 'auto';
+    let orientation = options.orientation || printOptions?.orientation || 'auto';
+
+    if (orientation === 'auto') {
+      orientation = profile.defaultOrientation || 'portrait';
     }
 
-    const paperSize = options.paperSize || options.printOptions?.paperSize;
+    if (sideType === 'single' || sideType === 'one_sided') {
+      args.push("-o", "sides=one-sided");
+    } else if (sideType === 'double' || sideType === 'two_sided') {
+      if (duplexBinding === 'auto') {
+        if (orientation === 'landscape') {
+          duplexBinding = profile.landscapeDuplexBinding || profile.defaultDuplexBinding || 'short-edge';
+        } else {
+          duplexBinding = profile.defaultDuplexBinding || 'long-edge';
+        }
+      }
+      
+      if (duplexBinding === "long-edge" || sideType === "two_sided_long_edge") {
+        args.push("-o", "sides=two-sided-long-edge");
+      } else if (duplexBinding === "short-edge" || sideType === "two_sided_short_edge") {
+        args.push("-o", "sides=two-sided-short-edge");
+      }
+    }
+
+    const paperSize = options.paperSize || printOptions?.paperSize;
     if (paperSize) {
       args.push("-o", `media=${paperSize}`);
     }
 
-    const orientation = options.orientation || options.printOptions?.orientation;
     if (orientation === "landscape") {
       args.push("-o", "landscape");
     } else if (orientation === "portrait") {
       args.push("-o", "portrait");
     }
 
-    args.push("-o", "fit-to-page");
-    args.push(filePath);
+    const scaleMode = printOptions?.scaleMode || profile.scaleMode || 'fit-to-page';
+    if (scaleMode === 'fit-to-page') {
+      args.push("-o", "fit-to-page");
+    } else if (scaleMode === 'actual-size') {
+      // no fit-to-page option implies actual size in most CUPS drivers
+    }
+
+    // Collate
+    const collate = printOptions?.collate ?? profile.collate ?? true;
+    if (collate) {
+      args.push("-o", "Collate=True");
+    } else {
+      args.push("-o", "Collate=False");
+    }
+
+    args.push(activeFilePath);
+    
+    console.log(`[CUPS] Executing: lp ${args.join(' ')}`);
 
     const { stdout, stderr } = await runCommand("lp", args);
 
@@ -377,5 +429,7 @@ export async function printFile({ printerName, filePath, copies = 1, options = {
       ...result,
       reasonCode: result.reasonCode || "LOCAL_PRINT_FAILED"
     };
+  } finally {
+    cleanupPdf();
   }
 }

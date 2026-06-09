@@ -56,7 +56,7 @@ export default function Navbar({
       <header className="sticky top-0 z-50 border-b bg-white/90 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-2">
           <button onClick={() => navigate("home")} className="flex items-center ml-[-8px] mr-8">
-            <img src={logo} alt="PrintEase" className="h-[68px] w-auto object-contain" />
+            <img src={logo} alt="PrintEase" className="h-[51px] w-auto object-contain" />
           </button>
 
           <nav className="hidden items-center gap-2 md:flex">

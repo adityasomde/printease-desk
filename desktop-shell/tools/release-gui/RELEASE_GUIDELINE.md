@@ -19,7 +19,8 @@ First:
 7. Only then publish.
 ```
 
-Do **not** publish if the app only "builds successfully." For Electron apps, a successful build can still open as a blank screen if files are missing from the package.
+> [!IMPORTANT]
+> **REMINDER**: The automated pipeline creates a **DRAFT** release on GitHub. You must manually download the draft installers, verify them on your devices to ensure there are no blank-screen issues, and then click **Publish release** on GitHub to publish it. Do **not** publish if the app only "builds successfully." For Electron apps, a successful build can still open as a blank screen if files are missing from the package.
 
 ---
 

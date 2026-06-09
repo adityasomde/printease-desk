@@ -85,7 +85,9 @@ try {
     console.log("\n====================================================");
     console.log("SUCCESS: Tag pushed.");
     console.log("====================================================");
-    console.log("GitHub Actions should now build Linux + Windows and create a draft release.");
+    console.log("GitHub Actions will automatically build Linux + Windows and create a DRAFT release.");
+    console.log("REMINDER: The release is created as a DRAFT. You MUST download and test the built");
+    console.log("installers on your target device before publishing the draft manually on GitHub.");
     console.log("====================================================\n");
     rl.close();
     process.exit(0);

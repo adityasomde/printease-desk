@@ -40,11 +40,14 @@ npm run dist:linux
 Push to `adityasomde/printease-desk`, then tag:
 
 ```bash
-git tag desktop-v0.1.1
+git tag desktop-v0.1.39
 git push origin main
-git push origin desktop-v0.1.1
+git push origin desktop-v0.1.39
 ```
 
 GitHub Actions builds and uploads the `.AppImage`, `.deb`, `.blockmap`, and `latest-linux.yml` release files.
+
+> [!IMPORTANT]
+> **REMINDER**: The automated GitHub Actions workflow will only create a **DRAFT** release. You must download and test the built installer artifacts (AppImage, deb, exe) to confirm they run without a blank screen, and then manually edit the draft and click **Publish release** on GitHub.
 
 For Linux auto-update, distribute the `.AppImage` from GitHub Releases.

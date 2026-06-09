@@ -4,7 +4,7 @@ import Card from "../components/Card";
 import Metric from "../components/Metric";
 import StatusBadge from "../components/StatusBadge";
 import { hubStatusOptions } from "../data/demoData";
-import { apiRequest, collectManualPayment, createDocumentSignedDownload, getHubAgentSummary, getOrderDocuments, pairAgent, sendOrderToAgent } from "../services/api";
+import { apiRequest, collectManualPayment, downloadDocumentBlob, getHubAgentSummary, getOrderDocuments, pairAgent, sendOrderToAgent } from "../services/api";
 
 function normalizeStatus(status) {
   return String(status || "").toLowerCase().replace(/\s+/g, "_");
@@ -416,20 +416,27 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
     const documentId = document.documentId || document.id;
     setDocumentActionId(`${mode}:${documentId}`);
     try {
-      const data = await createDocumentSignedDownload(documentId);
-      if (!data.signedUrl) throw new Error("Signed document link was not returned.");
+      const rawBlob = await downloadDocumentBlob(documentId);
+      const pdfBlob = new Blob([rawBlob], { type: "application/pdf" });
+      const localUrl = URL.createObjectURL(pdfBlob);
 
       if (mode === "view") {
         setDocumentPreview({
-          url: data.signedUrl,
+          url: localUrl,
           name: document.fileName || "Document preview",
         });
         return;
       }
 
-      await openExternalUrl(data.signedUrl);
+      const a = window.document.createElement("a");
+      a.href = localUrl;
+      a.download = document.fileName || "document.pdf";
+      window.document.body.appendChild(a);
+      a.click();
+      window.document.body.removeChild(a);
+      URL.revokeObjectURL(localUrl);
     } catch (error) {
-      setAgentError(error.message || "Could not create signed download link.");
+      setAgentError(error.message || "Could not retrieve document.");
     } finally {
       setDocumentActionId("");
     }
@@ -749,10 +756,10 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
             {orderSearch && <p className="mt-2 text-xs text-slate-500">{filteredOrders.length} of {ordersForHub.length} orders shown</p>}
           </div>
         </div>
-        <div className="mt-6 overflow-x-auto">
-          <table className="w-full min-w-[840px] table-fixed text-left text-sm">
-            <thead>
-              <tr className="border-b text-xs uppercase tracking-wide text-slate-500">
+        <div className="mt-6 max-h-[420px] overflow-y-auto overflow-x-auto border rounded-2xl">
+          <table className="w-full min-w-[840px] table-fixed text-left text-sm border-collapse">
+            <thead className="sticky top-0 bg-white z-10 shadow-sm border-b">
+              <tr className="border-b text-xs uppercase tracking-wide text-slate-500 bg-slate-50">
                 <th className="w-24 px-2 py-3">Order</th>
                 <th className="w-36 px-2 py-3">Customer</th>
                 <th className="w-52 px-2 py-3">Document</th>

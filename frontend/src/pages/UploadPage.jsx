@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useRef } from "react";
-import { FileText, Upload, IndianRupee, CheckSquare, Square, X, Settings2 } from "lucide-react";
+import { FileText, Upload, IndianRupee, CheckSquare, Square, X, Settings2, Eye } from "lucide-react";
 import Card from "../components/Card";
+import DocumentPreviewModal from "../components/DocumentPreviewModal";
 import Row from "../components/Row";
 import { calculateTotalAmount, getPricePerPage, countSelectedPages } from "../utils/price";
 import { countSelectedPagesPreview, estimatePrintablePages, estimateGuestLimitExceeded, estimateSheets, estimatePricePreview } from "../utils/printEstimate";
@@ -45,10 +46,70 @@ export default function UploadPage({
   setMultiFileConfigs,
   reprintSourceDocuments,
   setReprintSourceDocuments,
+  reprintDocumentExpired,
+  setReprintDocumentExpired,
 }) {
   const [selectedFileIndexes, setSelectedFileIndexes] = useState([]);
   const [modalFileIndex, setModalFileIndex] = useState(null);
   const longPressTimerRef = useRef(null);
+
+  const [localPreview, setLocalPreview] = useState(null);
+
+  function handleLocalPreview(index) {
+    const fileObj = documentFiles[index] || (index === 0 && documentFile);
+    if (!fileObj) return;
+
+    const mime = (fileObj.type || "").toLowerCase();
+    let kind = "unsupported";
+    if (mime === "application/pdf" || fileObj.name.toLowerCase().endsWith(".pdf")) {
+      kind = "pdf";
+    } else if (mime.startsWith("image/")) {
+      kind = "image";
+    } else if (mime === "text/plain" || mime === "text/csv" || mime === "application/json" || fileObj.name.toLowerCase().endsWith(".txt")) {
+      kind = "text";
+    }
+
+    const localUrl = URL.createObjectURL(fileObj);
+
+    if (kind === "text") {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setLocalPreview({
+          url: localUrl,
+          kind,
+          name: fileObj.name,
+          type: fileObj.type || (fileObj.name.toLowerCase().endsWith(".txt") ? "text/plain" : ""),
+          size: fileObj.size,
+          textContent: e.target.result,
+        });
+      };
+      reader.readAsText(fileObj);
+    } else {
+      setLocalPreview({
+        url: localUrl,
+        kind,
+        name: fileObj.name,
+        type: fileObj.type || (fileObj.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : ""),
+        size: fileObj.size,
+        textContent: "",
+      });
+    }
+  }
+
+  function closeLocalPreview() {
+    if (localPreview?.url) {
+      URL.revokeObjectURL(localPreview.url);
+    }
+    setLocalPreview(null);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (localPreview?.url) {
+        URL.revokeObjectURL(localPreview.url);
+      }
+    };
+  }, [localPreview]);
 
   const displayFiles = useMemo(() => {
     return documentFiles.length ? documentFiles.map(f => ({ name: f.name })) : (reprintSourceDocuments || []).map(d => ({ name: d.file_name }));
@@ -103,6 +164,7 @@ export default function UploadPage({
 
   function handleFileChange(event) {
     if (setReprintSourceDocuments) setReprintSourceDocuments([]);
+    if (setReprintDocumentExpired) setReprintDocumentExpired(false);
     const files = Array.from(event.target.files || []);
     const firstFile = files[0] || null;
     setDocumentFiles(files);
@@ -126,6 +188,8 @@ export default function UploadPage({
     const handlePaste = (e) => {
       const files = Array.from(e.clipboardData?.files || []).filter((f) => f.type === "application/pdf");
       if (files.length > 0) {
+        if (setReprintSourceDocuments) setReprintSourceDocuments([]);
+        if (setReprintDocumentExpired) setReprintDocumentExpired(false);
         setDocumentFiles(files);
         setDocumentFile(files[0]);
         if (files.length === 1) setDocumentName(files[0].name);
@@ -504,7 +568,16 @@ export default function UploadPage({
     <div className="grid gap-6 lg:grid-cols-3">
       <Card className="lg:col-span-2">
         <h2 className="text-2xl font-bold">Upload Document</h2>
-        <p className="mt-2 text-slate-600">Selected Centre: <b>{selectedCentre?.name || "Not selected yet"}</b></p>
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-slate-600">
+          <span>Selected Centre: <b>{selectedCentre?.name || "Not selected yet"}</b></span>
+          <button
+            type="button"
+            onClick={() => navigate("centre", { state: { fromUpload: true } })}
+            className="rounded-xl bg-slate-100 border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200 hover:text-slate-900 transition shadow-sm"
+          >
+            Change Centre
+          </button>
+        </div>
 
         {!selectedCentre && (
           <div className="mt-4 rounded-2xl bg-orange-50 p-4 text-sm text-orange-700">
@@ -516,6 +589,32 @@ export default function UploadPage({
           <p className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
             {paymentError}
           </p>
+        )}
+
+        {paymentLoading && reprintSourceDocuments && reprintSourceDocuments.length > 0 && documentFiles.length === 0 && (
+          <div className="mt-4 flex items-center gap-3 rounded-2xl border border-sky-100 bg-sky-50/50 p-4 text-sm text-sky-800 shadow-sm backdrop-blur-sm animate-pulse">
+            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-sky-100 text-sky-600">
+              <span className="h-2 w-2 rounded-full bg-sky-500 animate-ping"></span>
+            </div>
+            <div>
+              <p className="font-semibold text-sky-900">Restoring original documents</p>
+              <p className="text-xs text-sky-700 mt-0.5">Fetching and pre-loading files from your order history...</p>
+            </div>
+          </div>
+        )}
+
+        {reprintDocumentExpired && (
+          <div className="mt-4 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50/60 p-4 text-sm text-amber-800 shadow-sm">
+            <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600 font-bold text-xs">
+              !
+            </div>
+            <div>
+              <p className="font-semibold text-amber-900">Some or all documents have expired</p>
+              <p className="text-xs text-amber-700 mt-0.5">
+                The original files from this order could not be retrieved from history. Please upload the documents manually to configure your reprint.
+              </p>
+            </div>
+          </div>
         )}
 
         <div className="mt-6">
@@ -532,6 +631,22 @@ export default function UploadPage({
                 Order document name
                 <input value={documentName} onChange={(e) => setDocumentName(e.target.value)} placeholder="Assignment.pdf" className="rounded-2xl border px-4 py-3 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
               </label>
+            </div>
+          )}
+
+          {!isMulti && displayFiles.length === 1 && (
+            <div className="mb-4 flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50/50 p-4 shadow-sm">
+              <div className="flex items-center gap-3 min-w-0">
+                <FileText className="text-slate-600 shrink-0" size={20} />
+                <span className="min-w-0 truncate font-semibold text-sm text-slate-700">{displayFiles[0].name}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleLocalPreview(0)}
+                className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 shadow-sm transition"
+              >
+                <Eye size={14} /> Preview
+              </button>
             </div>
           )}
 
@@ -567,6 +682,13 @@ export default function UploadPage({
                       <div className="shrink-0 flex items-center gap-2 text-slate-500 text-xs">
                         <span className="bg-slate-200 px-2 py-0.5 rounded text-slate-700">{conf.colorType === 'bw' ? 'B/W' : 'Color'}</span>
                         <span className="bg-slate-200 px-2 py-0.5 rounded text-slate-700">{conf.copies} copy</span>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleLocalPreview(index); }}
+                          className="p-1 text-slate-400 hover:text-slate-900"
+                        >
+                          <Eye size={16} />
+                        </button>
                         <button onClick={(e) => { e.stopPropagation(); setModalFileIndex(index); }} className="ml-1 p-1 text-slate-400 hover:text-slate-900">
                           <Settings2 size={16} />
                         </button>
@@ -761,6 +883,29 @@ export default function UploadPage({
             </div>
           </div>
         </div>
+      )}
+
+      {localPreview && (
+        <DocumentPreviewModal
+          isOpen={true}
+          onClose={closeLocalPreview}
+          blobUrl={localPreview.url}
+          previewKind={localPreview.kind}
+          fileName={localPreview.name}
+          fileType={localPreview.type}
+          fileSize={localPreview.size}
+          textContent={localPreview.textContent}
+          loading={false}
+          error=""
+          onDownload={() => {
+            const a = window.document.createElement("a");
+            a.href = localPreview.url;
+            a.download = localPreview.name;
+            window.document.body.appendChild(a);
+            a.click();
+            window.document.body.removeChild(a);
+          }}
+        />
       )}
 </div>
   );

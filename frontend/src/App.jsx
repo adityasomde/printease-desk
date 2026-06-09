@@ -1,8 +1,11 @@
-import { Component, useEffect, useMemo, useRef, useState } from "react";
+import { Component, useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { emitOrderChanged } from "./utils/appEvents";
 import Navbar from "./components/Navbar";
 import BackendStatus from "./components/BackendStatus";
+import { hubActivityStore } from "./state/hubActivityStore";
+
+const HubHistoryPage = lazy(() => import("./pages/HubHistoryPage"));
 import HomePage from "./pages/HomePage";
 import AuthPage from "./pages/AuthPage";
 import UserDashboard from "./pages/UserDashboard";
@@ -22,7 +25,7 @@ import { initialCentres, initialOrders } from "./data/demoData";
 import { calculateTotalAmount, countSelectedPages, getPricePerPage } from "./utils/price";
 import { countSelectedPagesPreview, estimatePricePreview } from "./utils/printEstimate";
 import { clearStoredAuth, getStoredAuth, isDesktop, onPrintersUpdated, saveStoredAuth } from "./utils/desktopBridge";
-import { apiRequest, invalidateUserHistory } from "./services/api";
+import { apiRequest, invalidateUserHistory, createDocumentSignedDownload, getOrderDetail } from "./services/api";
 import { loadRazorpayCheckout } from "./utils/razorpay";
 import { saveOrderToLocalHistory } from "./utils/localHistory";
 import {
@@ -50,6 +53,7 @@ const ROUTES = {
   orderHistory: "/order-history",
   usageHistory: "/usage-history",
   platformStats: "/platform-metrics-dashboard",
+  hubHistory: "/hub/history",
 };
 
 function getPageFromPath(pathname) {
@@ -433,6 +437,7 @@ export default function App() {
   const [documentFile, setDocumentFile] = useState(null);
   const [documentFiles, setDocumentFiles] = useState([]);
   const [reprintSourceDocuments, setReprintSourceDocuments] = useState([]);
+  const [reprintDocumentExpired, setReprintDocumentExpired] = useState(false);
   const [multiFileConfigs, setMultiFileConfigs] = useState({});
   const [documentName, setDocumentName] = useState("");
   const [pages, setPages] = useState(1);
@@ -674,6 +679,17 @@ export default function App() {
     return orders.filter((item) => item.centreCode === currentHub.code || item.centreId === currentHub.id);
   }, [orders, currentHub]);
 
+  useEffect(() => {
+    hubActivityStore.setState({
+      hubOrders,
+      lastLoadedAt: lastOrdersUpdatedAt
+    });
+  }, [hubOrders, lastOrdersUpdatedAt]);
+
+  useEffect(() => {
+    hubActivityStore.refresh = () => loadOrdersForSession(currentUser, centres);
+  }, [currentUser, centres]);
+
   const prioritizedCentres = useMemo(() => {
     const usageByCentre = new Map();
 
@@ -761,7 +777,7 @@ export default function App() {
     setEmail(value);
     if (!usernameEdited) {
       setUsernameState(getUsernameBaseCandidates(name, value)[0]);
-      suggestUniqueUsername(name, value);
+      // Backend availability check is handled by the debounced useEffect (250ms)
     }
   }
 
@@ -769,7 +785,7 @@ export default function App() {
     setName(value);
     if (!usernameEdited) {
       setUsernameState(getUsernameBaseCandidates(value, email)[0]);
-      suggestUniqueUsername(value, email);
+      // Backend availability check is handled by the debounced useEffect (250ms)
     }
   }
 
@@ -1281,6 +1297,11 @@ export default function App() {
     }
 
     const filesToUpload = documentFiles.length ? documentFiles : documentFile ? [documentFile] : [];
+    if (reprintDocumentExpired) {
+      setPaymentError("One or more documents for this reprint have expired. Please upload the PDF files manually.");
+      navigate("upload");
+      return;
+    }
     if (!filesToUpload.length && !reprintSourceDocuments.length) {
       setPaymentError("Please upload a PDF document first.");
       navigate("upload");
@@ -1618,30 +1639,37 @@ export default function App() {
     navigate("track");
   }
 
-  function reprintWithSettings(historyOrder) {
+  async function reprintWithSettings(historyOrder) {
     if (!currentUser || currentUser.role !== "user" || !historyOrder) return;
 
-    const config = historyOrder.print_config || {};
-    const document = historyOrder.document || {};
+    setPaymentLoading(true);
+    let orderDetails = historyOrder;
+    if (!historyOrder.document && (!historyOrder.documents || historyOrder.documents.length === 0)) {
+      try {
+        orderDetails = await getOrderDetail(historyOrder.id);
+        if (!orderDetails) throw new Error("Order details not found");
+      } catch (err) {
+        alert(err.message || "Failed to load order details for reprint.");
+        setPaymentLoading(false);
+        return;
+      }
+    }
+
+    const config = orderDetails.print_config || {};
+    const document = orderDetails.document || {};
     const nextCentre = centres.find((centre) => (
-      centre.id === historyOrder.hub?.id ||
-      centre.code === historyOrder.hub?.code ||
-      centre.name === historyOrder.hub?.name
+      centre.id === orderDetails.hub?.id ||
+      centre.code === orderDetails.hub?.code ||
+      centre.name === orderDetails.hub?.name
     ));
 
     if (nextCentre) setSelectedCentre(nextCentre);
-    
-    const docs = historyOrder.documents?.length ? historyOrder.documents : [historyOrder.document].filter(Boolean);
-    setReprintSourceDocuments(docs);
-    
-    setDocumentFile(null);
-    setDocumentFiles([]);
-    setMultiFileConfigs({});
-    
-    setDocumentName(document.file_name || historyOrder.documentName || "");
-    setPages(Number(document.original_pages || historyOrder.pages || 1));
+
+    // Pre-fill all print settings from original order (same as before)
+    setDocumentName(document.file_name || orderDetails.documentName || orderDetails.document_name || "");
+    setPages(Number(document.original_pages || orderDetails.pages || 1));
     setSelectedPages(config.page_range && config.page_range !== "all" ? config.page_range : "");
-    setCopies(Number(config.copies || document.copies || historyOrder.copies || 1));
+    setCopies(Number(config.copies || document.copies || orderDetails.copies || 1));
     setColorType(config.color_mode === "color" ? "color" : "bw");
     setSideType(config.duplex ? "double" : "single");
     setPaperSize(config.paper_size || "A4");
@@ -1657,35 +1685,107 @@ export default function App() {
     setWatermarkOpacity(Number(config.watermark?.opacity || 0.18));
     setWatermarkFontSize(Number(config.watermark?.fontSize || 18));
     setWatermarkRotation(Number(config.watermark?.rotation || 45));
-    
     setBackendPrice(null);
     setPaymentError("");
     setOrder(null);
     setPendingPayment(null);
     setUpiQr(null);
-    
+
+    const docs = orderDetails.documents?.length ? orderDetails.documents : [orderDetails.document].filter(Boolean);
+    const docsWithId = docs.filter((d) => d?.document_id);
+
+    // Reset previous reprint state
+    setDocumentFile(null);
+    setDocumentFiles([]);
+    setMultiFileConfigs({});
+    setReprintSourceDocuments(docs);
+    setReprintDocumentExpired(false);
+
+    if (docsWithId.length === 0) {
+      // No document IDs available — can't fetch from Supabase
+      setReprintDocumentExpired(true);
+      setPaymentLoading(false);
+      navigate("upload");
+      return;
+    }
+
+    // Try to fetch each document from Supabase as a Blob → File
+    setPaymentLoading(true);
+    try {
+      const results = await Promise.allSettled(
+        docsWithId.map(async (doc) => {
+          const { signedUrl } = await createDocumentSignedDownload(doc.document_id);
+          if (!signedUrl) throw new Error("No signed URL");
+          const response = await fetch(signedUrl);
+          if (!response.ok) throw new Error(`Fetch failed: ${response.status}`);
+          const blob = await response.blob();
+          const fileName = doc.file_name || "document.pdf";
+          return new File([blob], fileName, { type: blob.type || "application/pdf" });
+        })
+      );
+
+      const succeededFiles = results
+        .filter((r) => r.status === "fulfilled")
+        .map((r) => r.value);
+
+      const failedCount = results.filter((r) => r.status === "rejected").length;
+
+      if (succeededFiles.length > 0) {
+        setDocumentFiles(succeededFiles);
+        setDocumentFile(succeededFiles[0]);
+        if (succeededFiles.length === 1) {
+          setDocumentName(succeededFiles[0].name);
+        } else {
+          setDocumentName(`${succeededFiles.length} uploaded documents`);
+        }
+        setReprintSourceDocuments([]);
+        // Partial expiry: some docs loaded, some didn't
+        if (failedCount > 0) setReprintDocumentExpired(true);
+      } else {
+        // All fetches failed — doc expired
+        setReprintDocumentExpired(true);
+      }
+    } catch {
+      setReprintDocumentExpired(true);
+    } finally {
+      setPaymentLoading(false);
+    }
+
     navigate("upload");
   }
 
   async function reprintWithSameSettings(historyOrder) {
     if (!currentUser || currentUser.role !== "user" || !historyOrder) return;
 
+    setPaymentLoading(true);
+    setPaymentError("");
+
+    let orderDetails = historyOrder;
+    if (!historyOrder.document && (!historyOrder.documents || historyOrder.documents.length === 0)) {
+      try {
+        orderDetails = await getOrderDetail(historyOrder.id);
+        if (!orderDetails) throw new Error("Order details not found");
+      } catch (err) {
+        alert(err.message || "Failed to load order details for reprint.");
+        setPaymentLoading(false);
+        return;
+      }
+    }
+
     const nextCentre = centres.find((centre) => (
-      centre.id === historyOrder.hub?.id ||
-      centre.code === historyOrder.hub?.code ||
-      centre.name === historyOrder.hub?.name
+      centre.id === orderDetails.hub?.id ||
+      centre.code === orderDetails.hub?.code ||
+      centre.name === orderDetails.hub?.name
     ));
 
     if (!nextCentre) {
       alert("The printing centre for this order is no longer available.");
+      setPaymentLoading(false);
       return;
     }
 
-    setPaymentLoading(true);
-    setPaymentError("");
-
     try {
-      const documents = historyOrder.documents?.length ? historyOrder.documents : [historyOrder.document].filter(Boolean);
+      const documents = orderDetails.documents?.length ? orderDetails.documents : [orderDetails.document].filter(Boolean);
       if (!documents.length || !documents[0].document_id) {
         throw new Error("Source document not available. Please start a new order.");
       }
@@ -1696,7 +1796,7 @@ export default function App() {
           centreCode: nextCentre.code,
           documentIds: documents.map((d) => d.document_id),
           files: documents.map((d) => {
-            const printOptions = d.print_options || historyOrder.print_config?.raw || {};
+            const printOptions = d.print_options || orderDetails.print_config?.raw || {};
             return {
               documentId: d.document_id,
               documentName: d.file_name,
@@ -2082,6 +2182,18 @@ export default function App() {
             }
           />
           <Route
+            path={ROUTES.hubHistory}
+            element={
+              currentUser?.role === "hub" ? (
+                <Suspense fallback={<div className="text-center py-10 font-medium text-slate-500">Loading Hub History...</div>}>
+                  <HubHistoryPage navigate={navigate} />
+                </Suspense>
+              ) : (
+                <RouteNotice title="Print Hub Login Required" message="Please login as a print hub to view history." actionLabel="Login as Print Hub" onAction={() => startLogin("hub")} />
+              )
+            }
+          />
+          <Route
             path={ROUTES.hubPricing}
             element={
               currentUser?.role === "hub" ? (
@@ -2115,7 +2227,7 @@ export default function App() {
           />
           <Route path={ROUTES.desktopAgent} element={<DesktopAgentPage currentUser={currentUser} />} />
           <Route path={ROUTES.centre} element={<CentreCodePage centreCode={centreCode} setCentreCode={setCentreCode} handleCentreCode={handleCentreCode} selectCentreByCode={selectCentreByCode} centres={prioritizedCentres} selectCentreAndUpload={selectCentreAndUpload} lookupLoading={centreLookupLoading} lookupError={centreLookupError} autoStartScanner={Boolean(location.state?.autoStartScanner)} />} />
-          <Route path={ROUTES.upload} element={<UploadPage currentUser={currentUser} startLogin={startLogin} selectedCentre={selectedCentre} documentFile={documentFile} setDocumentFile={setDocumentFile} documentFiles={documentFiles} setDocumentFiles={setDocumentFiles} reprintSourceDocuments={reprintSourceDocuments} setReprintSourceDocuments={setReprintSourceDocuments} multiFileConfigs={multiFileConfigs} setMultiFileConfigs={setMultiFileConfigs} documentName={documentName} setDocumentName={setDocumentName} pages={pages} setPages={setPages} selectedPages={selectedPages} setSelectedPages={setSelectedPages} copies={copies} setCopies={setCopies} colorType={colorType} setColorType={setColorType} sideType={sideType} setSideType={setSideType} paperSize={paperSize} setPaperSize={setPaperSize} pagesPerSheet={pagesPerSheet} setPagesPerSheet={setPagesPerSheet} orientation={orientation} setOrientation={setOrientation} printDpi={printDpi} setPrintDpi={setPrintDpi} scaleMode={scaleMode} setScaleMode={setScaleMode} marginMode={marginMode} setMarginMode={setMarginMode} watermark={watermark} setWatermark={setWatermark} watermarkType={watermarkType} setWatermarkType={setWatermarkType} watermarkText={watermarkText} setWatermarkText={setWatermarkText} watermarkPosition={watermarkPosition} setWatermarkPosition={setWatermarkPosition} watermarkOpacity={watermarkOpacity} setWatermarkOpacity={setWatermarkOpacity} watermarkFontSize={watermarkFontSize} setWatermarkFontSize={setWatermarkFontSize} watermarkRotation={watermarkRotation} setWatermarkRotation={setWatermarkRotation} pricePerPage={pricePerPage} estimatedSelectedPageCount={estimatedSelectedPageCount} totalAmount={totalAmount} backendPrice={backendPrice} preparePayment={preparePayment} paymentLoading={paymentLoading} paymentError={paymentError} navigate={navigate} />} />
+          <Route path={ROUTES.upload} element={<UploadPage currentUser={currentUser} startLogin={startLogin} selectedCentre={selectedCentre} documentFile={documentFile} setDocumentFile={setDocumentFile} documentFiles={documentFiles} setDocumentFiles={setDocumentFiles} reprintSourceDocuments={reprintSourceDocuments} setReprintSourceDocuments={setReprintSourceDocuments} reprintDocumentExpired={reprintDocumentExpired} setReprintDocumentExpired={setReprintDocumentExpired} multiFileConfigs={multiFileConfigs} setMultiFileConfigs={setMultiFileConfigs} documentName={documentName} setDocumentName={setDocumentName} pages={pages} setPages={setPages} selectedPages={selectedPages} setSelectedPages={setSelectedPages} copies={copies} setCopies={setCopies} colorType={colorType} setColorType={setColorType} sideType={sideType} setSideType={setSideType} paperSize={paperSize} setPaperSize={setPaperSize} pagesPerSheet={pagesPerSheet} setPagesPerSheet={setPagesPerSheet} orientation={orientation} setOrientation={setOrientation} printDpi={printDpi} setPrintDpi={setPrintDpi} scaleMode={scaleMode} setScaleMode={setScaleMode} marginMode={marginMode} setMarginMode={setMarginMode} watermark={watermark} setWatermark={setWatermark} watermarkType={watermarkType} setWatermarkType={setWatermarkType} watermarkText={watermarkText} setWatermarkText={setWatermarkText} watermarkPosition={watermarkPosition} setWatermarkPosition={setWatermarkPosition} watermarkOpacity={watermarkOpacity} setWatermarkOpacity={setWatermarkOpacity} watermarkFontSize={watermarkFontSize} setWatermarkFontSize={setWatermarkFontSize} watermarkRotation={watermarkRotation} setWatermarkRotation={setWatermarkRotation} pricePerPage={pricePerPage} estimatedSelectedPageCount={estimatedSelectedPageCount} totalAmount={totalAmount} backendPrice={backendPrice} preparePayment={preparePayment} paymentLoading={paymentLoading} paymentError={paymentError} navigate={navigate} />} />
           <Route
             path={ROUTES.payment}
             element={

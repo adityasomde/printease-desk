@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import { Calendar, CheckCircle2, ChevronDown, Download, Eye, FileText, Filter, IndianRupee, MapPin, Printer, RefreshCw, Search, Settings2, Store, X, Info } from "lucide-react";
 import Card from "../components/Card";
 import StatusBadge from "../components/StatusBadge";
-import { createDocumentSignedDownload, getUserHistory } from "../services/api";
+import { createDocumentSignedDownload, getUserHistory, getOrderDetail } from "../services/api";
+import { useDocumentPreview } from "../hooks/useDocumentPreview";
+import DocumentPreviewModal from "../components/DocumentPreviewModal";
 import { getLocalHistory } from "../utils/localHistory";
 import { onOrderChanged } from "../utils/appEvents";
 import {
@@ -80,9 +82,30 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
   const [paymentMethod, setPaymentMethod] = useState("all");
   const [hubFilter, setHubFilter] = useState("all");
   const [downloadError, setDownloadError] = useState("");
-  const [documentPreview, setDocumentPreview] = useState(null);
   const [historyStale, setHistoryStale] = useState(false);
+
+  const {
+    documentId: previewDocId,
+    openPreview,
+    closePreview,
+    downloadDocument: triggerDownload,
+    blobUrl,
+    previewKind,
+    fileName: previewFileName,
+    fileType: previewFileType,
+    fileSize: previewFileSize,
+    textContent: previewTextContent,
+    loading: previewLoading,
+    error: previewError
+  } = useDocumentPreview();
+  useEffect(() => {
+    // Mobile check removed to keep unified simple PDF viewer
+  }, []);
   const lastFetchTime = useRef(0);
+  /** Stores fetched full-detail per order.id so repeat clicks skip re-fetch */
+  const detailCache = useRef({});
+  const [detailLoading, setDetailLoading] = useState("");
+  const [detailError, setDetailError] = useState("");
 
   const loadHistory = (force = false) => {
     if (!currentUser || currentUser.role !== "user") {
@@ -106,6 +129,26 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
         setLoading(false);
       });
   };
+
+  /**
+   * Lazily fetches full order detail on demand.
+   * Uses detailCache ref so repeat clicks don't re-fetch.
+   */
+  function fetchOrderDetail(order) {
+    if (detailCache.current[order.id] || order.isLocal) return;
+    setDetailLoading(order.id);
+    setDetailError("");
+    getOrderDetail(order.id)
+      .then((detail) => {
+        detailCache.current = { ...detailCache.current, [order.id]: detail };
+        // Trigger re-render by updating a piece of state
+        setDetailLoading("");
+      })
+      .catch((err) => {
+        setDetailError(err.message || "Could not load order details.");
+        setDetailLoading("");
+      });
+  }
 
   useEffect(() => {
     loadHistory(false);
@@ -226,24 +269,13 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
     });
   }, [visibleSource, search, dateFrom, dateTo, status, paymentMethod, hubFilter]);
 
-  async function downloadDocument(document, mode = "download") {
+  function downloadDocument(document, mode = "download") {
     if (!document?.document_id) return;
     setDownloadError("");
-    try {
-      const data = await createDocumentSignedDownload(document.document_id);
-      if (!data.signedUrl) throw new Error("Signed document link was not returned.");
-      
-      if (mode === "view") {
-        setDocumentPreview({
-          url: data.signedUrl,
-          name: document.file_name || "Document preview",
-        });
-        return;
-      }
-      
-      window.open(data.signedUrl, "_blank", "noopener,noreferrer");
-    } catch (err) {
-      setDownloadError(err.message || "Could not create signed download link.");
+    if (mode === "view") {
+      openPreview(document.document_id, document.file_name, document.file_type, document.file_size);
+    } else {
+      triggerDownload(document.document_id, document.file_name);
     }
   }
 
@@ -257,11 +289,32 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
   }
 
   function renderOrderDetails(order) {
-    const config = order.print_config || {};
-    const documents = order.documents?.length ? order.documents : [order.document].filter(Boolean);
-    const paymentStatus = order.payment?.status || order.payment_status;
-    const paymentMethodLabel = label(order.payment?.method || order.payment_method || "Not recorded");
-    const createdAt = formatDateTime(order.created_at);
+    // Prefer full cached detail, fall back to compact order data for local/fallback orders
+    const detail = detailCache.current[order.id] || order;
+    const isLoadingDetail = detailLoading === order.id;
+
+    if (isLoadingDetail) {
+      return (
+        <div className="border-t bg-slate-50 p-6 flex items-center justify-center gap-3 text-sm text-slate-500">
+          <RefreshCw size={16} className="animate-spin" />
+          Loading order details…
+        </div>
+      );
+    }
+
+    if (detailError && expandedOrderId === order.id) {
+      return (
+        <div className="border-t bg-rose-50 p-4 text-sm font-semibold text-rose-700">
+          {detailError}
+        </div>
+      );
+    }
+
+    const config = detail.print_config || {};
+    const documents = detail.documents?.length ? detail.documents : [detail.document].filter(Boolean);
+    const paymentStatus = detail.payment?.status || detail.payment_status;
+    const paymentMethodLabel = label(detail.payment?.method || detail.payment_method || "Not recorded");
+    const createdAt = formatDateTime(detail.created_at);
 
     return (
       <div className="border-t bg-slate-50 p-3 sm:p-4">
@@ -269,20 +322,20 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Order sheet</p>
-              <h4 className="mt-1 text-xl font-extrabold text-slate-950">{order.order_code || order.id}</h4>
+              <h4 className="mt-1 text-xl font-extrabold text-slate-950">{detail.order_code || detail.id}</h4>
               <p className="mt-1 text-sm text-slate-500">Created {createdAt}</p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <StatusBadge color={printStatusColor(order.status)}>{label(order.status) || "Order"}</StatusBadge>
+              <StatusBadge color={printStatusColor(detail.status)}>{label(detail.status) || "Order"}</StatusBadge>
               <StatusBadge color={paymentColor(paymentStatus)}>{label(paymentStatus) || "Payment"}</StatusBadge>
             </div>
           </div>
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <DetailLine label="Documents" value={`${documents.length || 1} file${documents.length === 1 ? "" : "s"}`} />
-            <DetailLine label="Printable pages" value={order.pages || order.document?.printable_pages || "-"} />
-            <DetailLine label="Copies" value={order.copies || config.copies || 1} />
-            <DetailLine label="Total paid/requested" value={`₹${order.payment?.amount ?? order.amount ?? 0}`} />
+            <DetailLine label="Printable pages" value={detail.pages || detail.document?.printable_pages || "-"} />
+            <DetailLine label="Copies" value={detail.copies || config.copies || 1} />
+            <DetailLine label="Total paid/requested" value={`₹${detail.payment?.amount ?? detail.amount ?? 0}`} />
           </div>
         </div>
 
@@ -346,11 +399,11 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
 
             <DetailPanel title="Order Progress" icon={<CheckCircle2 size={17} />}>
               <div className="space-y-3">
-                {(order.timeline || []).map((item, index) => (
+                {(detail.timeline || []).map((item, index) => (
                   <div key={`${item.label}-${item.time}-${index}`} className="grid grid-cols-[24px_minmax(0,1fr)] gap-3">
                     <div className="flex flex-col items-center">
                       <span className="mt-1 h-3 w-3 rounded-full bg-slate-950" />
-                      {index < (order.timeline || []).length - 1 && <span className="mt-1 h-full min-h-8 w-px bg-slate-200" />}
+                      {index < (detail.timeline || []).length - 1 && <span className="mt-1 h-full min-h-8 w-px bg-slate-200" />}
                     </div>
                     <div className="rounded-xl bg-slate-50 px-3 py-2">
                       <p className="text-sm font-bold text-slate-900">{item.label}</p>
@@ -358,7 +411,7 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
                     </div>
                   </div>
                 ))}
-                {!order.timeline?.length && <p className="rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-500">Timeline is not available for this order yet.</p>}
+                {!detail.timeline?.length && <p className="rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-500">Timeline is not available for this order yet.</p>}
               </div>
             </DetailPanel>
           </div>
@@ -368,20 +421,20 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
               <div className="grid grid-cols-2 gap-2">
                 <DetailLine label="Method" value={paymentMethodLabel} />
                 <DetailLine label="Status" value={label(paymentStatus)} />
-                <DetailLine label="Amount" value={`₹${order.payment?.amount ?? order.amount ?? 0}`} />
-                <DetailLine label="Paid at" value={formatDateTime(order.payment?.paid_at)} />
+                <DetailLine label="Amount" value={`₹${detail.payment?.amount ?? detail.amount ?? 0}`} />
+                <DetailLine label="Paid at" value={formatDateTime(detail.payment?.paid_at)} />
               </div>
               <div className="mt-2">
-                <DetailLine label="Transaction reference" value={order.payment?.transaction_id || "Not recorded"} />
+                <DetailLine label="Transaction reference" value={detail.payment?.transaction_id || "Not recorded"} />
               </div>
             </DetailPanel>
 
             <DetailPanel title="Print Centre" icon={<MapPin size={17} />}>
               <div className="grid grid-cols-2 gap-2">
-                <DetailLine label="Shop" value={order.hub?.name || "Print Hub"} />
-                <DetailLine label="Centre code" value={order.hub?.code || "-"} />
-                <DetailLine label="Printer" value={order.print_job?.printer_name || "Not recorded"} />
-                <DetailLine label="Agent" value={order.print_job?.agent_id || "Not recorded"} />
+                <DetailLine label="Shop" value={detail.hub?.name || "Print Hub"} />
+                <DetailLine label="Centre code" value={detail.hub?.code || "-"} />
+                <DetailLine label="Printer" value={detail.print_job?.printer_name || "Not recorded"} />
+                <DetailLine label="Agent" value={detail.print_job?.agent_id || "Not recorded"} />
               </div>
             </DetailPanel>
 
@@ -391,7 +444,7 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
                 <DetailLine label="Color" value={label(config.color_mode || "black_white")} />
                 <DetailLine label="Sides" value={config.sides || (config.duplex ? "Double-sided" : "Single-sided")} />
                 <DetailLine label="Orientation" value={label(config.orientation || "auto")} />
-                <DetailLine label="Page range" value={config.page_range || order.document?.page_range || "all"} />
+                <DetailLine label="Page range" value={config.page_range || detail.document?.page_range || "all"} />
                 <DetailLine label="DPI" value={config.quality_dpi || 300} />
               </div>
             </DetailPanel>
@@ -399,14 +452,14 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
             <div className="grid gap-2">
               <button
                 type="button"
-                onClick={() => onReprintOrder?.(order)}
+                onClick={() => onReprintOrder?.(detail)}
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-sm font-bold text-white shadow-sm hover:bg-slate-800"
               >
                 <RefreshCw size={16} /> Reprint exact settings
               </button>
               <button
                 type="button"
-                onClick={() => onReprintWithSettings?.(order)}
+                onClick={() => onReprintWithSettings?.(detail)}
                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-900 shadow-sm hover:bg-slate-50"
               >
                 <Settings2 size={16} /> Reprint with changes
@@ -523,7 +576,7 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
                       </StatusBadge>
                     )}
                   </div>
-                  <p className="mt-1.5 font-semibold text-sm text-slate-800">{order.document?.file_name || `${order.documents?.length || 1} uploaded document${order.documents?.length !== 1 ? 's' : ''}`}</p>
+                  <p className="mt-1.5 font-semibold text-sm text-slate-800">{order.document?.file_name || order.document_name || `${order.file_count || order.documents?.length || 1} uploaded document${(order.file_count || order.documents?.length || 1) !== 1 ? 's' : ''}`}</p>
                   <p className="mt-1 text-[11px] text-slate-500">{formatDateTime(order.created_at)}</p>
                   <p className="mt-1 text-[11px] text-slate-600">{getOrderPrintableSummary(order)}</p>
                   <p className="mt-1.5 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
@@ -539,12 +592,14 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
                   <button
                     type="button"
                     onClick={() => {
-                      setExpandedOrderId(expanded ? "" : order.id);
+                      const nextExpanded = expanded ? "" : order.id;
+                      setExpandedOrderId(nextExpanded);
                       setMobileDetailOrder(order);
+                      if (nextExpanded) fetchOrderDetail(order);
                     }}
                     className="rounded-xl border px-3 py-2 text-sm font-semibold hover:bg-slate-50"
                   >
-                    View Details
+                    {detailLoading === order.id ? "Loading…" : "View Details"}
                   </button>
                   <button type="button" onClick={() => onReprintOrder?.(order)} className="rounded-xl border px-3 py-2 text-[11px] font-semibold hover:bg-slate-50">
                     Reprint exactly
@@ -579,24 +634,19 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
         </div>
       )}
 
-      {documentPreview && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm sm:p-6 lg:p-8">
-          <div className="flex h-full w-full max-w-5xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b bg-white p-4">
-              <div>
-                <h3 className="font-bold">{documentPreview.name}</h3>
-                <p className="text-xs text-slate-500">Document Preview</p>
-              </div>
-              <button type="button" onClick={() => setDocumentPreview(null)} className="rounded-full border bg-slate-50 p-2 hover:bg-slate-100" aria-label="Close preview">
-                <X size={18} />
-              </button>
-            </div>
-            <div className="flex-1 bg-slate-100 p-2 sm:p-4">
-              <iframe title={documentPreview.name} src={documentPreview.url} className="h-full w-full rounded-2xl border bg-white shadow-sm" />
-            </div>
-          </div>
-        </div>
-      )}
+      <DocumentPreviewModal
+        isOpen={!!previewDocId}
+        onClose={closePreview}
+        blobUrl={blobUrl}
+        previewKind={previewKind}
+        fileName={previewFileName}
+        fileType={previewFileType}
+        fileSize={previewFileSize}
+        textContent={previewTextContent}
+        loading={previewLoading}
+        error={previewError}
+        onDownload={() => triggerDownload(previewDocId, previewFileName)}
+      />
     </div>
   );
 }

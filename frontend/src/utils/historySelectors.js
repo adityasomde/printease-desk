@@ -6,6 +6,7 @@ export function getOrderSearchText(order) {
     order.payment_method,
     order.hub?.name,
     order.hub?.code,
+    order.document_name,
     order.document?.file_name,
     ...(order.documents || []).map((file) => file.file_name),
   ].filter(Boolean).join(" ").toLowerCase();
@@ -58,7 +59,13 @@ export function computeSummary(orders) {
   const sorted = [...orders].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   return {
     total_orders: orders.length,
-    total_pages_printed: orders.reduce((sum, order) => sum + Number(order.pages || 0) * Number(order.copies || 1), 0),
+    total_pages_printed: orders.reduce((sum, order) => {
+      // Prefer printable_page_count (more accurate for custom page ranges)
+      const pages = order.printable_page_count != null
+        ? Number(order.printable_page_count)
+        : Number(order.pages || 0) * Number(order.copies || 1);
+      return sum + pages;
+    }, 0),
     total_amount_spent: orders.reduce((sum, order) => sum + Number(order.amount || 0), 0),
     last_print_date: sorted[0]?.created_at || null,
   };
@@ -106,14 +113,21 @@ export function formatDate(value) {
 
 export function getOrderPrintableSummary(order) {
   const config = order.print_config || {};
-  const document = order.document || {};
+  const doc = order.document || {};
+  // Prefer printable_page_count from compact response; fall back to document detail, then pages
+  const pages = order.printable_page_count != null
+    ? Number(order.printable_page_count)
+    : (doc.printable_pages || order.pages || 0);
+  const copies = doc.copies || order.copies || config.copies || 1;
+  const fileCount = order.file_count || order.documents?.length || 1;
   return [
     config.paper_size || "A4",
     getStatusLabel(config.color_mode || "black_white"),
     config.sides || (config.duplex ? "Double-sided" : "Single-sided"),
-    `${document.printable_pages || order.pages || 0} pages`,
-    `${document.copies || order.copies || 1} copy`,
-  ].join(" • ");
+    `${pages} pages`,
+    `${copies} copy`,
+    fileCount > 1 ? `${fileCount} files` : null,
+  ].filter(Boolean).join(" • ");
 }
 
 export function getPageRangeFromOptions(options, fallback = "all") {

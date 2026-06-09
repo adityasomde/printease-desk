@@ -20,13 +20,13 @@ Because previous builds had issues (where compilation succeeded, but the app ren
 The workflow can be triggered in two ways:
 
 ### A. Tag-Based Release (Recommended)
-Pushing a tag starting with `v` will automatically trigger the release pipeline for that version:
+Pushing a tag starting with `desktop-v` will automatically trigger the release pipeline for that version:
 
 ```bash
 git checkout main
 git pull
-git tag v0.1.36
-git push origin v0.1.36
+git tag desktop-v0.1.39
+git push origin desktop-v0.1.39
 ```
 
 ### B. Manual Workflow Dispatch

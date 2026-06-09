@@ -33,4 +33,4 @@ The `printease-mvp-main/frontend` and `printease-desk/frontend` share core busin
 
 ## 5. Building Releases
 - To build the app *without* publishing to GitHub Releases, simply use `npm run build:win` or equivalent platform scripts.
-- To cut a new official release, you must ensure the `version` in `package.json` is updated and push a git tag (e.g., `v1.0.1`), allowing the release script to handle distribution. Do NOT push unverified builds as releases.
+- To cut a new official release, you must ensure the `version` in `package.json` is updated and push a git tag following the strict format `desktop-v<version>` (e.g., `desktop-v0.1.39`), allowing the release script to handle distribution. Do NOT push unverified builds as releases.

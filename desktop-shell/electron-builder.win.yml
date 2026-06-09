@@ -37,6 +37,8 @@ extraResources:
       - "!**/*.md"
   - from: "vendor/win/SumatraPDF.exe"
     to: "vendor/win/SumatraPDF.exe"
+  - from: "vendor/win/THIRD_PARTY_NOTICES.md"
+    to: "vendor/win/THIRD_PARTY_NOTICES.md"
 win:
   target:
     - target: nsis

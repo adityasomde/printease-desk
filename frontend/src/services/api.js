@@ -304,7 +304,14 @@ export function createDocumentSignedDownload(documentId) {
   });
 }
 
+const documentBlobCache = new Map();
+
 async function fetchSignedDocumentBlob(documentId) {
+  const cacheKey = String(documentId || "");
+  if (documentBlobCache.has(cacheKey)) {
+    return documentBlobCache.get(cacheKey);
+  }
+
   const data = await createDocumentSignedDownload(documentId);
   if (!data?.signedUrl) {
     throw new Error("Could not create secure document link.");
@@ -317,7 +324,9 @@ async function fetchSignedDocumentBlob(documentId) {
 
   const blob = await response.blob();
   const fallbackType = data.document?.fileType || blob.type || "application/octet-stream";
-  return blob.type ? blob : new Blob([blob], { type: fallbackType });
+  const typedBlob = blob.type ? blob : new Blob([blob], { type: fallbackType });
+  documentBlobCache.set(cacheKey, typedBlob);
+  return typedBlob;
 }
 
 export async function downloadDocumentBlob(documentId) {

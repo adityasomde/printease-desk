@@ -350,13 +350,19 @@ function normalizeOrder(order, centreList = []) {
     customerName: extractCustomerName(order) || "Customer",
     customerMobile: order.customerMobile || order.customer_mobile || order.userMobile || order.user_mobile || order.customer?.mobile || order.user?.mobile || order.mobile || "",
     document: order.documentName || order.document_name || order.document || "Uploaded Document",
-    pages: Number(order.pages || 1),
+    pages: Number(order.pages || order.printablePageCount || order.printable_page_count || order.selectedPageCount || order.selected_page_count || 1),
     copies: Number(order.copies || 1),
-    amount: Number(order.amount || 0),
+    amount: Number(order.amount ?? (order.totalAmountPaise || order.total_amount_paise ? Number(order.totalAmountPaise || order.total_amount_paise) / 100 : 0)),
     status: toDisplayLabel(order.status || "Payment Pending"),
     date: formatOrderDate(order.createdAt || order.created_at || order.date),
     paymentStatus: toDisplayLabel(order.paymentStatus || order.payment_status || "Pending"),
     pickupCode: order.pickupCode || order.pickup_code || "",
+    configVersion: order.configVersion || order.config_version || null,
+    latestConfiguredByRole: order.latestConfiguredByRole || order.latest_configured_by_role || null,
+    latestConfiguredAt: order.latestConfiguredAt || order.latest_configured_at || null,
+    latestConfigSource: order.latestConfigSource || order.latest_config_source || null,
+    priceSnapshot: order.priceSnapshot || order.price_snapshot || null,
+    printConfigSnapshot: order.printConfigSnapshot || order.print_config_snapshot || order.printOptions || order.print_options || null,
   };
 }
 
@@ -1995,7 +2001,7 @@ export default function App() {
         const savedOrder = normalizeOrder(data.order, centres);
         setOrders((prev) => upsertOrder(prev, savedOrder));
         setLastOrdersUpdatedAt(new Date().toISOString());
-      emitOrderChanged();
+        emitOrderChanged();
         invalidateUserHistory(currentUser?.id || "me");
         if (order?.id === orderId || order?.backendId === existingOrder.backendId) setOrder(savedOrder);
         return;
@@ -2009,6 +2015,21 @@ export default function App() {
     setLastOrdersUpdatedAt(new Date().toISOString());
     emitOrderChanged();
     if (order?.id === orderId) setOrder((prev) => ({ ...prev, status: nextStatus }));
+  }
+
+  function applySavedOrderUpdate(orderData) {
+    if (!orderData) return null;
+
+    const savedOrder = normalizeOrder(orderData, centres);
+    setOrders((prev) => upsertOrder(prev, savedOrder));
+    setLastOrdersUpdatedAt(new Date().toISOString());
+    emitOrderChanged();
+
+    if (order?.id === savedOrder.id || order?.backendId === savedOrder.backendId) {
+      setOrder(savedOrder);
+    }
+
+    return savedOrder;
   }
 
   useEffect(() => {
@@ -2173,6 +2194,7 @@ export default function App() {
                   hubOrders={hubOrders}
                   updateOrderStatus={updateOrderStatus}
                   refreshOrders={() => loadOrdersForSession(currentUser, centres)}
+                  onOrderSaved={applySavedOrderUpdate}
                   navigate={navigate}
                   openProfile={openProfile}
                 />
@@ -2191,6 +2213,7 @@ export default function App() {
                     hubOrders={hubOrders}
                     updateOrderStatus={updateOrderStatus}
                     refreshOrders={() => loadOrdersForSession(currentUser, centres)}
+                    onOrderSaved={applySavedOrderUpdate}
                     navigate={navigate}
                   />
                 </Suspense>

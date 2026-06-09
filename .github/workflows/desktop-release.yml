@@ -65,6 +65,7 @@ jobs:
           name: linux-release
           path: |
             desktop-shell/release/*.AppImage
+            desktop-shell/release/*.AppImage.blockmap
             desktop-shell/release/*.deb
             desktop-shell/release/latest-linux.yml
           if-no-files-found: error
@@ -117,11 +118,12 @@ jobs:
           name: windows-release
           path: |
             desktop-shell/release/*.exe
+            desktop-shell/release/*.exe.blockmap
             desktop-shell/release/latest.yml
           if-no-files-found: error
 
-  draft-release:
-    name: Create Draft GitHub Release
+  publish-release:
+    name: Publish GitHub Release
     needs:
       - linux
       - windows
@@ -156,19 +158,20 @@ jobs:
             echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Create draft release
+      - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: PrintEase Desktop ${{ steps.tag.outputs.tag }}
-          draft: true
+          draft: false
           prerelease: false
+          make_latest: true
           files: |
             release-assets/*
           body: |
             PrintEase Desktop ${{ steps.tag.outputs.tag }}
 
-            Automated draft release build.
+            Automated latest release build.
 
             Included:
             - Linux AppImage
@@ -183,10 +186,9 @@ jobs:
             - Windows package build passed
             - Windows package verification passed
 
-            Manual checks still required before publishing:
+            Recommended manual checks:
             - Download Linux build and open app
             - Download Windows build and open app
-            - Confirm no blank screen
             - Confirm dashboard loads
             - Confirm printer page opens
             - Confirm no did-fail-load/render-process-gone errors

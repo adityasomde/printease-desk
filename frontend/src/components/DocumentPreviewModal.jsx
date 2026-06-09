@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
 import { X, Download, FileText, Image, FileCode, AlertCircle, Loader2 } from "lucide-react";
+import InlineDocumentFrame from "./InlineDocumentFrame";
 
 export default function DocumentPreviewModal({
   isOpen,
@@ -135,11 +136,7 @@ export default function DocumentPreviewModal({
           ) : (
             <div className="flex h-full min-h-[40vh] items-center justify-center">
               {previewKind === "pdf" && blobUrl && (
-                <iframe
-                  src={`${blobUrl}#toolbar=0&navpanes=0`}
-                  title="PDF Document Preview"
-                  className="h-full min-h-[55vh] w-full rounded-xl border border-slate-200/50 bg-white shadow-inner dark:border-slate-800"
-                />
+                <InlineDocumentFrame url={blobUrl} title="PDF Document Preview" className="h-full min-h-[55vh] w-full shadow-inner dark:border-slate-800" />
               )}
 
               {previewKind === "image" && blobUrl && (

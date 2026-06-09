@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { BarChart3, Copy, Download, Eye, FileText, IndianRupee, Link2, PauseCircle, Printer, QrCode, RefreshCw, Send, Settings, ShieldCheck, Wifi, X, XCircle } from "lucide-react";
 import HubOrderConfigModal from "../components/HubOrderConfigModal";
+import InlineDocumentFrame from "../components/InlineDocumentFrame";
 import Card from "../components/Card";
 import Metric from "../components/Metric";
 import StatusBadge from "../components/StatusBadge";
@@ -62,6 +63,17 @@ const AGENT_LOCKED_STATUSES = new Set(["sent_to_agent", "queued_for_printing", "
 const ROUTEABLE_PRINTER_STATUSES = new Set(["idle", "available", "enabled", "accepting"]);
 const BLOCKED_PRINTER_STATUSES = new Set(["paused", "disabled", "stopped", "offline", "unable", "disconnected", "not_accepting"]);
 const PUBLIC_APP_URL = "https://printhubdesi.vercel.app";
+
+function getHubPricing(hub) {
+  const pricing = hub?.pricing || {};
+  return {
+    bwSingle: pricing.bwSingle ?? hub?.bwSingle,
+    bwDouble: pricing.bwDouble ?? hub?.bwDouble,
+    colorSingle: pricing.colorSingle ?? hub?.colorSingle,
+    colorDouble: pricing.colorDouble ?? hub?.colorDouble,
+    watermarkCharge: pricing.watermarkCharge ?? hub?.watermarkCharge,
+  };
+}
 
 function getEffectivePrinterCondition(printer) {
   const condition = normalizeStatus(printer?.condition);
@@ -146,7 +158,7 @@ function canCancelOrder(order) {
 }
 
 
-export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus, refreshOrders, navigate }) {
+export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus, refreshOrders, onOrderSaved, navigate }) {
   const [agents, setAgents] = useState([]);
   const [agentPrinters, setAgentPrinters] = useState([]);
   const [printJobs, setPrintJobs] = useState([]);
@@ -441,12 +453,9 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
         method: "PATCH",
         body: JSON.stringify(payload)
       });
-      if (typeof refreshOrders === "function") {
-        await refreshOrders();
-      }
-      if (data.order) {
-        setDocumentModalOrder(prev => ({ ...prev, ...data.order }));
-      }
+      const savedOrder = typeof onOrderSaved === "function" && data.order ? onOrderSaved(data.order) : null;
+      if (!savedOrder && typeof refreshOrders === "function") await refreshOrders();
+      if (data.order || savedOrder) setDocumentModalOrder(prev => ({ ...prev, ...(savedOrder || data.order) }));
       const docsData = await getOrderDocuments(orderId);
       setOrderDocuments(Array.isArray(docsData.documents) ? docsData.documents : []);
     } catch (error) {
@@ -1143,7 +1152,7 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
                       Close preview
                     </button>
                   </div>
-                  <iframe title={documentPreview.name} src={documentPreview.url} className="h-[70vh] w-full rounded-xl border bg-white" />
+                  <InlineDocumentFrame title={documentPreview.name} url={documentPreview.url} className="h-[70vh] w-full" />
                 </div>
               )}
             </div>
@@ -1157,7 +1166,7 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
           onClose={() => setConfigModalOpen(false)}
           order={documentModalOrder}
           files={orderDocuments}
-          pricing={currentHub?.pricing || {}}
+          pricing={getHubPricing(currentHub)}
           onSave={handleSaveConfig}
           isLoading={documentsLoading}
         />

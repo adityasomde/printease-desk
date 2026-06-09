@@ -95,6 +95,21 @@ function readAppFile(suffix) {
   return "";
 }
 
+function mainWindowSandboxIsEnabled(mainCode) {
+  const marker = "mainWindow = new BrowserWindow";
+  const markerIndex = mainCode.indexOf(marker);
+  if (markerIndex === -1) return false;
+
+  const mainWindowBlock = mainCode.slice(markerIndex, markerIndex + 1200);
+  const webPreferencesMatch = mainWindowBlock.match(/webPreferences\s*:\s*{[\s\S]*?}/);
+  return Boolean(webPreferencesMatch && /sandbox\s*:\s*true\b/.test(webPreferencesMatch[0]));
+}
+
+function isAllowedNoticeFile(filePath) {
+  const normalized = filePath.replaceAll("\\", "/").toLowerCase();
+  return targetPlatform === "win32" && normalized.endsWith("resources/vendor/win/third_party_notices.md");
+}
+
 // 1. Verify files inside app.asar
 for (const asarFile of appAsarFiles) {
   const normalized = asarFile.toLowerCase();
@@ -118,7 +133,7 @@ for (const asarFile of appAsarFiles) {
   }
 
   for (const ext of forbiddenExtensions) {
-    if (normalized.endsWith(ext)) {
+    if (normalized.endsWith(ext) && !isAllowedNoticeFile(asarFile)) {
       console.error(`Forbidden file extension "${ext}" in app.asar: ${asarFile}`);
       failed = true;
     }
@@ -150,7 +165,7 @@ for (const file of files) {
   if (fs.existsSync(file) && fs.statSync(file).isFile()) {
     const ext = path.extname(file).toLowerCase();
 
-    if (forbiddenExtensions.includes(ext)) {
+    if (forbiddenExtensions.includes(ext) && !isAllowedNoticeFile(file)) {
       console.error(`Forbidden file extension "${ext}" found: ${file}`);
       failed = true;
     }
@@ -183,8 +198,8 @@ for (const required of requiredResourceFiles) {
 
 const mainCode = readAppFile("main.js");
 if (mainCode) {
-  if (!mainCode.includes("sandbox: true")) {
-    console.error(`sandbox: true not found in main.js. Please enable it for security.`);
+  if (!mainWindowSandboxIsEnabled(mainCode)) {
+    console.error(`sandbox: true not found on the main app BrowserWindow. Please enable it for the primary renderer.`);
     failed = true;
   }
 }

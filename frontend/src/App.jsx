@@ -2186,7 +2186,13 @@ export default function App() {
             element={
               currentUser?.role === "hub" ? (
                 <Suspense fallback={<div className="text-center py-10 font-medium text-slate-500">Loading Hub History...</div>}>
-                  <HubHistoryPage navigate={navigate} />
+                  <HubHistoryPage
+                    currentHub={currentHub}
+                    hubOrders={hubOrders}
+                    updateOrderStatus={updateOrderStatus}
+                    refreshOrders={() => loadOrdersForSession(currentUser, centres)}
+                    navigate={navigate}
+                  />
                 </Suspense>
               ) : (
                 <RouteNotice title="Print Hub Login Required" message="Please login as a print hub to view history." actionLabel="Login as Print Hub" onAction={() => startLogin("hub")} />

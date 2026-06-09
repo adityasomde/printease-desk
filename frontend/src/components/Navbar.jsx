@@ -77,8 +77,8 @@ export default function Navbar({
             )}
             {currentUser?.role === "hub" && (
               <>
-                <NavButton active={page === "hubDashboard"} icon={<Building2 size={16} />} onClick={() => navigate("hubDashboard")}>Hub Dashboard</NavButton>
                 <NavButton active={page === "hubHistory"} icon={<History size={16} />} onClick={() => navigate("hubHistory")}>Hub History</NavButton>
+                <NavButton active={page === "hubDashboard"} icon={<Building2 size={16} />} onClick={() => navigate("hubDashboard")}>Hub Dashboard</NavButton>
                 <NavButton active={page === "hubPrinters"} icon={<Printer size={16} />} onClick={() => navigate("hubPrinters")}>Printers & Agents</NavButton>
               </>
             )}
@@ -114,8 +114,8 @@ export default function Navbar({
                     {currentUser.role === "user" && <MenuItem icon={<User size={16} />} onClick={() => navigate("userDashboard")}>User Dashboard</MenuItem>}
                     {currentUser.role === "hub" && (
                       <>
-                        <MenuItem icon={<Building2 size={16} />} onClick={() => navigate("hubDashboard")}>Hub Dashboard</MenuItem>
                         <MenuItem icon={<History size={16} />} onClick={() => navigate("hubHistory")}>Hub History</MenuItem>
+                        <MenuItem icon={<Building2 size={16} />} onClick={() => navigate("hubDashboard")}>Hub Dashboard</MenuItem>
                         <MenuItem icon={<Printer size={16} />} onClick={() => navigate("hubPrinters")}>Printers & Agents</MenuItem>
                         <MenuItem icon={<Settings size={16} />} onClick={() => navigate("hubPricing")}>Pricing & Payment</MenuItem>
                       </>

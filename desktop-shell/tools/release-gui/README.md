@@ -94,7 +94,7 @@ If a release hotfix fails or a blank screen is encountered on staging/production
    ```
 3. Checkout the specific commit or release tag:
    ```bash
-   git checkout tags/v30.0.0 # or git checkout <v30-sha>
+   git checkout tags/desktop-v0.1.30 # or git checkout <v30-sha>
    ```
 4. Perform a full clean build and package verification sequence using this tool:
    - Run **Clean previous build**

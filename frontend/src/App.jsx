@@ -238,6 +238,8 @@ function toCurrentUser(user, centre) {
   const hubId = user.hubId || user.centreId || centre?.id || null;
 
   return {
+    ...user,
+    ...(centre || {}),
     id: user.id,
     role,
     name: user.name,
@@ -612,6 +614,7 @@ export default function App() {
           ...restoredUser,
           ...(signedInCentre
             ? {
+                ...signedInCentre,
                 centreId: signedInCentre.id,
                 hubId: signedInCentre.id,
                 centreCode: signedInCentre.code,
@@ -1799,41 +1802,20 @@ export default function App() {
     }
 
     try {
-      const documents = orderDetails.documents?.length ? orderDetails.documents : [orderDetails.document].filter(Boolean);
-      if (!documents.length || !documents[0].document_id) {
-        throw new Error("Source document not available. Please start a new order.");
+      const response = await reprintOrder(historyOrder.backendId || historyOrder.id, { allowDocumentReuse: true });
+      
+      if (!response.success && response.nextAction === "document_reupload_required") {
+        alert(response.message || "Original document is no longer available. Please upload it again to reprint.");
+        // We could redirect to upload with prefill here, but for now we fallback to the old reprintWithSettings
+        // which fetches the file locally (and will likely also fail and ask for reupload).
+        return reprintWithSettings(historyOrder);
       }
 
-      const orderData = await apiRequest("/api/orders", {
-        method: "POST",
-        body: JSON.stringify({
-          centreCode: nextCentre.code,
-          documentIds: documents.map((d) => d.document_id),
-          files: documents.map((d) => {
-            const printOptions = d.print_options || orderDetails.print_config?.raw || {};
-            return {
-              documentId: d.document_id,
-              documentName: d.file_name,
-              selectedPages: d.page_range,
-              copies: d.copies,
-              colorType: printOptions.colorMode === "color" ? "color" : "bw",
-              sideType: printOptions.duplex || printOptions.sides?.startsWith("two_sided") ? "double" : "single",
-              paperSize: printOptions.paperSize || "A4",
-              pagesPerSheet: printOptions.pagesPerSheet || 1,
-              orientation: printOptions.orientation || "auto",
-              printDpi: printOptions.quality?.dpi || 300,
-              scaleMode: printOptions.scale?.mode || "original",
-              marginMode: printOptions.margins?.mode || "default",
-              watermarkEnabled: Boolean(printOptions.watermark?.enabled),
-              printOptions: printOptions
-            };
-          }),
-        }),
-      });
+      if (!response.success) {
+        throw new Error(response.message || "Failed to recreate order");
+      }
 
-      if (!orderData.success) throw new Error(orderData.message || "Failed to recreate order");
-
-      const createdOrder = normalizeOrder(orderData.order, centres);
+      const createdOrder = normalizeOrder(response.order, centres);
       setOrder(createdOrder);
       setOrders((prev) => upsertOrder(prev, createdOrder));
       setLastOrdersUpdatedAt(new Date().toISOString());
@@ -1841,17 +1823,14 @@ export default function App() {
       invalidateUserHistory(currentUser?.id || "me");
 
       setSelectedCentre(nextCentre);
-      setPendingPayment({
-        id: `manual-${createdOrder.backendId || createdOrder.id}`,
-        orderId: createdOrder.backendId || createdOrder.id,
-        amount: createdOrder.amount,
-        method: "MANUAL_UPI_OR_CASH",
-        status: "pending",
-        createdAt: new Date().toISOString(),
-      });
-      setUpiQr(nextCentre?.upiQrImageUrl ? { imageUrl: nextCentre.upiQrImageUrl } : null);
+      setPendingPayment(null);
+      setUpiQr(null);
       
-      navigate("track");
+      if (response.nextAction === "payment_required") {
+        navigate("payment");
+      } else {
+        navigate("track");
+      }
     } catch (err) {
       alert(err.message || "Could not reprint order. You may need to upload the file again.");
     } finally {
@@ -2133,6 +2112,11 @@ export default function App() {
                   startDirectUpload={startDirectUpload}
                   selectCentreAndUpload={selectCentreAndUpload}
                   selectCentreByCode={selectCentreByCode}
+                  currentHub={currentHub}
+                  hubOrders={hubOrders}
+                  updateOrderStatus={updateOrderStatus}
+                  refreshOrders={() => loadOrdersForSession(currentUser, centres)}
+                  onOrderSaved={applySavedOrderUpdate}
                 />
               }
             />
@@ -2293,7 +2277,7 @@ export default function App() {
               />
             }
           />
-            <Route path={ROUTES.history} element={<HistoryPage orders={orders} currentUser={currentUser} lastUpdatedAt={lastOrdersUpdatedAt} onOpenPayment={openPaymentRequest} onReprintOrder={reprintWithSameSettings} onReprintWithSettings={reprintWithSettings} />} />
+            <Route path={ROUTES.history} element={<HistoryPage orders={orders} currentUser={currentUser} lastUpdatedAt={lastOrdersUpdatedAt} onOpenPayment={openPaymentRequest} onReprintOrder={reprintWithSameSettings} onReprintWithSettings={reprintWithSettings} isReprinting={paymentLoading} />} />
             <Route path={ROUTES.orderHistory} element={<Navigate to={ROUTES.history} replace />} />
             <Route path={ROUTES.usageHistory} element={<Navigate to={ROUTES.history} replace />} />
             <Route path="*" element={<Navigate to={ROUTES.home} replace />} />

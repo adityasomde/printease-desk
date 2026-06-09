@@ -6,6 +6,7 @@ import Card from "../components/Card";
 import CentrePriceCard from "../components/CentrePriceCard";
 import CameraScanLayer from "../components/CameraScanLayer";
 import CentreScannerTile from "../components/CentreScannerTile";
+import HubActiveOrdersManager from "../components/HubActiveOrdersManager";
 
 import QRScanner from "../components/QRScanner";
 
@@ -32,6 +33,11 @@ export default function HomePage({
   startDirectUpload,
   selectCentreAndUpload,
   selectCentreByCode,
+  currentHub,
+  hubOrders,
+  updateOrderStatus,
+  refreshOrders,
+  onOrderSaved,
 }) {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [centreSearch, setCentreSearch] = useState("");
@@ -155,6 +161,40 @@ export default function HomePage({
         .includes(query);
     });
   }, [centreSearch, centres]);
+
+  if (currentUser?.role === "hub") {
+    return (
+      <div className="space-y-6">
+        <Card>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-2xl font-black tracking-tight text-slate-950">Print Hub Home</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Download the desktop app and manage incoming print orders from one focused screen.
+              </p>
+            </div>
+            <button
+              onClick={handleDownloadApp}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-4 font-semibold text-white transition hover:bg-slate-800"
+            >
+              <Download size={20} />
+              {isAndroid ? "Install Android App" : "Download Desktop App"}
+            </button>
+          </div>
+        </Card>
+
+        <HubActiveOrdersManager
+          currentHub={currentHub}
+          hubOrders={hubOrders}
+          updateOrderStatus={updateOrderStatus}
+          refreshOrders={refreshOrders}
+          onOrderSaved={onOrderSaved}
+          navigate={navigate}
+          compact
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">

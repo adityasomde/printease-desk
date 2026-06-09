@@ -485,9 +485,8 @@ export default function HubHistoryPage({ currentHub, hubOrders, updateOrderStatu
     const documentId = document.documentId || document.id;
     setDocumentActionId(`${mode}:${documentId}`);
     try {
-      const rawBlob = await downloadDocumentBlob(documentId);
-      const pdfBlob = new Blob([rawBlob], { type: "application/pdf" });
-      const localUrl = URL.createObjectURL(pdfBlob);
+      const blob = await downloadDocumentBlob(documentId);
+      const localUrl = URL.createObjectURL(blob);
 
       if (mode === "view") {
         setDocumentPreview({

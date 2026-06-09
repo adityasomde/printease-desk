@@ -304,45 +304,30 @@ export function createDocumentSignedDownload(documentId) {
   });
 }
 
-export async function downloadDocumentBlob(documentId) {
-  const token = localStorage.getItem("printease_token");
-  const orderToken = localStorage.getItem("printease_order_access_token");
-  const headers = new Headers();
-  if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
+async function fetchSignedDocumentBlob(documentId) {
+  const data = await createDocumentSignedDownload(documentId);
+  if (!data?.signedUrl) {
+    throw new Error("Could not create secure document link.");
   }
-  if (orderToken) {
-    headers.set("X-Order-Access-Token", orderToken);
-  }
-  const endpoint = `/api/documents/${encodeURIComponent(documentId)}/download`;
-  const fullUrl = joinApiUrl(API_BASE_URL, endpoint);
-  const response = await fetch(fullUrl, { headers });
+
+  const response = await fetch(data.signedUrl);
   if (!response.ok) {
     throw new Error(`Failed to fetch document: ${response.status}`);
   }
-  return response.blob();
+
+  const blob = await response.blob();
+  const fallbackType = data.document?.fileType || blob.type || "application/octet-stream";
+  return blob.type ? blob : new Blob([blob], { type: fallbackType });
+}
+
+export async function downloadDocumentBlob(documentId) {
+  return fetchSignedDocumentBlob(documentId);
 }
 
 export async function getDocumentPreviewBlob(documentId) {
-  const token = localStorage.getItem("printease_token");
-  const orderToken = localStorage.getItem("printease_order_access_token");
-  const headers = new Headers();
-  if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
-  if (orderToken) {
-    headers.set("X-Order-Access-Token", orderToken);
-  }
-  const endpoint = `/api/documents/${encodeURIComponent(documentId)}/preview`;
-  const fullUrl = joinApiUrl(API_BASE_URL, endpoint);
-  const response = await fetch(fullUrl, { headers });
-  if (!response.ok) {
-    throw new Error(`Failed to fetch document preview: ${response.status}`);
-  }
-  return response.blob();
+  return fetchSignedDocumentBlob(documentId);
 }
 
 export async function getDocumentDownloadBlob(documentId) {
   return downloadDocumentBlob(documentId);
 }
-

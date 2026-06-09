@@ -49,10 +49,14 @@ git log --oneline -5
 
 ---
 
-## 3. Version Rule
+## 3. Version Rule & Tag Formatting
 
 Before building a release, update the version in:
-`desktop-shell/package.json` (e.g., `"version": "0.0.36"`).
+`desktop-shell/package.json` (e.g., `"version": "0.1.39"`).
+
+**Tag Formatting Rule**:
+- Release tags must strictly follow the format `desktop-v<version>` (e.g., `desktop-v0.1.39`).
+- Pushing a tag matching `desktop-v*` triggers the automated GitHub Actions release workflow. Do not use plain `v*` tags for desktop releases to avoid namespace collision with the web MVP repository.
 
 **Version numbering guide**:
 - `v30`: Last known working stable release.
@@ -186,5 +190,5 @@ Only run compilation after unpacked testing passes:
 - **Emergency Rollback**: If a release fails in production:
   1. Delete broken assets from GitHub.
   2. Mark broken releases as drafts/pre-releases.
-  3. Checkout last known working tag (e.g. `git checkout tags/v30.0.0`).
-  4. Compile a hotfix version (e.g., `v36.0.1` or `v37.0.0`) from the good commit and update `latest.yml`.
+  3. Checkout last known working tag (e.g. `git checkout tags/desktop-v0.1.30`).
+  4. Compile a hotfix version (e.g., `desktop-v0.1.40` or `desktop-v0.1.41`) from the good commit and update `latest.yml`.

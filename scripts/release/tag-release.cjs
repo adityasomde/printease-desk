@@ -57,29 +57,30 @@ try {
 
   const proceedWithTag = () => {
     // 5. Check if tag already exists locally
-    const localTagExists = runGit(["tag", "-l", `v${versionArg}`]);
+    const tagName = `desktop-v${versionArg}`;
+    const localTagExists = runGit(["tag", "-l", tagName]);
     if (localTagExists) {
-      console.error(`Error: Tag v${versionArg} already exists locally.`);
+      console.error(`Error: Tag ${tagName} already exists locally.`);
       rl.close();
       process.exit(1);
     }
 
     // 6. Check if tag already exists remotely
     console.log("Checking remote tags...");
-    const remoteTagExists = runGit(["ls-remote", "--tags", "origin", `refs/tags/v${versionArg}`]);
+    const remoteTagExists = runGit(["ls-remote", "--tags", "origin", `refs/tags/${tagName}`]);
     if (remoteTagExists) {
-      console.error(`Error: Tag v${versionArg} already exists on remote origin.`);
+      console.error(`Error: Tag ${tagName} already exists on remote origin.`);
       rl.close();
       process.exit(1);
     }
 
     // 7. Create tag
-    console.log(`Creating tag v${versionArg}...`);
-    runGit(["tag", `v${versionArg}`]);
+    console.log(`Creating tag ${tagName}...`);
+    runGit(["tag", tagName]);
 
     // 8. Push tag
-    console.log(`Pushing tag v${versionArg} to origin...`);
-    runGit(["push", "origin", `v${versionArg}`]);
+    console.log(`Pushing tag ${tagName} to origin...`);
+    runGit(["push", "origin", tagName]);
 
     console.log("\n====================================================");
     console.log("SUCCESS: Tag pushed.");

@@ -86,23 +86,23 @@ export default function CentreCodePage({
                 className="w-full rounded-2xl border bg-slate-50 py-4 pl-14 pr-6 text-lg outline-none focus:bg-white focus:ring-2 focus:ring-slate-300 transition-all"
               />
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
               <button
                 onClick={handleCentreCode}
                 disabled={lookupLoading || !String(centreCode).trim()}
-                className="inline-flex flex-1 sm:flex-none items-center justify-center gap-2 rounded-2xl bg-slate-900 px-8 py-4 font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50"
+                className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-2xl bg-slate-900 px-8 py-4 font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50"
               >
                 Search Online
               </button>
               {mappableCentres.length > 0 ? (
                 <button
                   onClick={() => openMapForCentre()}
-                  className="inline-flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 font-semibold text-emerald-700 hover:bg-emerald-100 transition"
+                  className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 font-semibold text-emerald-700 hover:bg-emerald-100 transition"
                 >
                   <Map size={18} /> View centres on map
                 </button>
               ) : (
-                <div className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 font-semibold text-slate-500">
+                <div className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 font-semibold text-slate-500">
                   <Map size={18} /> No centres have shared location yet.
                 </div>
               )}

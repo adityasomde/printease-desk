@@ -447,7 +447,7 @@ export default function UploadPage({
   };
 
   const regularConfigurationForm = (
-    <div className="grid gap-2 md:gap-4 grid-cols-2">
+    <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2">
       <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-1">
         Estimated pages
         <input type="number" min="1" value={activeConfig?.pages || 1} onChange={(e) => setConfigVal("pages", Number(e.target.value))} className="rounded-2xl border px-4 py-3 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />

@@ -3,6 +3,7 @@ import { Check, CreditCard, Loader2, ShieldCheck, X } from "lucide-react";
 import Card from "../components/Card";
 import Input from "../components/Input";
 import NumberInput from "../components/NumberInput";
+import HubAfterOrderSettingsCard from "../components/HubAfterOrderSettingsCard";
 
 function SaveStatus({ status }) {
   if (status === "saving") {
@@ -63,45 +64,49 @@ export default function HubPricingPage({ currentHub, updateCentrePrice, updateCe
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
-      <Card>
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-bold">Centre Pricing</h2>
-            <p className="mt-2 text-sm text-slate-600">Set your own price per page. Changes save when you leave the field.</p>
+    <div className="space-y-6">
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-bold">Centre Pricing</h2>
+              <p className="mt-2 text-sm text-slate-600">Set your own price per page. Changes save when you leave the field.</p>
+            </div>
+            <SaveStatus status={pricingStatus} />
           </div>
-          <SaveStatus status={pricingStatus} />
-        </div>
-        <div className="mt-6 space-y-4">
-          <NumberInput label="A4 B/W Single Side" value={currentHub.bwSingle} onChange={(value) => handlePriceChange("bwSingle", value)} helperText="Most common" />
-          <NumberInput label="A4 B/W Double Side" value={currentHub.bwDouble} onChange={(value) => handlePriceChange("bwDouble", value)} />
-          <NumberInput label="A4 Color Single Side" value={currentHub.colorSingle} onChange={(value) => handlePriceChange("colorSingle", value)} />
-          <NumberInput label="A4 Color Double Side" value={currentHub.colorDouble} onChange={(value) => handlePriceChange("colorDouble", value)} />
-          <NumberInput label="Watermark Charge" value={currentHub.watermarkCharge} onChange={(value) => handlePriceChange("watermarkCharge", value)} helperText="Per-order surcharge" />
-        </div>
-      </Card>
+          <div className="mt-6 space-y-4">
+            <NumberInput label="A4 B/W Single Side" value={currentHub.bwSingle} onChange={(value) => handlePriceChange("bwSingle", value)} helperText="Most common" />
+            <NumberInput label="A4 B/W Double Side" value={currentHub.bwDouble} onChange={(value) => handlePriceChange("bwDouble", value)} />
+            <NumberInput label="A4 Color Single Side" value={currentHub.colorSingle} onChange={(value) => handlePriceChange("colorSingle", value)} />
+            <NumberInput label="A4 Color Double Side" value={currentHub.colorDouble} onChange={(value) => handlePriceChange("colorDouble", value)} />
+            <NumberInput label="Watermark Charge" value={currentHub.watermarkCharge} onChange={(value) => handlePriceChange("watermarkCharge", value)} helperText="Per-order surcharge" />
+          </div>
+        </Card>
 
-      <Card>
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-bold">Payment Method</h2>
-            <p className="mt-2 text-sm text-slate-600">Customers see these details for manual payment. Only the hub dashboard can confirm collection.</p>
+        <Card>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-bold">Payment Method</h2>
+              <p className="mt-2 text-sm text-slate-600">Customers see these details for manual payment. Only the hub dashboard can confirm collection.</p>
+            </div>
+            <SaveStatus status={paymentStatus} />
           </div>
-          <SaveStatus status={paymentStatus} />
-        </div>
-        <div className="mt-6 space-y-4">
-          <Input label="UPI ID" icon={<CreditCard size={18} />} value={currentHub.upiId} setValue={(value) => handlePaymentChange("upiId", value)} placeholder="example@upi" />
-          <Input label="UPI QR Image URL" icon={<CreditCard size={18} />} value={currentHub.upiQrImageUrl || ""} setValue={(value) => handlePaymentChange("upiQrImageUrl", value)} placeholder="https://.../qr.png" />
-          <div className="rounded-2xl bg-slate-50 p-4">
-            <div className="flex items-start gap-3">
-              <ShieldCheck className="mt-1 text-green-600" />
-              <p className="text-sm text-slate-600">
-                Security: customers cannot mark payment successful. Keep QR images public-only and never paste payment gateway secrets, API keys, or private tokens here.
-              </p>
+          <div className="mt-6 space-y-4">
+            <Input label="UPI ID" icon={<CreditCard size={18} />} value={currentHub.upiId} setValue={(value) => handlePaymentChange("upiId", value)} placeholder="example@upi" />
+            <Input label="UPI QR Image URL" icon={<CreditCard size={18} />} value={currentHub.upiQrImageUrl || ""} setValue={(value) => handlePaymentChange("upiQrImageUrl", value)} placeholder="https://.../qr.png" />
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <div className="flex items-start gap-3">
+                <ShieldCheck className="mt-1 text-green-600" />
+                <p className="text-sm text-slate-600">
+                  Security: customers cannot mark payment successful. Keep QR images public-only and never paste payment gateway secrets, API keys, or private tokens here.
+                </p>
+              </div>
             </div>
           </div>
-        </div>
-      </Card>
+        </Card>
+      </div>
+
+      <HubAfterOrderSettingsCard currentCentre={currentHub} onSettingsUpdate={(settings) => { if (currentHub) currentHub.afterOrderSettings = settings; }} />
     </div>
   );
 }

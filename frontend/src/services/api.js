@@ -354,3 +354,11 @@ export async function getDocumentPreviewBlob(documentId) {
 export async function getDocumentDownloadBlob(documentId) {
   return downloadDocumentBlob(documentId);
 }
+
+export function updateAfterOrderSettings(afterOrderSettings) {
+  return apiRequest("/api/centres/me/after-order-settings", {
+    method: "PATCH",
+    body: JSON.stringify({ afterOrderSettings }),
+  });
+}
+

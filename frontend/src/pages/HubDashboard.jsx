@@ -3,6 +3,7 @@ import { BarChart3, Copy, Download, FileText, IndianRupee, Link2, Printer, QrCod
 import Card from "../components/Card";
 import Metric from "../components/Metric";
 import HubLocationCard from "../components/HubLocationCard";
+import HubAfterOrderSettingsCard from "../components/HubAfterOrderSettingsCard";
 import HubActiveOrdersManager from "../components/HubActiveOrdersManager";
 import { apiRequest, getHubAgentSummary, pairAgent } from "../services/api";
 
@@ -413,6 +414,8 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
       </Card>
 
       <HubLocationCard currentCentre={currentHub} />
+
+      <HubAfterOrderSettingsCard currentCentre={currentHub} onSettingsUpdate={(settings) => { if (currentHub) currentHub.afterOrderSettings = settings; }} />
 
       <HubActiveOrdersManager
         currentHub={currentHub}

@@ -47,7 +47,13 @@ export function getExpectedFileHash(file) {
 
 export function getSafeFileName(file) {
   const original = file.fileName || 'document.pdf';
-  const ext = path.extname(original).toLowerCase() || '.pdf';
-  const base = path.basename(original, ext).replace(/[^a-zA-Z0-9-_]/g, '-').slice(0, 50);
+  const fileType = file.fileType || 'application/pdf';
+  let ext = path.extname(original).toLowerCase() || '.pdf';
+  
+  if (fileType === 'application/pdf') {
+    ext = '.pdf';
+  }
+
+  const base = path.basename(original, path.extname(original)).replace(/[^a-zA-Z0-9-_]/g, '-').slice(0, 50);
   return `${base || 'document'}${ext}`;
 }

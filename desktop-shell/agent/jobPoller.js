@@ -1,4 +1,5 @@
 import { rm } from "node:fs/promises";
+import path from "node:path";
 import { backendRequest } from "./heartbeat.js";
 import { cacheReadableDocument, findCachedDocument, removeCachedDocument, getDocumentCacheDirectory } from "./documentCache.js";
 import { printFile, stopPrinting } from "../printer/printExecutor.js";
@@ -361,7 +362,7 @@ export async function processNextJob({ agentToken, printerName } = {}) {
         filePath: download.filePath,
         copies: download.file.copies || job.copies || 1,
         fileType: download.fileType || download.file.fileType || "application/pdf",
-        fileName: download.file.fileName || null,
+        fileName: path.basename(download.filePath) || download.file.fileName || null,
         options: buildOrderScopedPrintOptions({
           job,
           file: download.file,

@@ -51,13 +51,13 @@ export function calculatePrintPricingLocal({
 
   const printablePageCount = selectedPageCount * copyCount;
   const sheetCount = Math.ceil(printablePageCount / pagesPerSheet);
-  const physicalSheetCount = (sides === "two_sided_long_edge" || sides === "two_sided_short_edge")
+  const physicalSheetCount = (sides === "two_sided" || sides === "two_sided_long_edge" || sides === "two_sided_short_edge")
     ? Math.ceil(sheetCount / 2)
     : sheetCount;
 
   let pricePerPage = 1;
   const isColor = colorMode === "color";
-  const isDouble = sides === "two_sided_long_edge" || sides === "two_sided_short_edge";
+  const isDouble = sides === "two_sided" || sides === "two_sided_long_edge" || sides === "two_sided_short_edge";
 
   if (!isColor && !isDouble) pricePerPage = pricing.bwSingle ?? 1;
   else if (!isColor && isDouble) pricePerPage = pricing.bwDouble ?? 1.5;
@@ -117,7 +117,12 @@ export default function HubOrderConfigModal({
           originalPageCount: file.originalPageCount || file.pageCount || 1,
           copies: file.copies || 1,
           colorMode: printOptions.colorMode || "black_white",
-          sides: printOptions.sides || "one_sided",
+          sideType: printOptions.sideType || (printOptions.sides?.startsWith('two') ? 'double' : 'single'),
+          duplexBinding: printOptions.duplexBinding || (printOptions.sides?.includes('short') ? 'short-edge' : printOptions.sides?.includes('long') ? 'long-edge' : 'auto'),
+          orientation: printOptions.orientation || "auto",
+          backSideRotation: printOptions.backSideRotation || "auto",
+          pageOrder: printOptions.pageOrder || "normal",
+          scaleMode: printOptions.scaleMode || "fit-to-page",
           paperSize: printOptions.paperSize || "A4",
           pagesMode: printOptions.pages?.mode || "all",
           pagesRange: printOptions.pages?.range || "",
@@ -148,7 +153,7 @@ export default function HubOrderConfigModal({
       selectedPagesRange: file.pagesRange,
       copies: file.copies,
       colorMode: file.colorMode,
-      sides: file.sides,
+      sides: file.sideType === 'double' ? 'two_sided' : 'one_sided',
       watermarkEnabled: file.watermarkEnabled
     });
     return { ...file, calc };
@@ -170,7 +175,12 @@ export default function HubOrderConfigModal({
         copies: parseInt(f.copies, 10),
         printOptions: {
           colorMode: f.colorMode,
-          sides: f.sides,
+          sideType: f.sideType,
+          duplexBinding: f.duplexBinding,
+          orientation: f.orientation,
+          backSideRotation: f.backSideRotation,
+          pageOrder: f.pageOrder,
+          scaleMode: f.scaleMode,
           paperSize: f.paperSize,
           pages: {
             mode: f.pagesMode,
@@ -294,19 +304,99 @@ export default function HubOrderConfigModal({
                       </select>
                     </div>
 
-                    {/* Sides */}
+                    {/* Side Type */}
                     <div>
                       <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
                         Double/Single Sided
                       </label>
                       <select
-                        value={file.sides}
-                        onChange={(e) => handleUpdateFile(file.id, "sides", e.target.value)}
+                        value={file.sideType}
+                        onChange={(e) => handleUpdateFile(file.id, "sideType", e.target.value)}
                         className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none transition focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
                       >
-                        <option value="one_sided">Single Sided</option>
-                        <option value="two_sided_long_edge">Double Sided (Long Edge)</option>
-                        <option value="two_sided_short_edge">Double Sided (Short Edge)</option>
+                        <option value="single">Single Sided</option>
+                        <option value="double">Double Sided</option>
+                      </select>
+                    </div>
+
+                    {/* Orientation */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                        Orientation
+                      </label>
+                      <select
+                        value={file.orientation}
+                        onChange={(e) => handleUpdateFile(file.id, "orientation", e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none transition focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                      >
+                        <option value="auto">Auto</option>
+                        <option value="portrait">Portrait</option>
+                        <option value="landscape">Landscape</option>
+                      </select>
+                    </div>
+
+                    {/* Advanced Controls (Only if Double Sided) */}
+                    {file.sideType === 'double' && (
+                      <>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1 text-amber-600">
+                            <Settings2 className="h-3 w-3"/> Duplex Binding
+                          </label>
+                          <select
+                            value={file.duplexBinding}
+                            onChange={(e) => handleUpdateFile(file.id, "duplexBinding", e.target.value)}
+                            className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none transition focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                          >
+                            <option value="auto">Auto (Profile default)</option>
+                            <option value="long-edge">Long Edge (Book)</option>
+                            <option value="short-edge">Short Edge (Calendar)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1 text-amber-600">
+                            <Settings2 className="h-3 w-3"/> Back-Side Rotation
+                          </label>
+                          <select
+                            value={file.backSideRotation}
+                            onChange={(e) => handleUpdateFile(file.id, "backSideRotation", e.target.value)}
+                            className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none transition focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                          >
+                            <option value="auto">Auto</option>
+                            <option value="normal">Normal</option>
+                            <option value="rotate-180">Rotate 180°</option>
+                          </select>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Scale Mode */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1 text-amber-600">
+                        <Settings2 className="h-3 w-3"/> Scale Mode
+                      </label>
+                      <select
+                        value={file.scaleMode}
+                        onChange={(e) => handleUpdateFile(file.id, "scaleMode", e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none transition focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                      >
+                        <option value="fit-to-page">Fit to Page</option>
+                        <option value="actual-size">Actual Size</option>
+                        <option value="shrink-to-fit">Shrink to Fit</option>
+                      </select>
+                    </div>
+
+                    {/* Page Order */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1 text-amber-600">
+                        <Settings2 className="h-3 w-3"/> Page Order
+                      </label>
+                      <select
+                        value={file.pageOrder}
+                        onChange={(e) => handleUpdateFile(file.id, "pageOrder", e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none transition focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                      >
+                        <option value="normal">Normal (1 to N)</option>
+                        <option value="reverse">Reverse (N to 1)</option>
                       </select>
                     </div>
 

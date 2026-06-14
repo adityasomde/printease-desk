@@ -1009,7 +1009,7 @@ export default function DesktopAgentPage({ currentUser = null }) {
 
       {/* Hub Location Visibility — lightweight card, no map library */}
       {isHubAccount && (
-        <HubLocationCard currentCentre={null} />
+        <HubLocationCard currentCentre={activeUser} />
       )}
     </div>
   );

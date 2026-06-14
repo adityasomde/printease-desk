@@ -23,11 +23,19 @@ export default function CentrePriceCard({ centre, onUpload, onOpenMap }) {
           <span className={`rounded-full px-3 py-1 text-xs font-semibold ${centre.printerOnline ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
             {centre.printerOnline ? "Available" : "Unavailable"}
           </span>
-          {hasLocation && onOpenMap && (
+          {hasLocation && onOpenMap ? (
             <button
               onClick={() => onOpenMap(centre)}
               title="View on map"
               className="flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition"
+            >
+              <MapPin size={12} /> Map
+            </button>
+          ) : (
+            <button
+              disabled
+              title="This centre has not shared location."
+              className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-400 cursor-not-allowed"
             >
               <MapPin size={12} /> Map
             </button>

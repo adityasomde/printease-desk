@@ -44,7 +44,14 @@ export default function CentreCodePage({
     [centres]
   );
 
-  function openMapForCentre() {
+  const [mapCentreToFocus, setMapCentreToFocus] = useState(null);
+
+  function openMapForCentre(centreToFocus = null) {
+    if (centreToFocus?.id) {
+      setMapCentreToFocus(centreToFocus);
+    } else {
+      setMapCentreToFocus(null);
+    }
     setMapOpen(true);
   }
 
@@ -87,13 +94,17 @@ export default function CentreCodePage({
               >
                 Search Online
               </button>
-              {mappableCentres.length > 0 && (
+              {mappableCentres.length > 0 ? (
                 <button
-                  onClick={openMapForCentre}
+                  onClick={() => openMapForCentre()}
                   className="inline-flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 font-semibold text-emerald-700 hover:bg-emerald-100 transition"
                 >
-                  <Map size={18} /> View Map
+                  <Map size={18} /> View centres on map
                 </button>
+              ) : (
+                <div className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 font-semibold text-slate-500">
+                  <Map size={18} /> No centres have shared location yet.
+                </div>
               )}
             </div>
           </div>
@@ -109,14 +120,18 @@ export default function CentreCodePage({
             <h3 className="text-xl font-bold">Centre List With Prices</h3>
             <p className="text-sm text-slate-600">Frequently used centres appear first.</p>
           </div>
-          {mappableCentres.length > 0 && (
+          {mappableCentres.length > 0 ? (
             <button
-              onClick={openMapForCentre}
+              onClick={() => openMapForCentre()}
               className="hidden sm:flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 transition"
             >
               <Map size={15} />
               {mappableCentres.length} centre{mappableCentres.length !== 1 ? "s" : ""} on map
             </button>
+          ) : (
+            <span className="hidden sm:inline-flex text-sm text-slate-500">
+              No centres have shared location yet.
+            </span>
           )}
         </div>
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -143,8 +158,12 @@ export default function CentreCodePage({
         <Suspense fallback={null}>
           <CentreMapModal
             centres={filteredCentres.length > 0 ? filteredCentres : centres}
-            onClose={() => setMapOpen(false)}
+            onClose={() => {
+              setMapOpen(false);
+              setMapCentreToFocus(null);
+            }}
             onSelectCentre={(centre) => selectCentreAndUpload(centre)}
+            focusCentre={mapCentreToFocus}
           />
         </Suspense>
       )}

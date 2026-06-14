@@ -41,6 +41,12 @@ export default function HubLocationCard({ currentCentre }) {
       const lat = latitude.trim() ? Number(latitude) : null;
       const lng = longitude.trim() ? Number(longitude) : null;
 
+      if (locationEnabled && (lat === null || lng === null)) {
+        setSaveError("Latitude and longitude are required when map exposure is enabled.");
+        setSaving(false);
+        return;
+      }
+
       const data = await apiRequest("/api/centres/me/location", {
         method: "PATCH",
         body: JSON.stringify({
@@ -55,6 +61,18 @@ export default function HubLocationCard({ currentCentre }) {
 
       if (data?.success) {
         setSaveMessage("Location saved successfully.");
+        // If parent centre state exists, update it too so refresh is not required
+        if (currentCentre && currentCentre.onLocationUpdate) {
+          currentCentre.onLocationUpdate({
+            locationEnabled,
+            latitude: lat,
+            longitude: lng,
+            addressText: addressText.trim() || null,
+            area: area.trim() || null,
+            city: city.trim() || null,
+            mapUpdatedAt: data.centre?.mapUpdatedAt || new Date().toISOString()
+          });
+        }
       } else {
         setSaveError(data?.message || "Failed to save location.");
       }
@@ -67,20 +85,36 @@ export default function HubLocationCard({ currentCentre }) {
 
   function handleUseMyLocation() {
     if (!navigator.geolocation) {
-      setSaveError("Geolocation not supported in this browser.");
+      setSaveError("Geolocation is not supported by this browser.");
       return;
     }
     setLocating(true);
     setSaveError("");
+    setSaveMessage("");
+
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setLatitude(String(pos.coords.latitude.toFixed(7)));
         setLongitude(String(pos.coords.longitude.toFixed(7)));
         setLocating(false);
+        setSaveMessage("Current coordinates retrieved successfully.");
       },
-      () => {
-        setSaveError("Could not get your location. Enter coordinates manually.");
+      (error) => {
+        let msg = "Could not get your location. Enter coordinates manually.";
+        if (error.code === error.PERMISSION_DENIED) {
+          msg = "Location permission denied. Please allow location permissions in browser settings.";
+        } else if (error.code === error.POSITION_UNAVAILABLE) {
+          msg = "Location position is unavailable. Check your device GPS/network connection.";
+        } else if (error.code === error.TIMEOUT) {
+          msg = "Location request timed out. Please try again.";
+        }
+        setSaveError(msg);
         setLocating(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 12000,
+        maximumAge: 0
       }
     );
   }
@@ -94,165 +128,172 @@ export default function HubLocationCard({ currentCentre }) {
   }
 
   return (
-    <div className="rounded-2xl border bg-white p-6 shadow-sm">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-5">
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:shadow-md max-w-4xl">
+      {/* Header & Toggle */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3 mb-3">
         <div className="flex items-center gap-2">
-          <MapPin size={20} className="text-emerald-600" />
-          <h3 className="text-lg font-bold text-slate-900">Shop Location Visibility</h3>
-        </div>
-        <button
-          onClick={handleOpenWebApp}
-          className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
-          title="Open full map on web"
-        >
-          <ExternalLink size={13} />
-          See map on web ↗
-        </button>
-      </div>
-
-      {/* Toggle */}
-      <div className="mb-5 flex items-center justify-between rounded-xl border bg-slate-50 px-4 py-3">
-        <div>
-          <p className="font-semibold text-slate-800 text-sm">Show my shop on customer map</p>
-          <p className="text-xs text-slate-500 mt-0.5">
-            {locationEnabled
-              ? "Your shop is visible to customers on the map."
-              : "Your shop is hidden from the customer map."}
-          </p>
-        </div>
-        <button
-          onClick={() => setLocationEnabled((v) => !v)}
-          className={`ml-4 flex-shrink-0 transition-colors ${locationEnabled ? "text-emerald-600" : "text-slate-400"}`}
-          title={locationEnabled ? "Disable location" : "Enable location"}
-        >
-          {locationEnabled ? <ToggleRight size={36} /> : <ToggleLeft size={36} />}
-        </button>
-      </div>
-
-      {/* Address fields */}
-      <div className="space-y-3 mb-4">
-        <div>
-          <label className="block text-xs font-semibold text-slate-500 mb-1">Address / Landmark</label>
-          <input
-            type="text"
-            value={addressText}
-            onChange={(e) => setAddressText(e.target.value)}
-            placeholder="Near college gate, Opp. hospital..."
-            maxLength={300}
-            className="w-full rounded-xl border bg-slate-50 px-4 py-2.5 text-sm outline-none focus:bg-white focus:ring-2 focus:ring-slate-200 transition"
-          />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 mb-1">Area / Locality</label>
-            <input
-              type="text"
-              value={area}
-              onChange={(e) => setArea(e.target.value)}
-              placeholder="College Road"
-              maxLength={300}
-              className="w-full rounded-xl border bg-slate-50 px-4 py-2.5 text-sm outline-none focus:bg-white focus:ring-2 focus:ring-slate-200 transition"
-            />
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 shadow-inner">
+            <MapPin size={16} className="animate-pulse" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-500 mb-1">City</label>
-            <input
-              type="text"
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-              placeholder="Aurangabad"
-              maxLength={300}
-              className="w-full rounded-xl border bg-slate-50 px-4 py-2.5 text-sm outline-none focus:bg-white focus:ring-2 focus:ring-slate-200 transition"
-            />
+            <h3 className="text-xs font-bold text-slate-800">Map Exposure Settings</h3>
+            <p className="text-[10px] text-slate-400">Manage customer map visibility and coordinates</p>
           </div>
         </div>
-
-        {/* Coordinates */}
-        <div className="grid grid-cols-2 gap-3 items-end">
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 mb-1">Latitude</label>
-            <input
-              type="number"
-              value={latitude}
-              onChange={(e) => setLatitude(e.target.value)}
-              placeholder="e.g. 19.8762"
-              step="0.0000001"
-              min="-90"
-              max="90"
-              className="w-full rounded-xl border bg-slate-50 px-4 py-2.5 text-sm outline-none focus:bg-white focus:ring-2 focus:ring-slate-200 transition"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 mb-1">Longitude</label>
-            <input
-              type="number"
-              value={longitude}
-              onChange={(e) => setLongitude(e.target.value)}
-              placeholder="e.g. 75.3433"
-              step="0.0000001"
-              min="-180"
-              max="180"
-              className="w-full rounded-xl border bg-slate-50 px-4 py-2.5 text-sm outline-none focus:bg-white focus:ring-2 focus:ring-slate-200 transition"
-            />
-          </div>
-        </div>
-        <button
-          onClick={handleUseMyLocation}
-          disabled={locating}
-          className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800 disabled:opacity-50"
-        >
-          <Navigation size={13} className={locating ? "animate-spin" : ""} />
-          {locating ? "Detecting location…" : "Use my current location (fills coordinates only)"}
-        </button>
-      </div>
-
-      {/* Status row */}
-      <div className="mb-4 rounded-xl bg-slate-50 px-4 py-3 text-xs text-slate-600 flex flex-wrap gap-x-4 gap-y-1">
-        <span>
-          <span className="font-semibold">Map exposure:</span>{" "}
-          <span className={locationEnabled ? "text-emerald-700 font-semibold" : "text-slate-500"}>
-            {locationEnabled ? "Enabled" : "Disabled"}
+        <div className="flex items-center gap-2">
+          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border transition-all ${
+            locationEnabled 
+              ? "bg-emerald-50 text-emerald-700 border-emerald-200 animate-pulse" 
+              : "bg-slate-50 text-slate-500 border-slate-200"
+          }`}>
+            {locationEnabled ? "Live on Map" : "Hidden"}
           </span>
-        </span>
-        {lastUpdated && (
-          <span>
-            <span className="font-semibold">Last updated:</span> {lastUpdated}
-          </span>
-        )}
-        <span className="text-slate-400">Full map available on web app</span>
+          <button
+            onClick={() => setLocationEnabled((v) => !v)}
+            className={`transition-all duration-300 transform active:scale-90 ${
+              locationEnabled ? "text-emerald-600" : "text-slate-300 hover:text-slate-400"
+            }`}
+          >
+            {locationEnabled ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+          </button>
+        </div>
       </div>
 
-      {/* Feedback */}
-      {saveMessage && (
-        <div className="mb-3 flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-700">
-          <CheckCircle2 size={15} /> {saveMessage}
+      {/* Grid: 2 columns on desktop to utilize horizontal space */}
+      <div className="grid gap-3 md:grid-cols-2">
+        {/* Left Column: Shop Address */}
+        <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-3 flex flex-col justify-between">
+          <div>
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Shop Address</span>
+            <div className="space-y-2">
+              <input
+                type="text"
+                value={addressText}
+                onChange={(e) => setAddressText(e.target.value)}
+                placeholder="Landmark (e.g. Near college gate...)"
+                maxLength={300}
+                className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-300 transition-all"
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="text"
+                  value={area}
+                  onChange={(e) => setArea(e.target.value)}
+                  placeholder="Area / Locality"
+                  maxLength={300}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-300 transition-all"
+                />
+                <input
+                  type="text"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  placeholder="City"
+                  maxLength={300}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-300 transition-all"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column: GPS Coordinates */}
+        <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-3 flex flex-col justify-between">
+          <div className="flex flex-col h-full justify-between gap-3">
+            <div>
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">GPS Coordinates</span>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-400 uppercase mb-0.5 ml-1">Latitude</label>
+                  <input
+                    type="number"
+                    value={latitude}
+                    onChange={(e) => setLatitude(e.target.value)}
+                    placeholder="e.g. 19.8762"
+                    step="0.0000001"
+                    min="-90"
+                    max="90"
+                    className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-300 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-400 uppercase mb-0.5 ml-1">Longitude</label>
+                  <input
+                    type="number"
+                    value={longitude}
+                    onChange={(e) => setLongitude(e.target.value)}
+                    placeholder="e.g. 75.3433"
+                    step="0.0000001"
+                    min="-180"
+                    max="180"
+                    className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-300 transition-all"
+                  />
+                </div>
+              </div>
+            </div>
+            
+            {/* Prominent Use Current Location button moved below coordinates inputs */}
+            <button
+              type="button"
+              onClick={handleUseMyLocation}
+              disabled={locating}
+              className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white w-full py-3.5 text-sm font-bold active:scale-[0.98] disabled:opacity-50 transition-all shadow-md hover:shadow-lg mt-auto"
+            >
+              <Navigation size={15} className={locating ? "animate-spin" : ""} />
+              {locating ? "Detecting Coordinates..." : "Use Current Location"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Footer Actions & Feedbacks */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3 mt-3">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={handleOpenWebApp}
+            className="flex items-center gap-1 text-[10px] font-semibold text-slate-500 hover:text-slate-700 transition-colors"
+            title="Open web app to view full map"
+          >
+            <ExternalLink size={10} />
+            View full map details ↗
+          </button>
+          {lastUpdated && (
+            <span className="text-[9px] text-slate-400">
+              Last saved: {lastUpdated}
+            </span>
+          )}
+        </div>
+
+        {/* Save button (aligned right or spanning if narrow) */}
+        <div className="w-full sm:w-auto">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-6 py-3.5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50 transition duration-200 shadow-md hover:shadow active:scale-[0.98] w-full sm:w-64"
+          >
+            <Save size={15} />
+            {saving ? "Saving..." : "Save Settings"}
+          </button>
+        </div>
+      </div>
+
+      {/* Alert Feedbacks */}
+      {(saveMessage || saveError) && (
+        <div className="mt-3">
+          {saveMessage && (
+            <div className="flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-[10px] font-semibold text-emerald-700 border border-emerald-100">
+              <CheckCircle2 size={12} className="flex-shrink-0" />
+              <span className="truncate">{saveMessage}</span>
+            </div>
+          )}
+          {saveError && (
+            <div className="flex items-center gap-1.5 rounded-lg bg-rose-50 px-2.5 py-1.5 text-[10px] font-semibold text-rose-700 border border-rose-100">
+              <AlertCircle size={12} className="flex-shrink-0" />
+              <span>{saveError}</span>
+            </div>
+          )}
         </div>
       )}
-      {saveError && (
-        <div className="mb-3 flex items-center gap-2 rounded-xl bg-red-50 px-4 py-2.5 text-sm font-medium text-red-600">
-          <AlertCircle size={15} /> {saveError}
-        </div>
-      )}
-
-      {/* Actions */}
-      <div className="flex gap-3">
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 transition"
-        >
-          <Save size={15} />
-          {saving ? "Saving…" : "Save Location"}
-        </button>
-        <button
-          onClick={handleOpenWebApp}
-          className="flex items-center gap-2 rounded-xl border px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
-        >
-          <ExternalLink size={15} />
-          Full Map Info on Web ↗
-        </button>
-      </div>
     </div>
   );
 }

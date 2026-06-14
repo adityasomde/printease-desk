@@ -35,15 +35,33 @@ const unavailableIcon = new L.Icon({
   className: "leaflet-marker-unavailable",
 });
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function safeDomId(value) {
+  return String(value ?? "")
+    .replace(/[^a-zA-Z0-9_-]/g, "-");
+}
+
 function buildPopupHtml(centre) {
   const statusColor = centre.printerOnline ? "#16a34a" : "#d97706";
   const statusLabel = centre.printerOnline ? "Available" : "Unavailable";
-  const addr = [centre.addressText, centre.area, centre.city].filter(Boolean).join(", ");
+  const addrParts = [centre.addressText, centre.area, centre.city].filter(Boolean);
+  const addr = addrParts.map(escapeHtml).join(", ");
+  const safeName = escapeHtml(centre.name);
+  const safeCode = escapeHtml(centre.code);
+  const popupButtonId = `map-upload-${safeDomId(centre.id || centre.code)}`;
 
   return `
     <div style="min-width:200px;max-width:260px;font-family:inherit">
-      <div style="font-weight:700;font-size:15px;margin-bottom:4px">${centre.name}</div>
-      <div style="font-size:12px;color:#64748b;margin-bottom:6px">Code: <b>${centre.code}</b></div>
+      <div style="font-weight:700;font-size:15px;margin-bottom:4px">${safeName}</div>
+      <div style="font-size:12px;color:#64748b;margin-bottom:6px">Code: <b>${safeCode}</b></div>
       <span style="display:inline-block;background:${statusColor}20;color:${statusColor};font-size:11px;font-weight:600;border-radius:999px;padding:2px 10px;margin-bottom:8px">${statusLabel}</span>
       ${addr ? `<div style="font-size:12px;color:#475569;margin-bottom:8px">📍 ${addr}</div>` : ""}
       <div style="background:#f8fafc;border-radius:8px;padding:8px;font-size:11px;color:#334155;margin-bottom:10px">
@@ -52,14 +70,14 @@ function buildPopupHtml(centre) {
         <div>Color Single: ₹${centre.colorSingle ?? "—"}/page</div>
         <div>Color Double: ₹${centre.colorDouble ?? "—"}/page</div>
       </div>
-      <a href="#upload-${centre.id}" id="map-upload-${centre.id}" style="display:block;text-align:center;background:#0f172a;color:#fff;border-radius:8px;padding:7px 0;font-size:13px;font-weight:600;text-decoration:none;cursor:pointer">
+      <a href="#upload-${safeCode}" id="${popupButtonId}" style="display:block;text-align:center;background:#0f172a;color:#fff;border-radius:8px;padding:7px 0;font-size:13px;font-weight:600;text-decoration:none;cursor:pointer">
         ↑ Upload to this Centre
       </a>
     </div>
   `;
 }
 
-export default function CentreMapModal({ centres, onClose, onSelectCentre }) {
+export default function CentreMapModal({ centres, onClose, onSelectCentre, focusCentre }) {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const [userLocation, setUserLocation] = useState(null);
@@ -102,7 +120,8 @@ export default function CentreMapModal({ centres, onClose, onSelectCentre }) {
       // Listen for upload button click inside popup
       marker.on("popupopen", () => {
         setTimeout(() => {
-          const btn = document.getElementById(`map-upload-${centre.id}`);
+          const btnId = `map-upload-${safeDomId(centre.id || centre.code)}`;
+          const btn = document.getElementById(btnId);
           if (btn) {
             btn.addEventListener("click", (e) => {
               e.preventDefault();
@@ -125,6 +144,11 @@ export default function CentreMapModal({ centres, onClose, onSelectCentre }) {
       mapInstanceRef.current = null;
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!mapInstanceRef.current || !focusCentre || focusCentre.latitude == null || focusCentre.longitude == null) return;
+    mapInstanceRef.current.setView([focusCentre.latitude, focusCentre.longitude], 16);
+  }, [focusCentre]);
 
   function locateMe() {
     if (!navigator.geolocation) {

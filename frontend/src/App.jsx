@@ -2024,7 +2024,8 @@ export default function App() {
 
     const shouldPollHistory = false; // Never poll user history page
     const shouldPollTrack = page === "track" && order?.backendId;
-    if (!shouldPollHistory && !shouldPollTrack) return;
+    const shouldPollHub = currentUser?.role === "hub";
+    if (!shouldPollHistory && !shouldPollTrack && !shouldPollHub) return;
 
     async function refreshVisibleOrders() {
       const nextOrders = await loadOrdersForSession(currentUser, centres);
@@ -2047,7 +2048,7 @@ export default function App() {
       window.removeEventListener("focus", refreshOnFocus);
       document.removeEventListener("visibilitychange", refreshOnFocus);
     };
-  }, [page, currentUser?.id, order?.backendId]);
+  }, [page, currentUser?.id, currentUser?.role, order?.backendId, centres]);
 
   async function updateCentrePrice(field, value) {
     if (!currentHub) return;

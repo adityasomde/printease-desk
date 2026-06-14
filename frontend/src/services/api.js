@@ -162,6 +162,13 @@ export function getHubAgentSummary() {
   return apiRequest("/api/hub-agents/summary");
 }
 
+export function updateHubLocation(payload) {
+  return apiRequest("/api/centres/me/location", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function registerDesktopAgent(payload = {}) {
   return apiRequest("/api/hub-agents/desktop/register", {
     method: "POST",
@@ -265,6 +272,13 @@ export function sendOrderToAgent(orderId, target = {}) {
 
 export function getOrderDocuments(orderId) {
   return apiRequest(`/api/orders/${encodeURIComponent(orderId)}/documents`);
+}
+
+export function reprintOrder(orderId, options = {}) {
+  return apiRequest(`/api/orders/${encodeURIComponent(orderId)}/reprint`, {
+    method: "POST",
+    body: JSON.stringify(options),
+  });
 }
 
 export function getUserHistory({ force = false, userId = "me" } = {}) {

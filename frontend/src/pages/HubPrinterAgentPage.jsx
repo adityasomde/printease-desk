@@ -12,6 +12,7 @@ import {
   revokeHubAgent,
 } from "../services/api";
 import { isDesktop, listPrinters as listLocalPrinters, onPrintersUpdated } from "../utils/desktopBridge";
+import HubPrinterTestWizard from "../components/HubPrinterTestWizard";
 
 const EMPTY_ANALYTICS = {
   totalAgents: 0,
@@ -71,6 +72,20 @@ export default function HubPrinterAgentPage({ navigate }) {
   const [loading, setLoading] = useState(false);
   const [actionId, setActionId] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardPrinter, setWizardPrinter] = useState(null);
+
+  const handleSaveProfile = async (platform, printerName, profile) => {
+    const token = localStorage.getItem("token");
+    const res = await fetch(`/api/printers/profiles`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+      body: JSON.stringify({ platform, printerName, profile })
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.message || "Failed to save profile.");
+    setMessage(`Correction profile saved for ${printerName}.`);
+  };
 
   const agentsById = useMemo(() => new Map(agents.map((agent) => [agent.id, agent])), [agents]);
   const localPrinterNames = localPrinters.map((printer) => printer.displayName || printer.printerName).filter(Boolean).join(", ");
@@ -360,11 +375,14 @@ export default function HubPrinterAgentPage({ navigate }) {
                     {printer.warningText && <p className="font-semibold text-amber-700 sm:col-span-2">{printer.warningCode}: {printer.warningText}</p>}
                   </div>
                   <div className="mt-4 flex flex-wrap gap-2">
-                    <button disabled className="rounded-xl border px-3 py-2 text-sm font-semibold text-slate-400">
-                      Set Default Later
-                    </button>
-                    <button disabled className="rounded-xl border px-3 py-2 text-sm font-semibold text-slate-400">
-                      Test Print Later
+                    <button 
+                      onClick={() => {
+                        setWizardPrinter({ name: printer.printerName, platform: agent?.platform || 'unknown' });
+                        setWizardOpen(true);
+                      }}
+                      className="rounded-xl border px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      Run Test Wizard
                     </button>
                   </div>
                 </div>
@@ -373,6 +391,16 @@ export default function HubPrinterAgentPage({ navigate }) {
           </div>
         )}
       </Card>
+
+      {wizardOpen && wizardPrinter && (
+        <HubPrinterTestWizard
+          isOpen={wizardOpen}
+          onClose={() => setWizardOpen(false)}
+          printerName={wizardPrinter.name}
+          platform={wizardPrinter.platform}
+          onSaveProfile={handleSaveProfile}
+        />
+      )}
 
       <Card>
         <h3 className="text-xl font-bold">Print Jobs</h3>

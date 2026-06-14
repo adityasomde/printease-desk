@@ -68,7 +68,7 @@ function EmptyState({ currentUser }) {
   );
 }
 
-export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, onOpenPayment, onReprintOrder, onReprintWithSettings }) {
+export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, onOpenPayment, onReprintOrder, onReprintWithSettings, isReprinting }) {
   const [historyData, setHistoryData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -453,16 +453,18 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
               <button
                 type="button"
                 onClick={() => onReprintOrder?.(detail)}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-sm font-bold text-white shadow-sm hover:bg-slate-800"
+                disabled={isReprinting}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-sm font-bold text-white shadow-sm hover:bg-slate-800 disabled:opacity-50"
               >
-                <RefreshCw size={16} /> Reprint exact settings
+                <RefreshCw size={16} /> {isReprinting ? "Creating a new reprint order..." : "Reprint exact settings"}
               </button>
               <button
                 type="button"
                 onClick={() => onReprintWithSettings?.(detail)}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-900 shadow-sm hover:bg-slate-50"
+                disabled={isReprinting}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-900 shadow-sm hover:bg-slate-50 disabled:opacity-50"
               >
-                <Settings2 size={16} /> Reprint with changes
+                <Settings2 size={16} /> {isReprinting ? "Loading..." : "Reprint with changes"}
               </button>
               <button
                 type="button"
@@ -601,11 +603,11 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
                   >
                     {detailLoading === order.id ? "Loading…" : "View Details"}
                   </button>
-                  <button type="button" onClick={() => onReprintOrder?.(order)} className="rounded-xl border px-3 py-2 text-[11px] font-semibold hover:bg-slate-50">
-                    Reprint exactly
+                  <button type="button" disabled={isReprinting} onClick={() => onReprintOrder?.(order)} className="rounded-xl border px-3 py-2 text-[11px] font-semibold hover:bg-slate-50 disabled:opacity-50">
+                    {isReprinting ? "Reprinting..." : "Reprint exactly"}
                   </button>
-                  <button type="button" onClick={() => onReprintWithSettings?.(order)} className="rounded-xl border px-3 py-2 text-[11px] font-semibold hover:bg-slate-50">
-                    Reprint with changes
+                  <button type="button" disabled={isReprinting} onClick={() => onReprintWithSettings?.(order)} className="rounded-xl border px-3 py-2 text-[11px] font-semibold hover:bg-slate-50 disabled:opacity-50">
+                    {isReprinting ? "Loading..." : "Reprint with changes"}
                   </button>
                 </div>
               </div>

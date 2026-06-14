@@ -142,11 +142,16 @@ export default function HubActiveOrdersManager({
   onOrderSaved,
   navigate,
   compact = false,
+  agents: propsAgents,
+  agentPrinters: propsAgentPrinters,
+  printJobs: propsPrintJobs,
+  refreshAgentStatus: propsRefreshAgentStatus,
+  agentLoading: propsAgentLoading,
 }) {
-  const [agents, setAgents] = useState([]);
-  const [agentPrinters, setAgentPrinters] = useState([]);
-  const [printJobs, setPrintJobs] = useState([]);
-  const [agentLoading, setAgentLoading] = useState(false);
+  const [internalAgents, setInternalAgents] = useState([]);
+  const [internalAgentPrinters, setInternalAgentPrinters] = useState([]);
+  const [internalPrintJobs, setInternalPrintJobs] = useState([]);
+  const [internalAgentLoading, setInternalAgentLoading] = useState(false);
   const [agentError, setAgentError] = useState("");
   const [message, setMessage] = useState("");
   const [orderSearch, setOrderSearch] = useState("");
@@ -171,6 +176,11 @@ export default function HubActiveOrdersManager({
     }
   });
 
+  const agents = propsAgents !== undefined ? propsAgents : internalAgents;
+  const agentPrinters = propsAgentPrinters !== undefined ? propsAgentPrinters : internalAgentPrinters;
+  const printJobs = propsPrintJobs !== undefined ? propsPrintJobs : internalPrintJobs;
+  const agentLoading = propsAgentLoading !== undefined ? propsAgentLoading : internalAgentLoading;
+
   const ordersForHub = hubOrders || [];
 
   useEffect(() => {
@@ -182,26 +192,30 @@ export default function HubActiveOrdersManager({
   }, [globalAutoPrintAfterCash]);
 
   async function refreshAgentStatus() {
+    if (propsRefreshAgentStatus) {
+      return propsRefreshAgentStatus();
+    }
     if (!currentHub?.id) return;
-    setAgentLoading(true);
+    setInternalAgentLoading(true);
     setAgentError("");
     try {
       const data = await getHubAgentSummary();
-      setAgents(Array.isArray(data.agents) ? data.agents : []);
-      setAgentPrinters(Array.isArray(data.printers) ? data.printers : []);
-      setPrintJobs(Array.isArray(data.printJobs) ? data.printJobs : []);
+      setInternalAgents(Array.isArray(data.agents) ? data.agents : []);
+      setInternalAgentPrinters(Array.isArray(data.printers) ? data.printers : []);
+      setInternalPrintJobs(Array.isArray(data.printJobs) ? data.printJobs : []);
     } catch (error) {
       setAgentError(error.message || "Could not load agent status.");
     } finally {
-      setAgentLoading(false);
+      setInternalAgentLoading(false);
     }
   }
 
   useEffect(() => {
-    refreshAgentStatus();
-    // Home uses a one-shot agent summary load. HubDashboard keeps its existing polling.
+    if (propsAgents === undefined) {
+      refreshAgentStatus();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentHub?.id]);
+  }, [currentHub?.id, propsAgents]);
 
   const routeableAgents = useMemo(() => {
     return agents.filter((agent) => {
@@ -517,7 +531,7 @@ export default function HubActiveOrdersManager({
   if (!currentHub) return null;
 
   return (
-    <section className="rounded-3xl border bg-white p-4 shadow-sm sm:p-5">
+    <section className="rounded-3xl border bg-white p-4 shadow-sm sm:p-5 relative left-1/2 w-[calc(100vw-1rem)] -translate-x-1/2 sm:w-[calc(100vw-2rem)] lg:w-[min(1800px,calc(100vw-3rem))]">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h3 className="text-xl font-bold">Incoming / Active Orders</h3>
@@ -587,37 +601,158 @@ export default function HubActiveOrdersManager({
         })}
       </div>
 
-      <div className={`mt-5 hidden md:block ${compact ? "max-h-[520px]" : "max-h-[460px]"} overflow-y-auto overflow-x-auto rounded-2xl border`}>
-        <table className="w-full min-w-[900px] table-fixed border-collapse text-left text-sm">
+      <div className={`mt-5 hidden md:block ${compact ? "max-h-[780px]" : "max-h-[690px]"} overflow-y-auto overflow-x-auto rounded-2xl border`}>
+        <table className="w-full min-w-[1250px] table-fixed border-collapse text-left text-sm">
           <thead className="sticky top-0 z-10 border-b bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="w-28 px-3 py-3">Order</th>
-              <th className="w-40 px-3 py-3">Customer</th>
-              <th className="w-56 px-3 py-3">Document</th>
+              <th className="w-44 px-3 py-3">Customer</th>
+              <th className="w-[280px] px-3 py-3">Document</th>
+              <th className="w-24 px-3 py-3">Pages</th>
               <th className="w-20 px-3 py-3">Amount</th>
-              <th className="w-32 px-3 py-3">Payment</th>
+              <th className="w-36 px-3 py-3">Payment</th>
               <th className="w-48 px-3 py-3">Manage Status</th>
-              <th className="w-52 px-3 py-3">Actions</th>
+              <th className="w-64 px-3 py-3">Actions / Agent</th>
             </tr>
           </thead>
           <tbody className="divide-y">
             {filteredOrders.map((order) => {
               const job = jobByOrderId.get(order.backendId);
+              const orderId = order.backendId || order.id;
+              const sendEnabled = canSendToAgent(order);
+              const paymentPending = isPaymentPending(order);
+              const paymentVerified = isPaymentVerified(order);
+              const orderCancelled = isOrderCancelled(order);
+              const cancelledBeforePayment = orderCancelled && !paymentVerified;
+              const canConfigure = canConfigureOrder(order, job);
+
               return (
                 <tr key={order.id} className="align-top odd:bg-white even:bg-slate-50">
-                  <td className="px-3 py-4 font-semibold"><p className="truncate" title={order.id}>{order.id}</p></td>
+                  <td className="px-3 py-4 font-semibold">
+                    <p className="truncate" title={order.id}>{order.id}</p>
+                  </td>
                   <td className="px-3 py-4">
                     <p className="truncate font-semibold text-slate-900" title={order.customerName}>{order.customerName || "Customer"}</p>
                     {order.customerMobile && <p className="text-xs text-slate-500">{order.customerMobile}</p>}
                   </td>
                   <td className="px-3 py-4">
                     <p className="truncate" title={order.document}>{order.document}</p>
-                    <p className="mt-1 text-xs text-slate-500">{order.pages} × {order.copies}</p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => openDocuments(order)}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-xl border px-2 py-1.5 text-xs font-semibold"
+                      >
+                        <FileText size={13} /> View / Download
+                      </button>
+                      {canConfigure && (
+                        <button
+                          type="button"
+                          onClick={() => openConfiguration(order)}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-2 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition shadow-sm"
+                        >
+                          <Settings size={13} /> Configure
+                        </button>
+                      )}
+                    </div>
                   </td>
-                  <td className="px-3 py-4 font-bold">₹{order.amount}</td>
-                  <td className="px-3 py-4"><OrderBadges order={order} job={job} /></td>
-                  <td className="px-3 py-4">{renderStatusControls(order)}</td>
-                  <td className="px-3 py-4">{renderActions(order, job)}</td>
+                  <td className="px-3 py-4 whitespace-nowrap font-medium">{order.pages} × {order.copies}</td>
+                  <td className="px-3 py-4 whitespace-nowrap font-bold">₹{order.amount}</td>
+                  <td className="px-3 py-4">
+                    <StatusBadge color={paymentVerified ? "green" : "amber"}>{label(order.paymentStatus)}</StatusBadge>
+                    {cancelledBeforePayment && (
+                      <p className="mt-1 text-xs font-semibold text-rose-600">Cancelled before payment.</p>
+                    )}
+                    {paymentPending && (
+                      <p className="mt-1 text-xs text-slate-500">Awaiting payment.</p>
+                    )}
+                    {paymentVerified && (
+                      <p className="mt-1 text-xs text-emerald-700">
+                        {orderCancelled ? "Payment collected; order cancelled." : "Ready to queue."}
+                      </p>
+                    )}
+                  </td>
+                  <td className="px-3 py-4">
+                    <select
+                      value={order.status}
+                      onChange={(event) => updateOrderStatus(order.id, event.target.value)}
+                      className="w-full rounded-xl border px-2 py-1.5 text-sm"
+                    >
+                      {hubStatusOptions.map((status) => (
+                        <option key={status} value={status}>{displayStatus(status)}</option>
+                      ))}
+                    </select>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {canPauseOrder(order) && (
+                        <button
+                          type="button"
+                          onClick={() => quickUpdateOrderStatus(order, "Paused")}
+                          disabled={statusActionId === `${orderId}:Paused`}
+                          className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-semibold text-slate-700 disabled:opacity-50"
+                        >
+                          <PauseCircle size={13} /> {statusActionId === `${orderId}:Paused` ? "Saving" : "Pause"}
+                        </button>
+                      )}
+                      {normalizeStatus(order.status) === "paused" && (
+                        <button
+                          type="button"
+                          onClick={() => quickUpdateOrderStatus(order, isPaymentVerified(order) ? "Payment Verified" : "Payment Pending")}
+                          disabled={statusActionId.startsWith(`${orderId}:`)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 px-2 py-1 text-xs font-semibold text-emerald-700 disabled:opacity-50"
+                        >
+                          Resume
+                        </button>
+                      )}
+                      {canCancelOrder(order) && (
+                        <button
+                          type="button"
+                          onClick={() => quickUpdateOrderStatus(order, "Cancelled")}
+                          disabled={statusActionId === `${orderId}:Cancelled`}
+                          className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-2 py-1 text-xs font-semibold text-rose-700 disabled:opacity-50"
+                        >
+                          <XCircle size={13} /> {statusActionId === `${orderId}:Cancelled` ? "Saving" : "Cancel"}
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-3 py-4">
+                    <div className="flex flex-col gap-2">
+                      {job && <StatusBadge>{label(displayStatus(job.status))}</StatusBadge>}
+                      {job && normalizeStatus(job.status) !== "failed" && <p className="text-xs text-slate-500">{displayStatus(job.status)} in desktop queue</p>}
+                      {job?.failureReasonText && <p className="text-xs font-semibold text-rose-600">{job.failureReasonText}</p>}
+                      {cancelledBeforePayment && (
+                        <p className="rounded-xl border border-rose-200 bg-rose-50 px-2 py-2 text-xs font-semibold text-rose-700">
+                          Cancelled before payment. Cash collection is disabled.
+                        </p>
+                      )}
+                      {paymentPending && (
+                        <button
+                          onClick={() => markCashCollected(order)}
+                          disabled={collectingOrderId === orderId || normalizeStatus(order.paymentStatus) === "draft"}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-emerald-200 px-2 py-1.5 font-semibold text-emerald-700 disabled:opacity-50"
+                        >
+                          <IndianRupee size={14} /> {collectingOrderId === orderId ? "Saving" : "Cash Collected"}
+                        </button>
+                      )}
+                      {sendEnabled && routeableAgents.length > 0 && (
+                        <button
+                          onClick={() => openSendModal(order)}
+                          disabled={sendingOrderId === orderId}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-700 px-2 py-1.5 font-semibold text-white disabled:bg-slate-300"
+                        >
+                          <Send size={14} /> {sendingOrderId === orderId ? "Sending" : "Send"}
+                        </button>
+                      )}
+                      {sendEnabled && routeableAgents.length === 0 && (
+                        <button
+                          onClick={() => navigate("hubPrinters")}
+                          className="rounded-xl border border-amber-200 px-2 py-1.5 text-left text-xs font-semibold text-amber-800"
+                        >
+                          Open agent to queue.
+                        </button>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               );
             })}

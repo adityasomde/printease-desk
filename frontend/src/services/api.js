@@ -347,6 +347,17 @@ export async function downloadDocumentBlob(documentId) {
   return fetchSignedDocumentBlob(documentId);
 }
 
+export async function getDesktopCachedDocumentUrl(documentId) {
+  if (!window.printeaseDesktop?.getCachedDocumentUrl) return null;
+
+  try {
+    const result = await window.printeaseDesktop.getCachedDocumentUrl(documentId);
+    return result?.success && result.url ? result.url : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function getDocumentPreviewBlob(documentId) {
   return fetchSignedDocumentBlob(documentId);
 }
@@ -361,4 +372,3 @@ export function updateAfterOrderSettings(afterOrderSettings) {
     body: JSON.stringify({ afterOrderSettings }),
   });
 }
-

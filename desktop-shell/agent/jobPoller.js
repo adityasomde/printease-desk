@@ -1,11 +1,6 @@
-import { createHash } from "node:crypto";
-import { createWriteStream } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
+import { rm } from "node:fs/promises";
 import { backendRequest } from "./heartbeat.js";
+import { cacheReadableDocument, findCachedDocument } from "./documentCache.js";
 import { printFile, stopPrinting } from "../printer/printExecutor.js";
 import { 
   normalizeJobFiles, 
@@ -31,6 +26,28 @@ export async function getNextJob({ agentToken } = {}) {
     return {
       success: false,
       message: error.message || "Could not fetch next print job.",
+      status: error.status || 0,
+    };
+  }
+}
+
+export async function getPredownloadCandidates({ agentToken, limit = 15 } = {}) {
+  if (!agentToken) {
+    return {
+      success: false,
+      message: "Pair the desktop before predownloading documents.",
+    };
+  }
+
+  try {
+    return await backendRequest({
+      endpoint: `/agent/jobs/predownload?limit=${encodeURIComponent(String(limit))}`,
+      agentToken,
+    });
+  } catch (error) {
+    return {
+      success: false,
+      message: error.message || "Could not fetch predownload candidates.",
       status: error.status || 0,
     };
   }
@@ -81,11 +98,6 @@ export async function markJobStatus({ agentToken, jobId, status, reasonCode, rea
 
 
 
-async function calculateSha256(filePath) {
-  const buffer = await readFile(filePath);
-  return createHash("sha256").update(buffer).digest("hex");
-}
-
 async function getRemoteJobStatus({ agentToken, jobId } = {}) {
   if (!agentToken || !jobId) return null;
 
@@ -124,6 +136,19 @@ export async function downloadJobFile(job, file = null) {
     };
   }
 
+  const expectedHash = getExpectedFileHash(printFileItem);
+  const cachedFilePath = printFileItem.documentId
+    ? await findCachedDocument(printFileItem.documentId, expectedHash)
+    : null;
+
+  if (cachedFilePath) {
+    return {
+      success: true,
+      filePath: cachedFilePath,
+      cached: true,
+    };
+  }
+
   const response = await fetch(printFileItem.fileUrl);
   if (!response.ok || !response.body) {
     return {
@@ -132,38 +157,90 @@ export async function downloadJobFile(job, file = null) {
     };
   }
 
-  const tempDir = await mkdtemp(path.join(os.tmpdir(), "printease-job-"));
   const safeName = getSafeFileName(printFileItem);
-  const filePath = path.join(tempDir, safeName);
+  return cacheReadableDocument({
+    documentId: printFileItem.documentId || printFileItem.fileHash || safeName,
+    fileName: safeName,
+    expectedHash,
+    responseBody: response.body,
+  });
+}
 
-  try {
-    await pipeline(Readable.fromWeb(response.body), createWriteStream(filePath));
+export async function predownloadPendingDocuments({ agentToken, limit = 15 } = {}) {
+  const candidates = await getPredownloadCandidates({ agentToken, limit });
+  if (!candidates.success) return candidates;
 
-    const expectedHash = getExpectedFileHash(printFileItem);
-    if (expectedHash) {
-      const actualHash = await calculateSha256(filePath);
-      if (actualHash !== expectedHash) {
-        await rm(tempDir, { recursive: true, force: true }).catch(() => {});
-        return {
-          success: false,
-          message: "Downloaded print file failed SHA-256 verification.",
-        };
-      }
+  const files = Array.isArray(candidates.files) ? candidates.files : [];
+  const cachedFiles = [];
+  const failures = [];
+
+  for (const file of files) {
+    const documentId = file.documentId;
+    const expectedHash = getExpectedFileHash({
+      fileHash: file.fileSha256 || file.fileHash,
+    });
+
+    if (!documentId || !file.fileUrl || !expectedHash) continue;
+
+    const alreadyCached = await findCachedDocument(documentId, expectedHash);
+    if (alreadyCached) {
+      cachedFiles.push({
+        documentId,
+        orderId: file.orderId || null,
+        cached: true,
+      });
+      continue;
     }
 
-    return {
-      success: true,
-      filePath,
-      tempDir,
-    };
-  } catch (error) {
-    await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    try {
+      const response = await fetch(file.fileUrl);
+      if (!response.ok || !response.body) {
+        failures.push({
+          documentId,
+          orderId: file.orderId || null,
+          message: `Predownload failed with status ${response.status}.`,
+        });
+        continue;
+      }
 
-    return {
-      success: false,
-      message: error.message || "Could not save downloaded print file.",
-    };
+      const cached = await cacheReadableDocument({
+        documentId,
+        fileName: file.fileName || "document.pdf",
+        expectedHash,
+        responseBody: response.body,
+      });
+
+      if (cached.success) {
+        cachedFiles.push({
+          documentId,
+          orderId: file.orderId || null,
+          cached: cached.cached,
+        });
+      } else {
+        failures.push({
+          documentId,
+          orderId: file.orderId || null,
+          message: cached.message || "Predownload cache write failed.",
+        });
+      }
+    } catch (error) {
+      failures.push({
+        documentId,
+        orderId: file.orderId || null,
+        message: error.message || "Predownload failed.",
+      });
+    }
   }
+
+  // Guardrail: predownload never calls printFile and never updates print job
+  // statuses. It only warms the local cache for pending-payment documents.
+  return {
+    success: true,
+    mode: "predownload_only",
+    checked: files.length,
+    cached: cachedFiles.length,
+    failures,
+  };
 }
 
 export async function processNextJob({ agentToken, printerName } = {}) {
@@ -251,7 +328,9 @@ export async function processNextJob({ agentToken, printerName } = {}) {
     };
   } finally {
     for (const download of downloads) {
-      await rm(download.tempDir, { recursive: true, force: true }).catch(() => {});
+      if (download.tempDir) {
+        await rm(download.tempDir, { recursive: true, force: true }).catch(() => {});
+      }
     }
   }
 }

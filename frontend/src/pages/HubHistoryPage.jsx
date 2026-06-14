@@ -3,7 +3,7 @@ import { BarChart3, Download, Eye, FileText, IndianRupee, Printer, ShieldCheck, 
 import Card from "../components/Card";
 import Metric from "../components/Metric";
 import StatusBadge from "../components/StatusBadge";
-import { downloadDocumentBlob, getOrderDocuments } from "../services/api";
+import { downloadDocumentBlob, getDesktopCachedDocumentUrl, getOrderDocuments } from "../services/api";
 
 function normalizeStatus(status) {
   return String(status || "").toLowerCase().replace(/\s+/g, "_");
@@ -161,6 +161,17 @@ export default function HubHistoryPage({ currentHub, hubOrders }) {
     const documentId = document.documentId || document.id;
     setDocumentActionId(`${mode}:${documentId}`);
     try {
+      if (mode === "view") {
+        const cachedUrl = await getDesktopCachedDocumentUrl(documentId);
+        if (cachedUrl) {
+          setDocumentPreview({
+            url: cachedUrl,
+            name: document.fileName || "Document preview",
+          });
+          return;
+        }
+      }
+
       const blob = await downloadDocumentBlob(documentId);
       const localUrl = URL.createObjectURL(blob);
 

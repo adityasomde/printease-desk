@@ -22,6 +22,7 @@ import {
   apiRequest,
   collectManualPayment,
   downloadDocumentBlob,
+  getDesktopCachedDocumentUrl,
   getHubAgentSummary,
   getOrderDocuments,
   sendOrderToAgent,
@@ -396,6 +397,14 @@ export default function HubActiveOrdersManager({
     const documentId = document.documentId || document.id;
     setDocumentActionId(`${mode}:${documentId}`);
     try {
+      if (mode === "view") {
+        const cachedUrl = await getDesktopCachedDocumentUrl(documentId);
+        if (cachedUrl) {
+          setDocumentPreview({ url: cachedUrl, name: document.fileName || "Document preview" });
+          return;
+        }
+      }
+
       const blob = await downloadDocumentBlob(documentId);
       const localUrl = URL.createObjectURL(blob);
       if (mode === "view") {

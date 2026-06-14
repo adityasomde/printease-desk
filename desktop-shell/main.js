@@ -19,7 +19,14 @@ async function diagnoseWindowsPrintHelperSafe() {
   return module.diagnoseWindowsPrintHelper();
 }
 import { confirmPairing, sendHeartbeat, startPairing } from "./agent/heartbeat.js";
-import { processNextJob } from "./agent/jobPoller.js";
+import {
+  cleanupDocumentCache,
+  findCachedDocument,
+  getDocumentCacheDirectory,
+  getDocumentCacheMaxAgeDays,
+  setDocumentCacheDirectory,
+} from "./agent/documentCache.js";
+import { predownloadPendingDocuments, processNextJob } from "./agent/jobPoller.js";
 import { syncPrinters } from "./agent/statusReporter.js";
 import { getApiBaseUrl, getBackendUrl } from "./config/backend.js";
 import { loadConfig, saveConfig, setConfigDirectory } from "./local/config.js";
@@ -195,7 +202,7 @@ function isPathInside(parentPath, childPath) {
 function registerDesktopProtocol() {
   if (!app.isPackaged) return;
 
-  protocol.handle("app", (request) => {
+  protocol.handle("app", async (request) => {
     const frontendRoot = getFrontendDistRoot();
 
     try {
@@ -205,6 +212,18 @@ function registerDesktopProtocol() {
       }
 
       const requestedPath = decodeURIComponent(requestUrl.pathname || "/");
+      if (requestedPath.startsWith("/cache/")) {
+        const documentId = requestedPath.replace(/^\/cache\/+/, "");
+        const cachedDocumentPath = await findCachedDocument(documentId);
+        const cacheRoot = getDocumentCacheDirectory();
+
+        if (!cachedDocumentPath || !isPathInside(cacheRoot, cachedDocumentPath)) {
+          return new Response("Cached document not found", { status: 404 });
+        }
+
+        return net.fetch(pathToFileURL(cachedDocumentPath).toString());
+      }
+
       const relativePath = requestedPath === "/" ? "index.html" : requestedPath.replace(/^\/+/, "");
       const candidatePath = path.normalize(path.join(frontendRoot, relativePath));
 
@@ -1169,6 +1188,22 @@ async function pollJobsNow(reason = "manual", payload = {}) {
     await syncLatestPrinterStatus(`${reason}:resolve-printer`).catch(() => null);
   }
 
+  const predownloadResult = await predownloadPendingDocuments({
+    agentToken: agentSession.accessToken,
+  }).catch((error) => ({
+    success: false,
+    message: error.message || "Could not predownload pending documents.",
+  }));
+
+  if (predownloadResult?.cached) {
+    console.log("[DESKTOP AGENT BACKGROUND] predownload cached pending documents", {
+      reason,
+      cached: predownloadResult.cached,
+      checked: predownloadResult.checked,
+      failures: Array.isArray(predownloadResult.failures) ? predownloadResult.failures.length : 0,
+    });
+  }
+
   const printerName = payload.printerName || resolveLocalPrinterName();
   const knownPrinters = Array.isArray(latestPrinterResult?.printers) ? latestPrinterResult.printers : [];
   if (!printerName && knownPrinters.length === 0) {
@@ -1381,6 +1416,10 @@ function registerIpcHandlers() {
       backendUrl: getBackendUrl({ packaged: app.isPackaged }),
       apiBaseUrl: getApiBaseUrl({ packaged: app.isPackaged }),
       version: VERSION,
+      documentCache: {
+        directory: getDocumentCacheDirectory(),
+        maxAgeDays: getDocumentCacheMaxAgeDays(),
+      },
       printerResult,
     };
   }, app.isPackaged);
@@ -1425,6 +1464,25 @@ function registerIpcHandlers() {
     } catch (error) {
       return { success: false, message: error?.message || "Could not start download." };
     }
+  }, app.isPackaged);
+  secureHandle("desktop:get-cached-document-url", async (_event, documentId) => {
+    const id = String(documentId || "").trim();
+    if (!id) {
+      return { success: false, message: "Document ID is required." };
+    }
+
+    const cachedDocumentPath = await findCachedDocument(id);
+    if (!cachedDocumentPath) {
+      return {
+        success: false,
+        message: "Document is not cached on this desktop yet.",
+      };
+    }
+
+    return {
+      success: true,
+      url: `${DESKTOP_PROTOCOL_ORIGIN}/cache/${encodeURIComponent(id)}`,
+    };
   }, app.isPackaged);
   secureHandle("desktop:print-html", async (_event, payload = {}) => {
     const html = typeof payload.html === "string" ? payload.html : "";
@@ -1726,7 +1784,9 @@ app.whenReady().then(async () => {
           "style-src 'self' app: file: 'unsafe-inline'; " +
           "img-src 'self' app: file: data: blob: https:; " +
           "connect-src 'self' app: file: https: wss:; " +
-          "font-src 'self' app: file: data:;"
+          "font-src 'self' app: file: data:; " +
+          "frame-src 'self' app: file: blob:; " +
+          "object-src 'self' app: file: blob:;"
         ]
       }
     });
@@ -1734,6 +1794,8 @@ app.whenReady().then(async () => {
   await runStartupStep("clear-cache", () => session.defaultSession.clearCache());
   await runStartupStep("register-desktop-protocol", () => registerDesktopProtocol());
   await runStartupStep("set-config-directory", () => setConfigDirectory(app.getPath("userData")));
+  await runStartupStep("set-document-cache-directory", () => setDocumentCacheDirectory(path.join(app.getPath("userData"), "document-cache")));
+  runStartupStep("cleanup-document-cache", () => cleanupDocumentCache());
   await runStartupStep("register-ipc-handlers", () => registerIpcHandlers());
   await runStartupStep("create-main-window", () => createMainWindow());
 

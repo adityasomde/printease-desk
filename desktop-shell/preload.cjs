@@ -23,6 +23,7 @@ try {
     checkBackendHealth: () => ipcRenderer.invoke("backend:health"),
     openExternalUrl: (url) => ipcRenderer.invoke("desktop:open-external-url", url),
     downloadUrl: (payload) => ipcRenderer.invoke("desktop:download-url", payload),
+    getCachedDocumentUrl: (documentId) => ipcRenderer.invoke("desktop:get-cached-document-url", documentId),
     printHtml: (payload) => ipcRenderer.invoke("desktop:print-html", payload),
     listPrinters: () => ipcRenderer.invoke("printers:list"),
     selectPrinter: (payload) => ipcRenderer.invoke("printers:select", payload),

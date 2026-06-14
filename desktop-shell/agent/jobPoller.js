@@ -113,6 +113,32 @@ async function getRemoteJobStatus({ agentToken, jobId } = {}) {
   }
 }
 
+function buildOrderScopedPrintOptions({ job, file, isLastFile }) {
+  const fileOptions = file.printOptions || {};
+  const jobOptions = job.printOptions || {};
+
+  const {
+    afterOrderSettings: _fileAfterOrderSettings,
+    orderInfo: _fileOrderInfo,
+    ...safeFileOptions
+  } = fileOptions;
+
+  const orderAfterOrderSettings =
+    jobOptions.afterOrderSettings || fileOptions.afterOrderSettings || null;
+
+  const orderInfo =
+    jobOptions.orderInfo || fileOptions.orderInfo || null;
+
+  return {
+    ...safeFileOptions,
+    copies: file.copies || fileOptions.copies || job.copies || 1,
+    isLastFile,
+    orderInsertScope: "order",
+    afterOrderSettings: isLastFile ? orderAfterOrderSettings : null,
+    orderInfo: isLastFile ? orderInfo : null,
+  };
+}
+
 async function assertJobStillPrintable({ agentToken, jobId } = {}) {
   const remoteJob = await getRemoteJobStatus({ agentToken, jobId });
   const status = String(remoteJob?.status || "").toLowerCase();
@@ -280,11 +306,11 @@ export async function processNextJob({ agentToken, printerName } = {}) {
         printerName: selectedPrinterName,
         filePath: download.filePath,
         copies: download.file.copies || job.copies || 1,
-        options: {
-          ...download.file.printOptions,
-          copies: download.file.copies || download.file.printOptions?.copies || job.copies || 1,
+        options: buildOrderScopedPrintOptions({
+          job,
+          file: download.file,
           isLastFile,
-        },
+        }),
       });
 
       if (!printResult.success) {

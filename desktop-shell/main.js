@@ -1185,45 +1185,45 @@ async function pollJobsNow(reason = "manual", payload = {}) {
     };
   }
 
-  if (!payload.printerName && !resolveLocalPrinterName()) {
-    await syncLatestPrinterStatus(`${reason}:resolve-printer`).catch(() => null);
-  }
-
-  const predownloadResult = await predownloadPendingDocuments({
-    agentToken: agentSession.accessToken,
-  }).catch((error) => ({
-    success: false,
-    message: error.message || "Could not predownload pending documents.",
-  }));
-
-  if (predownloadResult?.cached) {
-    console.log("[DESKTOP AGENT BACKGROUND] predownload cached pending documents", {
-      reason,
-      cached: predownloadResult.cached,
-      checked: predownloadResult.checked,
-      failures: Array.isArray(predownloadResult.failures) ? predownloadResult.failures.length : 0,
-    });
-  }
-
-  const printerName = payload.printerName || resolveLocalPrinterName();
-  const knownPrinters = Array.isArray(latestPrinterResult?.printers) ? latestPrinterResult.printers : [];
-  if (!printerName && knownPrinters.length === 0) {
-    agentSession.lastJobPollAt = new Date().toISOString();
-    agentSession.lastJobPollError = "No local printer selected/available.";
-    agentSession.lastJobPollMessage = "Auto-print is online but waiting for a local printer.";
-    console.warn("[DESKTOP AGENT BACKGROUND] no local printer selected/available", { reason });
-    emitAgentSession();
-    return {
-      success: true,
-      skipped: true,
-      message: agentSession.lastJobPollError,
-      session: sanitizeAgentSession(),
-    };
-  }
-
   isPollingJobs = true;
 
   try {
+    if (!payload.printerName && !resolveLocalPrinterName()) {
+      await syncLatestPrinterStatus(`${reason}:resolve-printer`).catch(() => null);
+    }
+
+    const predownloadResult = await predownloadPendingDocuments({
+      agentToken: agentSession.accessToken,
+    }).catch((error) => ({
+      success: false,
+      message: error.message || "Could not predownload pending documents.",
+    }));
+
+    if (predownloadResult?.cached) {
+      console.log("[DESKTOP AGENT BACKGROUND] predownload cached pending documents", {
+        reason,
+        cached: predownloadResult.cached,
+        checked: predownloadResult.checked,
+        failures: Array.isArray(predownloadResult.failures) ? predownloadResult.failures.length : 0,
+      });
+    }
+
+    const printerName = payload.printerName || resolveLocalPrinterName();
+    const knownPrinters = Array.isArray(latestPrinterResult?.printers) ? latestPrinterResult.printers : [];
+    if (!printerName && knownPrinters.length === 0) {
+      agentSession.lastJobPollAt = new Date().toISOString();
+      agentSession.lastJobPollError = "No local printer selected/available.";
+      agentSession.lastJobPollMessage = "Auto-print is online but waiting for a local printer.";
+      console.warn("[DESKTOP AGENT BACKGROUND] no local printer selected/available", { reason });
+      emitAgentSession();
+      return {
+        success: true,
+        skipped: true,
+        message: agentSession.lastJobPollError,
+        session: sanitizeAgentSession(),
+      };
+    }
+
     const result = await processNextJob({
       agentToken: agentSession.accessToken,
       printerName,

@@ -17,7 +17,10 @@ export async function preparePdfForPrinting(inputFilePath, printOptions = {}, pr
   let reversePageOrder = printOptions.pageOrder === 'reverse' || printerProfile.reversePageOrder;
   
   const afterOrderSettings = printOptions.afterOrderSettings;
-  const insertEnabled = afterOrderSettings && afterOrderSettings.enabled && printOptions.isLastFile !== false;
+  const insertEnabled =
+    Boolean(afterOrderSettings?.enabled) &&
+    printOptions.orderInsertScope === "order" &&
+    printOptions.isLastFile === true;
 
   const requiresRotation = backSideRotation === 'rotate-180';
   

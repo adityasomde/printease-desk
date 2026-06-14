@@ -204,8 +204,6 @@ function isPathInside(parentPath, childPath) {
 }
 
 function registerDesktopProtocol() {
-  if (!app.isPackaged) return;
-
   protocol.handle("app", async (request) => {
     const frontendRoot = getFrontendDistRoot();
 

@@ -1,7 +1,7 @@
 export default function InlineDocumentFrame({ url, title = "Document preview", className = "" }) {
   if (!url) return null;
 
-  const previewUrl = `${url}#toolbar=0&navpanes=0`;
+  const previewUrl = url.startsWith("blob:") ? url : `${url}#toolbar=0&navpanes=0`;
 
   return (
     <div className={`overflow-hidden rounded-xl border bg-white ${className}`}>

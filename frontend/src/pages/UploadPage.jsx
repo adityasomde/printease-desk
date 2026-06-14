@@ -38,6 +38,7 @@ export default function UploadPage({
   estimatedSelectedPageCount,
   totalAmount,
   backendPrice,
+  setBackendPrice,
   preparePayment,
   paymentLoading,
   paymentError,
@@ -112,7 +113,12 @@ export default function UploadPage({
   }, [localPreview]);
 
   const displayFiles = useMemo(() => {
-    return documentFiles.length ? documentFiles.map(f => ({ name: f.name })) : (reprintSourceDocuments || []).map(d => ({ name: d.file_name }));
+    return documentFiles.length
+      ? documentFiles.map((file) => ({ name: file.name }))
+      : (reprintSourceDocuments || []).map((document) => ({
+          name: document.fileName || document.file_name || "Reprint document",
+          pageCount: document.pageCount || document.page_count || document.originalPageCount || document.original_pages || document.pages || 1,
+        }));
   }, [documentFiles, reprintSourceDocuments]);
 
   const isMulti = displayFiles.length > 1;
@@ -137,7 +143,7 @@ export default function UploadPage({
       indices.push(index);
       if (!newConfigs[index]) {
         newConfigs[index] = {
-          pages: 1,
+          pages: Number(f.pageCount || f.pages || f.originalPageCount || f.original_pages || 1),
           selectedPages: "",
           copies: 1,
           colorType: "bw",
@@ -163,6 +169,7 @@ export default function UploadPage({
   }
 
   function handleFileChange(event) {
+    setBackendPrice?.(null);
     if (setReprintSourceDocuments) setReprintSourceDocuments([]);
     if (setReprintDocumentExpired) setReprintDocumentExpired(false);
     const files = Array.from(event.target.files || []);
@@ -188,6 +195,7 @@ export default function UploadPage({
     const handlePaste = (e) => {
       const files = Array.from(e.clipboardData?.files || []).filter((f) => f.type === "application/pdf");
       if (files.length > 0) {
+        setBackendPrice?.(null);
         if (setReprintSourceDocuments) setReprintSourceDocuments([]);
         if (setReprintDocumentExpired) setReprintDocumentExpired(false);
         setDocumentFiles(files);
@@ -227,6 +235,7 @@ export default function UploadPage({
       };
 
   const setConfigVal = (key, value) => {
+    setBackendPrice?.(null);
     if (modalFileIndex !== null) {
       setMultiFileConfigs((prev) => ({
         ...prev,

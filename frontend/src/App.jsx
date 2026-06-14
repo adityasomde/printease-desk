@@ -220,6 +220,20 @@ function normalizeCentre(centre) {
   };
 }
 
+function normalizeReprintSourceDocument(document = {}) {
+  const printOptions = document.printOptions || document.print_options || {};
+  return {
+    ...document,
+    documentId: document.documentId || document.document_id || document.id || "",
+    fileName: document.fileName || document.file_name || document.name || "document.pdf",
+    pageCount: Number(document.pageCount || document.page_count || document.originalPageCount || document.original_pages || document.pages || 1),
+    originalPageCount: Number(document.originalPageCount || document.original_pages || document.pageCount || document.page_count || document.pages || 1),
+    copies: Number(document.copies || printOptions.copies || 1),
+    selectedPages: document.selectedPages || document.selected_pages || printOptions.pages?.range || "",
+    printOptions,
+  };
+}
+
 function upsertCentre(centreList, centre) {
   if (!centre) return centreList;
 
@@ -1352,11 +1366,11 @@ export default function App() {
           uploadedDocuments.push(uploadData.document);
         }
       } else if (reprintSourceDocuments.length) {
-        reprintSourceDocuments.forEach(doc => {
+        reprintSourceDocuments.map(normalizeReprintSourceDocument).forEach((doc) => {
           uploadedDocuments.push({
-            id: doc.document_id,
-            fileName: doc.file_name,
-            pageCount: doc.original_pages
+            id: doc.documentId,
+            fileName: doc.fileName,
+            pageCount: doc.pageCount,
           });
         });
       }
@@ -1453,6 +1467,11 @@ export default function App() {
           printOptions: defaultPrintOptions,
         }),
       });
+
+      const returnedOrderFiles = Array.isArray(orderData.orderFiles) ? orderData.orderFiles : [];
+      if (returnedOrderFiles.length !== uploadedDocuments.length) {
+        throw new Error("Order configuration was not saved for every document. Please try again before payment.");
+      }
 
       const nextOrder = normalizeOrder(orderData.order, centres);
       setOrder(nextOrder);
@@ -1716,8 +1735,9 @@ export default function App() {
     setPendingPayment(null);
     setUpiQr(null);
 
-    const docs = orderDetails.documents?.length ? orderDetails.documents : [orderDetails.document].filter(Boolean);
-    const docsWithId = docs.filter((d) => d?.document_id);
+    const docs = (orderDetails.documents?.length ? orderDetails.documents : [orderDetails.document].filter(Boolean))
+      .map(normalizeReprintSourceDocument);
+    const docsWithId = docs.filter((document) => document.documentId);
 
     // Reset previous reprint state
     setDocumentFile(null);
@@ -1726,7 +1746,7 @@ export default function App() {
     const initialConfigs = {};
     docsWithId.forEach((doc, idx) => {
       if (doc) {
-        const opts = doc.print_options || doc.printOptions;
+        const opts = doc.printOptions;
         if (opts) {
           const pagesMode = opts.pages?.mode;
           const pageRange = opts.pages?.range;
@@ -1771,12 +1791,12 @@ export default function App() {
     try {
       const results = await Promise.allSettled(
         docsWithId.map(async (doc) => {
-          const { signedUrl } = await createDocumentSignedDownload(doc.document_id);
+          const { signedUrl } = await createDocumentSignedDownload(doc.documentId);
           if (!signedUrl) throw new Error("No signed URL");
           const response = await fetch(signedUrl);
           if (!response.ok) throw new Error(`Fetch failed: ${response.status}`);
           const blob = await response.blob();
-          const fileName = doc.file_name || "document.pdf";
+          const fileName = doc.fileName || "document.pdf";
           return new File([blob], fileName, { type: blob.type || "application/pdf" });
         })
       );
@@ -2301,7 +2321,7 @@ export default function App() {
           />
           <Route path={ROUTES.desktopAgent} element={<DesktopAgentPage currentUser={currentUser} />} />
           <Route path={ROUTES.centre} element={<CentreCodePage centreCode={centreCode} setCentreCode={setCentreCode} handleCentreCode={handleCentreCode} selectCentreByCode={selectCentreByCode} centres={prioritizedCentres} selectCentreAndUpload={selectCentreAndUpload} lookupLoading={centreLookupLoading} lookupError={centreLookupError} autoStartScanner={Boolean(location.state?.autoStartScanner)} />} />
-          <Route path={ROUTES.upload} element={<UploadPage currentUser={currentUser} startLogin={startLogin} selectedCentre={selectedCentre} documentFile={documentFile} setDocumentFile={setDocumentFile} documentFiles={documentFiles} setDocumentFiles={setDocumentFiles} reprintSourceDocuments={reprintSourceDocuments} setReprintSourceDocuments={setReprintSourceDocuments} reprintDocumentExpired={reprintDocumentExpired} setReprintDocumentExpired={setReprintDocumentExpired} multiFileConfigs={multiFileConfigs} setMultiFileConfigs={setMultiFileConfigs} documentName={documentName} setDocumentName={setDocumentName} pages={pages} setPages={setPages} selectedPages={selectedPages} setSelectedPages={setSelectedPages} copies={copies} setCopies={setCopies} colorType={colorType} setColorType={setColorType} sideType={sideType} setSideType={setSideType} paperSize={paperSize} setPaperSize={setPaperSize} pagesPerSheet={pagesPerSheet} setPagesPerSheet={setPagesPerSheet} orientation={orientation} setOrientation={setOrientation} printDpi={printDpi} setPrintDpi={setPrintDpi} scaleMode={scaleMode} setScaleMode={setScaleMode} marginMode={marginMode} setMarginMode={setMarginMode} watermark={watermark} setWatermark={setWatermark} watermarkType={watermarkType} setWatermarkType={setWatermarkType} watermarkText={watermarkText} setWatermarkText={setWatermarkText} watermarkPosition={watermarkPosition} setWatermarkPosition={setWatermarkPosition} watermarkOpacity={watermarkOpacity} setWatermarkOpacity={setWatermarkOpacity} watermarkFontSize={watermarkFontSize} setWatermarkFontSize={setWatermarkFontSize} watermarkRotation={watermarkRotation} setWatermarkRotation={setWatermarkRotation} pricePerPage={pricePerPage} estimatedSelectedPageCount={estimatedSelectedPageCount} totalAmount={totalAmount} backendPrice={backendPrice} preparePayment={preparePayment} paymentLoading={paymentLoading} paymentError={paymentError} navigate={navigate} />} />
+          <Route path={ROUTES.upload} element={<UploadPage currentUser={currentUser} startLogin={startLogin} selectedCentre={selectedCentre} documentFile={documentFile} setDocumentFile={setDocumentFile} documentFiles={documentFiles} setDocumentFiles={setDocumentFiles} reprintSourceDocuments={reprintSourceDocuments} setReprintSourceDocuments={setReprintSourceDocuments} reprintDocumentExpired={reprintDocumentExpired} setReprintDocumentExpired={setReprintDocumentExpired} multiFileConfigs={multiFileConfigs} setMultiFileConfigs={setMultiFileConfigs} documentName={documentName} setDocumentName={setDocumentName} pages={pages} setPages={setPages} selectedPages={selectedPages} setSelectedPages={setSelectedPages} copies={copies} setCopies={setCopies} colorType={colorType} setColorType={setColorType} sideType={sideType} setSideType={setSideType} paperSize={paperSize} setPaperSize={setPaperSize} pagesPerSheet={pagesPerSheet} setPagesPerSheet={setPagesPerSheet} orientation={orientation} setOrientation={setOrientation} printDpi={printDpi} setPrintDpi={setPrintDpi} scaleMode={scaleMode} setScaleMode={setScaleMode} marginMode={marginMode} setMarginMode={setMarginMode} watermark={watermark} setWatermark={setWatermark} watermarkType={watermarkType} setWatermarkType={setWatermarkType} watermarkText={watermarkText} setWatermarkText={setWatermarkText} watermarkPosition={watermarkPosition} setWatermarkPosition={setWatermarkPosition} watermarkOpacity={watermarkOpacity} setWatermarkOpacity={setWatermarkOpacity} watermarkFontSize={watermarkFontSize} setWatermarkFontSize={setWatermarkFontSize} watermarkRotation={watermarkRotation} setWatermarkRotation={setWatermarkRotation} pricePerPage={pricePerPage} estimatedSelectedPageCount={estimatedSelectedPageCount} totalAmount={totalAmount} backendPrice={backendPrice} setBackendPrice={setBackendPrice} preparePayment={preparePayment} paymentLoading={paymentLoading} paymentError={paymentError} navigate={navigate} />} />
           <Route
             path={ROUTES.payment}
             element={

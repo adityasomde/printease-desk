@@ -1,5 +1,6 @@
-import { rm } from "node:fs/promises";
+import { rm, readFile } from "node:fs/promises";
 import path from "node:path";
+import { PDFDocument } from "pdf-lib";
 import { backendRequest } from "./heartbeat.js";
 import { cacheReadableDocument, findCachedDocument, removeCachedDocument, getDocumentCacheDirectory } from "./documentCache.js";
 import { printFile, stopPrinting } from "../printer/printExecutor.js";
@@ -248,13 +249,48 @@ export async function predownloadPendingDocuments({ agentToken, limit = 15 } = {
 
       if (cached.success) {
         try {
-          await preparePrintFile({
+          const prepResult = await preparePrintFile({
             filePath: cached.filePath,
             fileName: file.fileName || "document.pdf",
             fileType: file.fileType || "application/pdf",
             sha256: expectedHash,
             cacheBaseDir: getDocumentCacheDirectory()
           });
+
+          if (file.requiresDesktopPreparation && file.preparationStatus === 'pending') {
+            let preparedPageCount = null;
+            let status = 'failed';
+            let errorCode = prepResult.reasonCode || 'UNKNOWN_ERROR';
+            let errorMessage = prepResult.message || 'Failed to prepare print file';
+
+            if (prepResult.success && prepResult.filePath) {
+              try {
+                const pdfBytes = await readFile(prepResult.filePath);
+                const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+                preparedPageCount = pdfDoc.getPageCount();
+                status = 'prepared';
+                errorCode = null;
+                errorMessage = null;
+              } catch (pdfErr) {
+                errorCode = 'PDF_PARSE_ERROR';
+                errorMessage = 'Failed to count pages in converted PDF';
+              }
+            }
+
+            await backendRequest({
+              endpoint: "/agent/preparation-result",
+              method: "POST",
+              agentToken,
+              body: {
+                orderFileId: file.orderFileId,
+                documentId: file.documentId,
+                preparedPageCount,
+                preparationStatus: status,
+                errorCode,
+                errorMessage
+              }
+            });
+          }
         } catch (e) {
           console.warn("Predownload preparation failed:", e);
         }

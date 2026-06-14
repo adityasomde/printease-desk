@@ -17,18 +17,23 @@ export async function preparePdfForPrinting(inputFilePath, printOptions = {}, pr
   let reversePageOrder = printOptions.pageOrder === 'reverse' || printerProfile.reversePageOrder;
   
   const afterOrderSettings = printOptions.afterOrderSettings;
-  const insertEnabled = afterOrderSettings && afterOrderSettings.enabled;
+  const insertEnabled = afterOrderSettings && afterOrderSettings.enabled && printOptions.isLastFile !== false;
 
   const requiresRotation = backSideRotation === 'rotate-180';
   
-  if (!requiresRotation && !reversePageOrder && !insertEnabled) {
-    return { tempFilePath: null, cleanup: () => {} }; // No correction/insertion needed
+  let requestedOrientation = printOptions.orientation || printerProfile.defaultOrientation || 'auto';
+  const isWindows = process.platform === 'win32';
+  const requiresOrientationRotation = isWindows && (requestedOrientation === 'landscape' || requestedOrientation === 'portrait');
+  
+  if (!requiresRotation && !reversePageOrder && !insertEnabled && !requiresOrientationRotation) {
+    return { tempFilePath: null, cleanup: () => {} }; // No correction/insertion/rotation needed
   }
 
   console.log(`[PDF PREP] Processing PDF: ${inputFilePath}`);
   if (requiresRotation) console.log(`[PDF PREP] Rotating even pages by 180 degrees.`);
   if (reversePageOrder) console.log(`[PDF PREP] Reversing page order.`);
   if (insertEnabled) console.log(`[PDF PREP] Appending slip/banner page after order.`);
+  if (requiresOrientationRotation) console.log(`[PDF PREP] Adjusting page rotation for Windows ${requestedOrientation} mode.`);
 
   const originalPdfBytes = fs.readFileSync(inputFilePath);
   const pdfDoc = await PDFDocument.load(originalPdfBytes);
@@ -151,6 +156,22 @@ export async function preparePdfForPrinting(inputFilePath, printOptions = {}, pr
       if ((i + 1) % 2 === 0) {
         const currentRotation = finalPages[i].getRotation().angle;
         finalPages[i].setRotation(degrees(currentRotation + 180));
+      }
+    }
+  }
+
+  // Programmatically rotate pages for Windows landscape/portrait printing
+  if (requiresOrientationRotation) {
+    const finalPages = targetDoc.getPages();
+    for (const page of finalPages) {
+      const { width, height } = page.getSize();
+      const currentRotation = page.getRotation().angle;
+      const isPortrait = (currentRotation % 180 === 0) ? (width < height) : (width > height);
+      
+      if (requestedOrientation === 'landscape' && isPortrait) {
+        page.setRotation(degrees((currentRotation + 90) % 360));
+      } else if (requestedOrientation === 'portrait' && !isPortrait) {
+        page.setRotation(degrees((currentRotation + 90) % 360));
       }
     }
   }

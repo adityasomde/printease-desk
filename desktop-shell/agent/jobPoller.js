@@ -195,7 +195,9 @@ export async function processNextJob({ agentToken, printerName } = {}) {
     await markJobStatus({ agentToken, jobId: job.jobId, status: "printing" });
 
     const printedFiles = [];
-    for (const download of downloads) {
+    for (let idx = 0; idx < downloads.length; idx++) {
+      const download = downloads[idx];
+      const isLastFile = idx === downloads.length - 1;
       await assertJobStillPrintable({ agentToken, jobId: job.jobId });
       const printResult = await printFile({
         printerName: selectedPrinterName,
@@ -204,6 +206,7 @@ export async function processNextJob({ agentToken, printerName } = {}) {
         options: {
           ...download.file.printOptions,
           copies: download.file.copies || download.file.printOptions?.copies || job.copies || 1,
+          isLastFile,
         },
       });
 

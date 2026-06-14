@@ -322,7 +322,7 @@ export async function printFile({ printerName, filePath, copies = 1, options = {
   // Determine effective profile from available profiles or passed options
   const profiles = options.printerProfiles || [];
   const profile = profiles.find(p => p.osPlatform === 'linux') || options.printerProfile || {};
-  const printOptions = options.printOptions || {};
+  const printOptions = options.printOptions || options || {};
 
   // Pre-process PDF if required (rotation / page order)
   let activeFilePath = filePath;
@@ -408,6 +408,12 @@ export async function printFile({ printerName, filePath, copies = 1, options = {
       args.push("-o", "Collate=True");
     } else {
       args.push("-o", "Collate=False");
+    }
+
+    // Resolution (DPI)
+    const printDpi = options.printDpi || printOptions.printDpi || options.quality?.dpi || printOptions.quality?.dpi || printOptions.quality_dpi;
+    if (printDpi) {
+      args.push("-o", `printer-resolution=${printDpi}dpi`);
     }
 
     args.push(activeFilePath);

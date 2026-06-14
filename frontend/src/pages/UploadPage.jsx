@@ -270,7 +270,7 @@ export default function UploadPage({
     <div className="grid gap-2 grid-cols-2 md:grid-cols-4 bg-slate-50 p-3 rounded-2xl border border-slate-100">
       <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-1">
         Pages
-        <input type="number" min="1" value={activeConfig?.pages || 1} onChange={(e) => setConfigVal("pages", Number(e.target.value))} className="rounded-xl border px-2 py-1.5 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
+        <input type="number" min="1" value={activeConfig?.pages ?? 1} onChange={(e) => setConfigVal("pages", e.target.value === "" ? "" : Number(e.target.value))} className="rounded-xl border px-2 py-1.5 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
       </label>
       <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-1">
         Range
@@ -278,7 +278,7 @@ export default function UploadPage({
       </label>
       <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-1">
         Copies
-        <input type="number" min="1" value={activeConfig?.copies || 1} onChange={(e) => setConfigVal("copies", Number(e.target.value))} className="rounded-xl border px-2 py-1.5 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
+        <input type="number" min="1" value={activeConfig?.copies ?? 1} onChange={(e) => setConfigVal("copies", e.target.value === "" ? "" : Number(e.target.value))} className="rounded-xl border px-2 py-1.5 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
       </label>
       <label className="grid gap-1 text-xs font-semibold text-slate-600 col-span-1">
         Color
@@ -374,7 +374,7 @@ export default function UploadPage({
             Rotation
             <input type="range" min="-90" max="90" step="5" value={activeConfig?.watermarkRotation || 0} onChange={(e) => setConfigVal("watermarkRotation", Number(e.target.value))} />
           </label>
-          <input type="number" min="8" max="72" value={activeConfig?.watermarkFontSize || 18} onChange={(e) => setConfigVal("watermarkFontSize", Number(e.target.value))} placeholder="Size" className="rounded-xl border px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-slate-300 col-span-2 md:col-span-2" />
+          <input type="number" min="8" max="72" value={activeConfig?.watermarkFontSize ?? 18} onChange={(e) => setConfigVal("watermarkFontSize", e.target.value === "" ? "" : Number(e.target.value))} placeholder="Size" className="rounded-xl border px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-slate-300 col-span-2 md:col-span-2" />
         </div>
       )}
     </div>
@@ -450,7 +450,7 @@ export default function UploadPage({
     <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2">
       <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-1">
         Estimated pages
-        <input type="number" min="1" value={activeConfig?.pages || 1} onChange={(e) => setConfigVal("pages", Number(e.target.value))} className="rounded-2xl border px-4 py-3 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
+        <input type="number" min="1" value={activeConfig?.pages ?? 1} onChange={(e) => setConfigVal("pages", e.target.value === "" ? "" : Number(e.target.value))} className="rounded-2xl border px-4 py-3 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
       </label>
       <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-1">
         Page range
@@ -458,7 +458,7 @@ export default function UploadPage({
       </label>
       <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-1">
         Copies
-        <input type="number" min="1" value={activeConfig?.copies || 1} onChange={(e) => setConfigVal("copies", Number(e.target.value))} className="rounded-2xl border px-4 py-3 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
+        <input type="number" min="1" value={activeConfig?.copies ?? 1} onChange={(e) => setConfigVal("copies", e.target.value === "" ? "" : Number(e.target.value))} className="rounded-2xl border px-4 py-3 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
       </label>
       <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-1">
         Color mode
@@ -558,7 +558,7 @@ export default function UploadPage({
             Rotation
             <input type="range" min="-90" max="90" step="5" value={activeConfig?.watermarkRotation || 0} onChange={(e) => setConfigVal("watermarkRotation", Number(e.target.value))} />
           </label>
-          <input type="number" min="8" max="72" value={activeConfig?.watermarkFontSize || 18} onChange={(e) => setConfigVal("watermarkFontSize", Number(e.target.value))} placeholder="Font size" className="rounded-2xl border px-4 py-3 outline-none focus:ring-2 focus:ring-slate-300 col-span-2" />
+          <input type="number" min="8" max="72" value={activeConfig?.watermarkFontSize ?? 18} onChange={(e) => setConfigVal("watermarkFontSize", e.target.value === "" ? "" : Number(e.target.value))} placeholder="Font size" className="rounded-2xl border px-4 py-3 outline-none focus:ring-2 focus:ring-slate-300 col-span-2" />
         </div>
       )}
     </div>

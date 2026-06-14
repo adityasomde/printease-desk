@@ -302,7 +302,7 @@ export async function printPdfFile({ filePath, printerName, options = {} } = {})
 
     const profiles = options.printerProfiles || [];
     const profile = profiles.find(p => p.osPlatform === 'win32') || options.printerProfile || {};
-    const printOptions = options.printOptions || {};
+    const printOptions = options.printOptions || options || {};
 
     let activeFilePath = filePath;
     let cleanupPdf = () => {};

@@ -381,6 +381,31 @@ export default function UploadPage({
   );
 
   const handlePaymentClick = () => {
+    if (!isMulti) {
+      if (copies === "" || Number(copies) <= 0) {
+        window.alert("Please enter a valid number of copies (at least 1).");
+        return;
+      }
+      if (pages === "" || Number(pages) <= 0) {
+        window.alert("Please enter a valid number of pages (at least 1).");
+        return;
+      }
+    } else {
+      for (let i = 0; i < displayFiles.length; i++) {
+        const conf = multiFileConfigs[i] || {};
+        const fileCopies = conf.copies ?? 1;
+        const filePages = conf.pages ?? 1;
+        if (fileCopies === "" || Number(fileCopies) <= 0) {
+          window.alert(`Please enter a valid number of copies (at least 1) for document: "${displayFiles[i].name}".`);
+          return;
+        }
+        if (filePages === "" || Number(filePages) <= 0) {
+          window.alert(`Please enter a valid number of pages (at least 1) for document: "${displayFiles[i].name}".`);
+          return;
+        }
+      }
+    }
+
     if (!selectedCentre) {
       navigate("centre", { state: { autoStartScanner: true, fromUpload: true } });
       return;
@@ -764,7 +789,7 @@ export default function UploadPage({
                   <Row label="Selected Pages" value={backendPrice?.selectedPageCount || selectedPages || "All"} />
                   <Row label="Copies" value={copies} />
                   <Row label="Printable Pages" value={backendPrice?.printablePageCount || estimatePrintablePages(estimatedSelectedPageCount, copies)} />
-                  <Row label="Sheets" value={backendPrice?.sheetCount || estimateSheets(estimatedSelectedPageCount, copies, sideType)} />
+                  <Row label="Sheets" value={backendPrice?.sheetCount || estimateSheets(estimatedSelectedPageCount, copies, sideType, pagesPerSheet)} />
                   <Row label="Print Type" value={colorType === "bw" ? "B/W" : "Color"} />
                   <Row label="Side" value={sideType} />
                   <Row label="Pages/Sheet" value={pagesPerSheet} />
@@ -802,7 +827,7 @@ export default function UploadPage({
                  <Row label="Selected Pages" value={backendPrice?.selectedPageCount || selectedPages || "All"} />
                  <Row label="Copies" value={copies} />
                  <Row label="Printable Pages" value={backendPrice?.printablePageCount || estimatePrintablePages(estimatedSelectedPageCount, copies)} />
-                 <Row label="Sheets" value={backendPrice?.sheetCount || estimateSheets(estimatedSelectedPageCount, copies, sideType)} />
+                 <Row label="Sheets" value={backendPrice?.sheetCount || estimateSheets(estimatedSelectedPageCount, copies, sideType, pagesPerSheet)} />
                  <Row label="Print Type" value={colorType === "bw" ? "B/W" : "Color"} />
                  <Row label="Side" value={sideType} />
                  <Row label="Orientation" value={orientation} />

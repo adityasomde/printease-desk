@@ -29,6 +29,10 @@ function ensureCacheDirectory() {
   return cacheDirectory;
 }
 
+async function ensureParentDir(filePath) {
+  await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+}
+
 function isPathInside(parentPath, childPath) {
   const relative = path.relative(parentPath, childPath);
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
@@ -156,6 +160,7 @@ export async function cacheReadableDocument({ documentId, fileName, expectedHash
   }
 
   try {
+    await ensureParentDir(tempPath);
     await pipeline(Readable.fromWeb(responseBody), createWriteStream(tempPath));
 
     if (expectedHash) {
@@ -224,7 +229,7 @@ export async function cleanupDocumentCache({ maxAgeDays = CACHE_MAX_AGE_DAYS, ma
         });
       }
     } catch {
-      // Cleanup is best effort.
+      // Cleanup is best effort, ignore ENOENT
     }
   }
 

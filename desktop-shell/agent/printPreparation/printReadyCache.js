@@ -26,6 +26,10 @@ export async function ensureDir(dir) {
   return dir;
 }
 
+export async function ensureParentDir(filePath) {
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+}
+
 export function buildPrintReadyCacheKey({ sha256, fileName = '', kind = '', conversionProfile = 'default' } = {}) {
   const hash = crypto.createHash('sha256');
   hash.update(String(sha256 || 'missing-sha'));
@@ -69,8 +73,9 @@ export async function findPrintReadyPdf(args = {}) {
 
 export async function savePrintReadyPdf({ baseDir, sourcePath, sha256, fileName, kind, conversionProfile, metadata = {} } = {}) {
   const paths = await getPrintReadyPaths({ baseDir, sha256, fileName, kind, conversionProfile });
-  await ensureDir(paths.cacheDir);
+  await ensureParentDir(paths.pdfPath);
   await fs.copyFile(sourcePath, paths.pdfPath);
+  await ensureParentDir(paths.metaPath);
   await fs.writeFile(paths.metaPath, JSON.stringify({
     ...metadata,
     cacheVersion: CACHE_VERSION,

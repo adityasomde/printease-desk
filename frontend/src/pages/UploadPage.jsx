@@ -6,6 +6,12 @@ import Row from "../components/Row";
 import { calculateTotalAmount, getPricePerPage, countSelectedPages } from "../utils/price";
 import { countSelectedPagesPreview, estimatePrintablePages, estimateGuestLimitExceeded, estimateSheets, estimatePricePreview } from "../utils/printEstimate";
 import { ALLOWED_UPLOAD_ACCEPT, isAllowedUploadFile } from "../constants/upload";
+import { detectUploadFileKind } from "../utils/filePreparation/detectUploadFileKind";
+import {
+  PREPARATION_STATUS,
+  prepareUploadPreview,
+  revokePreparationPreview,
+} from "../utils/filePreparation/prepareUploadPreview";
 
 export default function UploadPage({
   currentUser,
@@ -54,10 +60,61 @@ export default function UploadPage({
   const [selectedFileIndexes, setSelectedFileIndexes] = useState([]);
   const [modalFileIndex, setModalFileIndex] = useState(null);
   const longPressTimerRef = useRef(null);
+  const preparationRunRef = useRef(0);
+  const filePreparationStateRef = useRef({});
 
   const [localPreview, setLocalPreview] = useState(null);
+  const [filePreparationState, setFilePreparationState] = useState({});
+
+  function releasePreparationState(state = filePreparationState) {
+    Object.values(state || {}).forEach(revokePreparationPreview);
+  }
 
   function handleLocalPreview(index) {
+    const prepared = filePreparationState[index];
+    if (prepared?.status === PREPARATION_STATUS.PREPARING) {
+      setLocalPreview({
+        url: "",
+        kind: prepared.previewKind || "pdf",
+        name: displayFiles[index]?.name || "Preparing preview",
+        type: "application/pdf",
+        size: 0,
+        textContent: "",
+        loading: true,
+        error: "",
+      });
+      return;
+    }
+
+    if (prepared?.status === PREPARATION_STATUS.PENDING_DESKTOP || prepared?.status === PREPARATION_STATUS.FAILED) {
+      setLocalPreview({
+        url: "",
+        kind: prepared.previewKind || "unsupported",
+        name: displayFiles[index]?.name || "Document preview",
+        type: "",
+        size: 0,
+        textContent: "",
+        loading: false,
+        error: prepared.errorMessage || prepared.message || "Preview is not ready yet.",
+      });
+      return;
+    }
+
+    if (prepared?.status === PREPARATION_STATUS.READY && prepared.previewPdfUrl) {
+      setLocalPreview({
+        url: prepared.previewPdfUrl,
+        kind: prepared.previewKind || "pdf",
+        name: displayFiles[index]?.name || "Prepared preview",
+        type: prepared.previewKind === "pdf" ? "application/pdf" : "",
+        size: documentFiles[index]?.size || 0,
+        textContent: prepared.textContent || "",
+        loading: false,
+        error: "",
+        skipRevoke: true,
+      });
+      return;
+    }
+
     const fileObj = documentFiles[index] || (index === 0 && documentFile);
     if (!fileObj) return;
 
@@ -99,7 +156,7 @@ export default function UploadPage({
   }
 
   function closeLocalPreview() {
-    if (localPreview?.url) {
+    if (localPreview?.url && !localPreview.skipRevoke) {
       URL.revokeObjectURL(localPreview.url);
     }
     setLocalPreview(null);
@@ -107,11 +164,21 @@ export default function UploadPage({
 
   useEffect(() => {
     return () => {
-      if (localPreview?.url) {
+      if (localPreview?.url && !localPreview.skipRevoke) {
         URL.revokeObjectURL(localPreview.url);
       }
     };
   }, [localPreview]);
+
+  useEffect(() => {
+    return () => {
+      releasePreparationState(filePreparationStateRef.current);
+    };
+  }, []); // eslint-disable-line
+
+  useEffect(() => {
+    filePreparationStateRef.current = filePreparationState;
+  }, [filePreparationState]);
 
   const displayFiles = useMemo(() => {
     return documentFiles.length
@@ -169,6 +236,80 @@ export default function UploadPage({
     setSelectedFileIndexes(indices);
   }
 
+  function applyPreparedPageCount(index, pageCount) {
+    if (!pageCount) return;
+    if (index === 0) {
+      setPages(pageCount);
+    }
+    setMultiFileConfigs((prev) => ({
+      ...prev,
+      [index]: {
+        ...(prev[index] || {}),
+        pages: Number(pageCount),
+      },
+    }));
+  }
+
+  async function startFilePreparation(files) {
+    const runId = preparationRunRef.current + 1;
+    preparationRunRef.current = runId;
+
+    setFilePreparationState((prev) => {
+      releasePreparationState(prev);
+      return Object.fromEntries(files.map((file, index) => [
+        index,
+        {
+          status: PREPARATION_STATUS.PREPARING,
+          fileKind: detectUploadFileKind(file),
+          pageCount: null,
+          originalFile: file,
+        },
+      ]));
+    });
+
+    files.forEach(async (file, index) => {
+      try {
+        const prepared = await prepareUploadPreview(file, {
+          paperSize: multiFileConfigs[index]?.paperSize || paperSize,
+          orientation: multiFileConfigs[index]?.orientation || orientation,
+          hubId: selectedCentre?.id || selectedCentre?.code,
+          hubLoad: selectedCentre?.hubLoad || {
+            queuedEstimatedSeconds: 0,
+            queuedOfficeCount: 0,
+            isOnline: selectedCentre?.printerOnline ?? true,
+          },
+        });
+        if (preparationRunRef.current !== runId) {
+          revokePreparationPreview(prepared);
+          return;
+        }
+
+        setFilePreparationState((prev) => ({
+          ...prev,
+          [index]: {
+            ...prepared,
+            originalFile: file,
+          },
+        }));
+        if (prepared.status === PREPARATION_STATUS.READY && prepared.pageCount) {
+          applyPreparedPageCount(index, prepared.pageCount);
+        }
+      } catch (error) {
+        if (preparationRunRef.current !== runId) return;
+        setFilePreparationState((prev) => ({
+          ...prev,
+          [index]: {
+            status: PREPARATION_STATUS.FAILED,
+            fileKind: detectUploadFileKind(file),
+            pageCount: null,
+            originalFile: file,
+            errorMessage: error.message || "Could not prepare preview or page count.",
+          },
+        }));
+      }
+    });
+  }
+
   function handleFileChange(event) {
     setBackendPrice?.(null);
     if (setReprintSourceDocuments) setReprintSourceDocuments([]);
@@ -181,11 +322,16 @@ export default function UploadPage({
       setDocumentName("");
       setSelectedFileIndexes([]);
       setModalFileIndex(null);
+      setFilePreparationState((prev) => {
+        releasePreparationState(prev);
+        return {};
+      });
       return;
     }
     if (files.length === 1) setDocumentName(firstFile.name);
     if (files.length > 1) setDocumentName(`${files.length} uploaded documents`);
-    if (files.length > 1) initConfigs(files);
+    initConfigs(files);
+    startFilePreparation(files);
   }
 
   useEffect(() => {
@@ -202,10 +348,9 @@ export default function UploadPage({
         setDocumentFiles(files);
         setDocumentFile(files[0]);
         if (files.length === 1) setDocumentName(files[0].name);
-        if (files.length > 1) {
-          setDocumentName(`${files.length} uploaded documents`);
-          initConfigs(files);
-        }
+        if (files.length > 1) setDocumentName(`${files.length} uploaded documents`);
+        initConfigs(files);
+        startFilePreparation(files);
       }
     };
     window.addEventListener("paste", handlePaste);
@@ -399,6 +544,14 @@ export default function UploadPage({
   );
 
   const handlePaymentClick = () => {
+    const blockingPreparation = Object.values(filePreparationState).find((item) =>
+      [PREPARATION_STATUS.PREPARING, PREPARATION_STATUS.PENDING_DESKTOP, PREPARATION_STATUS.FAILED].includes(item?.status)
+    );
+    if (blockingPreparation) {
+      window.alert(blockingPreparation.errorMessage || blockingPreparation.message || "Please wait until document pricing is ready.");
+      return;
+    }
+
     if (!isMulti) {
       if (copies === "" || Number(copies) <= 0) {
         window.alert("Please enter a valid number of copies (at least 1).");
@@ -440,11 +593,34 @@ export default function UploadPage({
     ? displayFiles[0].name
     : "";
 
+  const preparationItems = Object.values(filePreparationState);
+  const hasPreparingFiles = preparationItems.some((item) => item?.status === PREPARATION_STATUS.PREPARING);
+  const hasPendingDesktopFiles = preparationItems.some((item) => item?.status === PREPARATION_STATUS.PENDING_DESKTOP);
+  const failedPreparation = preparationItems.find((item) => item?.status === PREPARATION_STATUS.FAILED);
+  const priceReady = selectedFileCount > 0 && !hasPreparingFiles && !hasPendingDesktopFiles && !failedPreparation;
+  const priceSummaryLabel = hasPreparingFiles
+    ? "Calculating price..."
+    : hasPendingDesktopFiles
+      ? "Waiting for desktop preparation"
+      : failedPreparation
+        ? "Price unavailable"
+        : backendPrice
+          ? "Total"
+          : "Est. Total";
+  const priceSummaryHelp = hasPreparingFiles
+    ? "Preparing page count and preview from your selected files."
+    : hasPendingDesktopFiles
+      ? "Office files need hub desktop conversion before exact pricing. Upload as PDF for immediate pricing."
+      : failedPreparation
+        ? failedPreparation.errorMessage || "Remove the failed file or upload it as PDF."
+        : "Price is ready before checkout and will be verified by the backend.";
+
   const multiEstimatedFiles = useMemo(() => {
     if (!isMulti) return [];
     return displayFiles.map((file, index) => {
       const config = multiFileConfigs[index] || {};
-      const filePages = Number(config.pages || 1);
+      const prepared = filePreparationState[index];
+      const filePages = Number(prepared?.pageCount || config.pages || 1);
       const selectedCount = countSelectedPagesPreview(config.selectedPages, filePages) || filePages;
       const fileCopies = Number(config.copies || 1);
       const fileRate = getPricePerPage(selectedCentre, config.colorType || "bw", config.sideType || "single");
@@ -466,9 +642,11 @@ export default function UploadPage({
         sideType: config.sideType || "single",
         rate: fileRate,
         total: fileTotal,
+        preparationStatus: prepared?.status || PREPARATION_STATUS.IDLE,
+        preparationMessage: prepared?.message || prepared?.errorMessage || "",
       };
     });
-  }, [displayFiles, isMulti, multiFileConfigs, selectedCentre]);
+  }, [displayFiles, isMulti, multiFileConfigs, selectedCentre, filePreparationState]);
 
   const localEstimatedTotal = useMemo(() => {
     if (!isMulti) return totalAmount;
@@ -681,7 +859,16 @@ export default function UploadPage({
             <div className="mb-4 flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50/50 p-4 shadow-sm">
               <div className="flex items-center gap-3 min-w-0">
                 <FileText className="text-slate-600 shrink-0" size={20} />
-                <span className="min-w-0 truncate font-semibold text-sm text-slate-700">{displayFiles[0].name}</span>
+                <div className="min-w-0">
+                  <span className="block min-w-0 truncate font-semibold text-sm text-slate-700">{displayFiles[0].name}</span>
+                  {filePreparationState[0]?.status && (
+                    <span className="block truncate text-xs text-slate-500">
+                      {filePreparationState[0].status === PREPARATION_STATUS.READY
+                        ? `${filePreparationState[0].pageCount || pages} page${Number(filePreparationState[0].pageCount || pages) === 1 ? "" : "s"} ready`
+                        : filePreparationState[0].message || filePreparationState[0].errorMessage || "Preparing..."}
+                    </span>
+                  )}
+                </div>
               </div>
               <button
                 type="button"
@@ -723,6 +910,23 @@ export default function UploadPage({
                         <span className="min-w-0 truncate font-medium">{file.name}</span>
                       </div>
                       <div className="shrink-0 flex items-center gap-2 text-slate-500 text-xs">
+                        {filePreparationState[index]?.status && (
+                          <span className={`px-2 py-0.5 rounded ${
+                            filePreparationState[index].status === PREPARATION_STATUS.READY
+                              ? "bg-emerald-100 text-emerald-700"
+                              : filePreparationState[index].status === PREPARATION_STATUS.FAILED
+                                ? "bg-rose-100 text-rose-700"
+                                : "bg-amber-100 text-amber-700"
+                          }`}>
+                            {filePreparationState[index].status === PREPARATION_STATUS.READY
+                              ? `${filePreparationState[index].pageCount || conf.pages || 1}p`
+                              : filePreparationState[index].status === PREPARATION_STATUS.PENDING_DESKTOP
+                                ? "desktop"
+                                : filePreparationState[index].status === PREPARATION_STATUS.FAILED
+                                  ? "failed"
+                                  : "calc"}
+                          </span>
+                        )}
                         <span className="bg-slate-200 px-2 py-0.5 rounded text-slate-700">{conf.colorType === 'bw' ? 'B/W' : 'Color'}</span>
                         <span className="bg-slate-200 px-2 py-0.5 rounded text-slate-700">{conf.copies} copy</span>
                         <button
@@ -779,9 +983,21 @@ export default function UploadPage({
             <h3 className="hidden text-xl font-bold md:block">Price Summary</h3>
             
             <div className="flex w-full items-center justify-between font-bold md:hidden">
-              <span className="text-sm text-slate-500">{backendPrice ? "Total" : "Est. Total"}</span>
-              <span className="flex items-center text-xl text-emerald-600"><IndianRupee size={20} />{backendPrice?.totalAmount ?? localEstimatedTotal}</span>
+              <span className="text-sm text-slate-500">{priceSummaryLabel}</span>
+              <span className="flex items-center text-xl text-emerald-600">
+                {priceReady ? <><IndianRupee size={20} />{backendPrice?.totalAmount ?? localEstimatedTotal}</> : "Pending"}
+              </span>
             </div>
+          </div>
+
+          <div className={`mb-3 rounded-xl border px-3 py-2 text-xs font-semibold md:mt-4 ${
+            priceReady
+              ? "border-emerald-100 bg-emerald-50 text-emerald-800"
+              : failedPreparation
+                ? "border-rose-100 bg-rose-50 text-rose-800"
+                : "border-amber-100 bg-amber-50 text-amber-800"
+          }`}>
+            {priceSummaryHelp}
           </div>
 
           <details className="group mb-2 md:hidden">
@@ -798,7 +1014,7 @@ export default function UploadPage({
                     <Row label="Copies" value={file.copies} />
                     <Row label="Mode" value={`${file.colorType === "bw" ? "B/W" : "Color"} · ${file.sideType}`} />
                     <Row label="Rate" value={`₹${file.rate}`} />
-                    <Row label="Estimate" value={`₹${file.total}`} />
+                    <Row label="Estimate" value={file.preparationStatus === PREPARATION_STATUS.READY ? `₹${file.total}` : "Calculating"} />
                   </div>
                 ))
               ) : (
@@ -834,10 +1050,11 @@ export default function UploadPage({
                        <Row label="Copies" value={file.copies} />
                        <Row label="Mode" value={`${file.colorType === "bw" ? "B/W" : "Color"} · ${file.sideType}`} />
                        <Row label="Rate" value={`₹${file.rate}`} />
+                       <Row label="Status" value={file.preparationStatus === PREPARATION_STATUS.READY ? "Ready" : file.preparationStatus === PREPARATION_STATUS.PENDING_DESKTOP ? "Desktop prep" : file.preparationStatus === PREPARATION_STATUS.FAILED ? "Failed" : "Calculating"} />
                      </div>
                    </div>
                  ))}
-                 <p className="text-xs text-slate-500">Estimate updates here from each file's settings. The backend verifies PDF pages before payment.</p>
+                 <p className="text-xs text-slate-500">Estimate updates here from each file's settings. Continue unlocks only when page counts are known.</p>
                </div>
             ) : (
                <>
@@ -900,8 +1117,8 @@ export default function UploadPage({
               </button>
             )}
 
-            <button onClick={handlePaymentClick} disabled={!selectedFileCount || paymentLoading} className="flex-1 rounded-2xl bg-slate-900 px-2 py-3 text-sm font-semibold text-white disabled:opacity-40 md:mt-3 md:w-full md:px-4 md:text-base">
-              {paymentLoading ? "Calculating..." : (!selectedCentre ? "Select & Continue" : "Continue to Payment")}
+            <button onClick={handlePaymentClick} disabled={!selectedFileCount || paymentLoading || !priceReady} className="flex-1 rounded-2xl bg-slate-900 px-2 py-3 text-sm font-semibold text-white disabled:opacity-40 md:mt-3 md:w-full md:px-4 md:text-base">
+              {paymentLoading ? "Calculating..." : !priceReady ? "Calculating price..." : (!selectedCentre ? "Select & Continue" : "Continue to Payment")}
             </button>
           </div>
         </Card>

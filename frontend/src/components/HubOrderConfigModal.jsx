@@ -106,27 +106,52 @@ export default function HubOrderConfigModal({
     };
   }, [isOpen]);
 
+  // Normalize legacy color values
+  function normalizeColorMode(value) {
+    if (value === "black_white" || value === "black-white" || value === "bw") return "bw";
+    if (value === "color") return "color";
+    return "bw";
+  }
+
+  // Normalize legacy scale values
+  function normalizeScaleMode(value) {
+    if (value === "fit-to-page" || value === "fit_to_page") return "fit_to_page";
+    if (value === "actual-size" || value === "original") return "original";
+    if (value === "shrink-to-fit" || value === "fit_to_page_width") return "fit_to_page_width";
+    return "original";
+  }
+
   // Load and prefill file options
   useEffect(() => {
     if (isOpen && Array.isArray(files)) {
       const initial = files.map(file => {
         const printOptions = file.printOptions || {};
+        const wm = printOptions.watermark || {};
         return {
           id: file.id,
           fileName: file.fileName,
           originalPageCount: file.originalPageCount || file.pageCount || 1,
           copies: file.copies || 1,
-          colorMode: printOptions.colorMode || "black_white",
+          colorMode: normalizeColorMode(printOptions.colorMode),
           sideType: printOptions.sideType || (printOptions.sides?.startsWith('two') ? 'double' : 'single'),
           duplexBinding: printOptions.duplexBinding || (printOptions.sides?.includes('short') ? 'short-edge' : printOptions.sides?.includes('long') ? 'long-edge' : 'auto'),
           orientation: printOptions.orientation || "auto",
           backSideRotation: printOptions.backSideRotation || "auto",
           pageOrder: printOptions.pageOrder || "normal",
-          scaleMode: printOptions.scaleMode || "fit-to-page",
+          scaleMode: normalizeScaleMode(printOptions.scaleMode),
           paperSize: printOptions.paperSize || "A4",
+          pagesPerSheet: Number(printOptions.pagesPerSheet) || 1,
+          printDpi: Number(printOptions.printDpi || printOptions.dpi) || 300,
+          marginMode: printOptions.marginMode || "default",
           pagesMode: printOptions.pages?.mode || "all",
           pagesRange: printOptions.pages?.range || "",
-          watermarkEnabled: Boolean(printOptions.watermark?.enabled)
+          watermarkEnabled: Boolean(wm.enabled),
+          watermarkType: wm.type || "order_code",
+          watermarkPosition: wm.position || "bottom_right",
+          watermarkOpacity: Number(wm.opacity) || 0.18,
+          watermarkFontSize: Number(wm.fontSize) || 18,
+          watermarkRotation: Number(wm.rotation) || 0,
+          watermarkText: wm.text || "",
         };
       });
       setFormFiles(initial);
@@ -152,8 +177,9 @@ export default function HubOrderConfigModal({
       selectedPagesMode: file.pagesMode,
       selectedPagesRange: file.pagesRange,
       copies: file.copies,
-      colorMode: file.colorMode,
+      colorMode: file.colorMode === "bw" ? "black_white" : file.colorMode,
       sides: file.sideType === 'double' ? 'two_sided' : 'one_sided',
+      pagesPerSheet: file.pagesPerSheet || 1,
       watermarkEnabled: file.watermarkEnabled
     });
     return { ...file, calc };
@@ -182,12 +208,21 @@ export default function HubOrderConfigModal({
           pageOrder: f.pageOrder,
           scaleMode: f.scaleMode,
           paperSize: f.paperSize,
+          pagesPerSheet: f.pagesPerSheet,
+          printDpi: f.printDpi,
+          marginMode: f.marginMode,
           pages: {
             mode: f.pagesMode,
             range: f.pagesMode === "custom" ? f.pagesRange : ""
           },
           watermark: {
-            enabled: f.watermarkEnabled
+            enabled: f.watermarkEnabled,
+            type: f.watermarkType,
+            position: f.watermarkPosition,
+            opacity: f.watermarkOpacity,
+            fontSize: f.watermarkFontSize,
+            rotation: f.watermarkRotation,
+            text: f.watermarkType === "custom_text" ? f.watermarkText : "",
           }
         }
       }))
@@ -272,7 +307,7 @@ export default function HubOrderConfigModal({
                     </span>
                   </div>
 
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                     {/* Copies */}
                     <div>
                       <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
@@ -292,14 +327,14 @@ export default function HubOrderConfigModal({
                     {/* Color Mode */}
                     <div>
                       <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                        Color Mode
+                        Color mode
                       </label>
                       <select
                         value={file.colorMode}
                         onChange={(e) => handleUpdateFile(file.id, "colorMode", e.target.value)}
                         className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none transition focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
                       >
-                        <option value="black_white">Black & White</option>
+                        <option value="bw">Black & White</option>
                         <option value="color">Color</option>
                       </select>
                     </div>
@@ -307,15 +342,32 @@ export default function HubOrderConfigModal({
                     {/* Side Type */}
                     <div>
                       <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                        Double/Single Sided
+                        Sides
                       </label>
                       <select
                         value={file.sideType}
                         onChange={(e) => handleUpdateFile(file.id, "sideType", e.target.value)}
                         className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none transition focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
                       >
-                        <option value="single">Single Sided</option>
-                        <option value="double">Double Sided</option>
+                        <option value="single">Single side</option>
+                        <option value="double">Double side</option>
+                      </select>
+                    </div>
+
+                    {/* Paper Size */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                        Paper size
+                      </label>
+                      <select
+                        value={file.paperSize}
+                        onChange={(e) => handleUpdateFile(file.id, "paperSize", e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none transition focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                      >
+                        <option value="A4">A4</option>
+                        <option value="A3">A3</option>
+                        <option value="Letter">Letter</option>
+                        <option value="Legal">Legal</option>
                       </select>
                     </div>
 
@@ -335,92 +387,77 @@ export default function HubOrderConfigModal({
                       </select>
                     </div>
 
-                    {/* Advanced Controls (Only if Double Sided) */}
-                    {file.sideType === 'double' && (
-                      <>
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1 text-amber-600">
-                            <Settings2 className="h-3 w-3"/> Duplex Binding
-                          </label>
-                          <select
-                            value={file.duplexBinding}
-                            onChange={(e) => handleUpdateFile(file.id, "duplexBinding", e.target.value)}
-                            className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none transition focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
-                          >
-                            <option value="auto">Auto (Profile default)</option>
-                            <option value="long-edge">Long Edge (Book)</option>
-                            <option value="short-edge">Short Edge (Calendar)</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1 text-amber-600">
-                            <Settings2 className="h-3 w-3"/> Back-Side Rotation
-                          </label>
-                          <select
-                            value={file.backSideRotation}
-                            onChange={(e) => handleUpdateFile(file.id, "backSideRotation", e.target.value)}
-                            className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none transition focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
-                          >
-                            <option value="auto">Auto</option>
-                            <option value="normal">Normal</option>
-                            <option value="rotate-180">Rotate 180°</option>
-                          </select>
-                        </div>
-                      </>
-                    )}
-
-                    {/* Scale Mode */}
+                    {/* Pages per Sheet */}
                     <div>
-                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1 text-amber-600">
-                        <Settings2 className="h-3 w-3"/> Scale Mode
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                        Pages per sheet
+                      </label>
+                      <select
+                        value={file.pagesPerSheet}
+                        onChange={(e) => handleUpdateFile(file.id, "pagesPerSheet", Number(e.target.value))}
+                        className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none transition focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                      >
+                        <option value={1}>1 page per sheet</option>
+                        <option value={2}>2 pages per sheet</option>
+                        <option value={4}>4 pages per sheet</option>
+                        <option value={6}>6 pages per sheet</option>
+                        <option value={9}>9 pages per sheet</option>
+                        <option value={16}>16 pages per sheet</option>
+                      </select>
+                    </div>
+
+                    {/* Print Quality / DPI */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                        Print quality
+                      </label>
+                      <select
+                        value={file.printDpi}
+                        onChange={(e) => handleUpdateFile(file.id, "printDpi", Number(e.target.value))}
+                        className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none transition focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                      >
+                        <option value={203}>Draft — 203 DPI</option>
+                        <option value={300}>Standard — 300 DPI</option>
+                        <option value={600}>High — 600 DPI</option>
+                      </select>
+                    </div>
+
+                    {/* Scale */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                        Scale
                       </label>
                       <select
                         value={file.scaleMode}
                         onChange={(e) => handleUpdateFile(file.id, "scaleMode", e.target.value)}
                         className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none transition focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
                       >
-                        <option value="fit-to-page">Fit to Page</option>
-                        <option value="actual-size">Actual Size</option>
-                        <option value="shrink-to-fit">Shrink to Fit</option>
+                        <option value="original">Original size</option>
+                        <option value="fit_to_page">Fit to page</option>
+                        <option value="fit_to_page_width">Fit to page width</option>
                       </select>
                     </div>
 
-                    {/* Page Order */}
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1 text-amber-600">
-                        <Settings2 className="h-3 w-3"/> Page Order
-                      </label>
-                      <select
-                        value={file.pageOrder}
-                        onChange={(e) => handleUpdateFile(file.id, "pageOrder", e.target.value)}
-                        className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none transition focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
-                      >
-                        <option value="normal">Normal (1 to N)</option>
-                        <option value="reverse">Reverse (N to 1)</option>
-                      </select>
-                    </div>
-
-                    {/* Paper Size */}
+                    {/* Margins */}
                     <div>
                       <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                        Paper Size
+                        Margins
                       </label>
                       <select
-                        value={file.paperSize}
-                        onChange={(e) => handleUpdateFile(file.id, "paperSize", e.target.value)}
+                        value={file.marginMode}
+                        onChange={(e) => handleUpdateFile(file.id, "marginMode", e.target.value)}
                         className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none transition focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
                       >
-                        <option value="A4">A4</option>
-                        <option value="A3">A3</option>
-                        <option value="Letter">Letter</option>
-                        <option value="Legal">Legal</option>
+                        <option value="default">Default</option>
+                        <option value="minimum">Minimum</option>
+                        <option value="none">None</option>
                       </select>
                     </div>
 
-                    {/* Pages Mode */}
+                    {/* Page Selection */}
                     <div>
                       <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                        Page Selection
+                        Page selection
                       </label>
                       <select
                         value={file.pagesMode}
@@ -436,7 +473,7 @@ export default function HubOrderConfigModal({
                     {file.pagesMode === "custom" && (
                       <div>
                         <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                          Custom Range (e.g. 1-3,5)
+                          Page range (e.g. 1-3,5)
                         </label>
                         <input
                           type="text"
@@ -449,8 +486,57 @@ export default function HubOrderConfigModal({
                       </div>
                     )}
 
-                    {/* Watermark checkbox */}
-                    <div className="flex items-center gap-2 sm:col-span-2 mt-2">
+                    {/* Page Order — hub-only advanced */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1 text-amber-600">
+                        <Settings2 className="h-3 w-3"/> Page order
+                      </label>
+                      <select
+                        value={file.pageOrder}
+                        onChange={(e) => handleUpdateFile(file.id, "pageOrder", e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none transition focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                      >
+                        <option value="normal">Normal (1 to N)</option>
+                        <option value="reverse">Reverse (N to 1)</option>
+                      </select>
+                    </div>
+
+                    {/* Advanced Controls (Only if Double Sided) */}
+                    {file.sideType === 'double' && (
+                      <>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1 text-amber-600">
+                            <Settings2 className="h-3 w-3"/> Duplex binding
+                          </label>
+                          <select
+                            value={file.duplexBinding}
+                            onChange={(e) => handleUpdateFile(file.id, "duplexBinding", e.target.value)}
+                            className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none transition focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                          >
+                            <option value="auto">Auto (Profile default)</option>
+                            <option value="long-edge">Long Edge (Book)</option>
+                            <option value="short-edge">Short Edge (Calendar)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1 text-amber-600">
+                            <Settings2 className="h-3 w-3"/> Back-side rotation
+                          </label>
+                          <select
+                            value={file.backSideRotation}
+                            onChange={(e) => handleUpdateFile(file.id, "backSideRotation", e.target.value)}
+                            className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none transition focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                          >
+                            <option value="auto">Auto</option>
+                            <option value="normal">Normal</option>
+                            <option value="rotate-180">Rotate 180°</option>
+                          </select>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Watermark toggle */}
+                    <div className="flex items-center gap-2 col-span-full mt-1">
                       <input
                         type="checkbox"
                         id={`watermark-${file.id}`}
@@ -462,9 +548,67 @@ export default function HubOrderConfigModal({
                         htmlFor={`watermark-${file.id}`}
                         className="text-sm font-semibold text-slate-700 dark:text-slate-300 cursor-pointer"
                       >
-                        Enable Watermark (Adds watermark surcharge)
+                        Add watermark to printable PDF
                       </label>
                     </div>
+
+                    {/* Expanded watermark options */}
+                    {file.watermarkEnabled && (
+                      <div className="col-span-full grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/40">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Type</label>
+                          <select
+                            value={file.watermarkType}
+                            onChange={(e) => handleUpdateFile(file.id, "watermarkType", e.target.value)}
+                            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                          >
+                            <option value="order_code">Order code</option>
+                            <option value="pickup_code">Pickup code</option>
+                            <option value="date_time">Date/time</option>
+                            <option value="custom_text">Custom text</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Position</label>
+                          <select
+                            value={file.watermarkPosition}
+                            onChange={(e) => handleUpdateFile(file.id, "watermarkPosition", e.target.value)}
+                            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                          >
+                            <option value="bottom_right">Bottom right</option>
+                            <option value="bottom_center">Bottom center</option>
+                            <option value="bottom_left">Bottom left</option>
+                            <option value="center">Center</option>
+                            <option value="top_left">Top left</option>
+                            <option value="top_center">Top center</option>
+                            <option value="top_right">Top right</option>
+                          </select>
+                        </div>
+                        {file.watermarkType === "custom_text" && (
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Custom text</label>
+                            <input
+                              value={file.watermarkText}
+                              onChange={(e) => handleUpdateFile(file.id, "watermarkText", e.target.value)}
+                              placeholder="Watermark text"
+                              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                            />
+                          </div>
+                        )}
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Opacity — {Math.round(file.watermarkOpacity * 100)}%</label>
+                          <input type="range" min="0.05" max="0.6" step="0.01" value={file.watermarkOpacity} onChange={(e) => handleUpdateFile(file.id, "watermarkOpacity", Number(e.target.value))} className="w-full accent-indigo-600" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Rotation — {file.watermarkRotation}°</label>
+                          <input type="range" min="-90" max="90" step="5" value={file.watermarkRotation} onChange={(e) => handleUpdateFile(file.id, "watermarkRotation", Number(e.target.value))} className="w-full accent-indigo-600" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Font size</label>
+                          <input type="number" min="8" max="72" value={file.watermarkFontSize} onChange={(e) => handleUpdateFile(file.id, "watermarkFontSize", e.target.value === "" ? "" : Number(e.target.value))} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100" />
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* File Pricing Summary */}

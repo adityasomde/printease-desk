@@ -1,6 +1,6 @@
 {
   "name": "printease-desk",
-  "version": "0.1.54",
+  "version": "0.1.55",
   "main": "desktop-shell/main.js",
   "private": false,
   "description": "PrintEase Desktop Linux release/update repo. Contains the real frontend source plus Electron desktop shell.",

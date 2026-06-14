@@ -25,7 +25,7 @@ import { initialCentres, initialOrders } from "./data/demoData";
 import { calculateTotalAmount, countSelectedPages, getPricePerPage } from "./utils/price";
 import { countSelectedPagesPreview, estimatePricePreview } from "./utils/printEstimate";
 import { clearStoredAuth, getStoredAuth, isDesktop, onPrintersUpdated, saveStoredAuth } from "./utils/desktopBridge";
-import { apiRequest, invalidateUserHistory, createDocumentSignedDownload, getOrderDetail } from "./services/api";
+import { apiRequest, invalidateUserHistory, createDocumentSignedDownload, getOrderDetail, reprintOrder } from "./services/api";
 import { loadRazorpayCheckout } from "./utils/razorpay";
 import { saveOrderToLocalHistory } from "./utils/localHistory";
 import {
@@ -1714,7 +1714,39 @@ export default function App() {
     // Reset previous reprint state
     setDocumentFile(null);
     setDocumentFiles([]);
-    setMultiFileConfigs({});
+    
+    const initialConfigs = {};
+    docsWithId.forEach((doc, idx) => {
+      if (doc) {
+        const opts = doc.print_options || doc.printOptions;
+        if (opts) {
+          const pagesMode = opts.pages?.mode;
+          const pageRange = opts.pages?.range;
+          const isCustomRange = pagesMode === "custom";
+
+          initialConfigs[idx] = {
+            selectedPages: isCustomRange ? pageRange : "",
+            copies: Number(opts.copies || 1),
+            colorType: opts.colorMode === "color" ? "color" : "bw",
+            sideType: (opts.sides === "two_sided_long_edge" || opts.sides === "double") ? "double" : "single",
+            paperSize: opts.paperSize || "A4",
+            pagesPerSheet: Number(opts.pagesPerSheet || 1),
+            orientation: opts.orientation || "auto",
+            printDpi: Number(opts.quality?.dpi || 300),
+            scaleMode: opts.scale?.mode || "original",
+            marginMode: opts.margins?.mode || "default",
+            watermark: Boolean(opts.watermark?.enabled),
+            watermarkType: opts.watermark?.type || "order_code",
+            watermarkText: opts.watermark?.text || "",
+            watermarkPosition: opts.watermark?.position || "bottom_right",
+            watermarkOpacity: Number(opts.watermark?.opacity || 0.18),
+            watermarkFontSize: Number(opts.watermark?.fontSize || 18),
+            watermarkRotation: Number(opts.watermark?.rotation || 0),
+          };
+        }
+      }
+    });
+    setMultiFileConfigs(initialConfigs);
     setReprintSourceDocuments(docs);
     setReprintDocumentExpired(false);
 

@@ -413,9 +413,10 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
         </div>
       </Card>
 
-      <HubLocationCard currentCentre={currentHub} />
-
-      <HubAfterOrderSettingsCard currentCentre={currentHub} onSettingsUpdate={(settings) => { if (currentHub) currentHub.afterOrderSettings = settings; }} />
+      <div className="grid gap-6 md:grid-cols-2 max-w-4xl">
+        <HubLocationCard currentCentre={currentHub} />
+        <HubAfterOrderSettingsCard currentCentre={currentHub} onSettingsUpdate={(settings) => { if (currentHub) currentHub.afterOrderSettings = settings; }} />
+      </div>
 
       <HubActiveOrdersManager
         currentHub={currentHub}

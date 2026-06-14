@@ -1,35 +1,56 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FilePlus, ToggleLeft, ToggleRight, Save, CheckCircle2, AlertCircle, Sliders, Type, Grid } from "lucide-react";
 import { updateAfterOrderSettings } from "../services/api";
 
-export default function HubAfterOrderSettingsCard({ currentCentre, onSettingsUpdate }) {
-  const settings = currentCentre?.afterOrderSettings || {};
-
-  const [enabled, setEnabled] = useState(settings.enabled ?? false);
-  const [type, setType] = useState(settings.type ?? "blank");
-  const [customText, setCustomText] = useState(settings.customText ?? "");
-  
-  const [watermarkMetadata, setWatermarkMetadata] = useState({
-    printerId: settings.watermarkMetadata?.printerId ?? true,
-    pickupCode: settings.watermarkMetadata?.pickupCode ?? true,
-    clientName: settings.watermarkMetadata?.clientName ?? true,
-    serialNo: settings.watermarkMetadata?.serialNo ?? true,
-  });
-
-  const [layout, setLayout] = useState({
-    fontSize: settings.layout?.fontSize ?? 14,
-    opacity: settings.layout?.opacity ?? 0.8,
-    location: {
-      x: settings.layout?.location?.x ?? 50,
-      y: settings.layout?.location?.y ?? 100,
+function normalizeAfterOrderSettings(settings = {}) {
+  return {
+    enabled: Boolean(settings.enabled),
+    type: ["blank", "custom", "watermark"].includes(settings.type) ? settings.type : "blank",
+    customText: typeof settings.customText === "string" ? settings.customText : "",
+    watermarkMetadata: {
+      printerId: settings.watermarkMetadata?.printerId ?? true,
+      pickupCode: settings.watermarkMetadata?.pickupCode ?? true,
+      clientName: settings.watermarkMetadata?.clientName ?? true,
+      serialNo: settings.watermarkMetadata?.serialNo ?? true,
     },
-    orientation: settings.layout?.orientation ?? 0,
-    shape: settings.layout?.shape ?? "text",
-  });
+    layout: {
+      fontSize: Number(settings.layout?.fontSize) || 14,
+      opacity: Number(settings.layout?.opacity) || 0.8,
+      location: {
+        x: Number(settings.layout?.location?.x) || 50,
+        y: Number(settings.layout?.location?.y) || 100,
+      },
+      orientation: Number(settings.layout?.orientation) || 0,
+      shape: ["text", "box", "circle"].includes(settings.layout?.shape) ? settings.layout.shape : "text",
+    },
+  };
+}
+
+export default function HubAfterOrderSettingsCard({ currentCentre, onSettingsUpdate }) {
+  const settings = useMemo(
+    () => normalizeAfterOrderSettings(currentCentre?.afterOrderSettings),
+    [currentCentre?.id, currentCentre?.afterOrderSettings]
+  );
+
+  const [enabled, setEnabled] = useState(settings.enabled);
+  const [type, setType] = useState(settings.type);
+  const [customText, setCustomText] = useState(settings.customText);
+  
+  const [watermarkMetadata, setWatermarkMetadata] = useState(settings.watermarkMetadata);
+
+  const [layout, setLayout] = useState(settings.layout);
 
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
   const [saveError, setSaveError] = useState("");
+
+  useEffect(() => {
+    setEnabled(settings.enabled);
+    setType(settings.type);
+    setCustomText(settings.customText);
+    setWatermarkMetadata(settings.watermarkMetadata);
+    setLayout(settings.layout);
+  }, [settings]);
 
   const handleMetadataChange = (key) => {
     setWatermarkMetadata((prev) => ({

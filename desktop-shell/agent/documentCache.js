@@ -8,6 +8,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 const CACHE_MAX_AGE_DAYS = 15;
+const CACHE_MAX_SIZE_BYTES = 5 * 1024 * 1024 * 1024;
 let cacheDirectory = path.join(os.tmpdir(), "printease-document-cache");
 
 function safeCacheKey(value) {
@@ -55,6 +56,10 @@ export function getDocumentCacheDirectory() {
 
 export function getDocumentCacheMaxAgeDays() {
   return CACHE_MAX_AGE_DAYS;
+}
+
+export function getDocumentCacheMaxSizeBytes() {
+  return CACHE_MAX_SIZE_BYTES;
 }
 
 export async function findCachedDocument(documentId, expectedHash = "") {
@@ -147,6 +152,7 @@ export async function cacheReadableDocument({ documentId, fileName, expectedHash
     }
 
     fs.renameSync(tempPath, filePath);
+    await cleanupDocumentCache();
     return {
       success: true,
       filePath,
@@ -161,17 +167,21 @@ export async function cacheReadableDocument({ documentId, fileName, expectedHash
   }
 }
 
-export async function cleanupDocumentCache({ maxAgeDays = CACHE_MAX_AGE_DAYS } = {}) {
+export async function cleanupDocumentCache({ maxAgeDays = CACHE_MAX_AGE_DAYS, maxSizeBytes = CACHE_MAX_SIZE_BYTES } = {}) {
   const root = ensureCacheDirectory();
   const maxAgeMs = Math.max(1, Number(maxAgeDays) || CACHE_MAX_AGE_DAYS) * 24 * 60 * 60 * 1000;
+  const sizeLimit = Math.max(10 * 1024 * 1024, Number(maxSizeBytes) || CACHE_MAX_SIZE_BYTES);
   const cutoff = Date.now() - maxAgeMs;
   let removed = 0;
+  let removedBytes = 0;
+  let totalBytes = 0;
+  const retainedFiles = [];
 
   let entries = [];
   try {
     entries = await readdir(root);
   } catch {
-    return { success: true, removed };
+    return { success: true, removed, removedBytes, totalBytes };
   }
 
   for (const entry of entries) {
@@ -183,12 +193,38 @@ export async function cleanupDocumentCache({ maxAgeDays = CACHE_MAX_AGE_DAYS } =
       if (details.isFile() && details.mtimeMs < cutoff) {
         await rm(entryPath, { force: true });
         removed += 1;
+        removedBytes += details.size;
+        continue;
+      }
+
+      if (details.isFile()) {
+        totalBytes += details.size;
+        retainedFiles.push({
+          path: entryPath,
+          size: details.size,
+          mtimeMs: details.mtimeMs,
+        });
       }
     } catch {
       // Cleanup is best effort.
     }
   }
 
-  return { success: true, removed };
-}
+  if (totalBytes > sizeLimit) {
+    retainedFiles.sort((left, right) => left.mtimeMs - right.mtimeMs);
 
+    for (const file of retainedFiles) {
+      if (totalBytes <= sizeLimit) break;
+      try {
+        await rm(file.path, { force: true });
+        totalBytes -= file.size;
+        removed += 1;
+        removedBytes += file.size;
+      } catch {
+        // Cleanup is best effort.
+      }
+    }
+  }
+
+  return { success: true, removed, removedBytes, totalBytes, maxSizeBytes: sizeLimit };
+}

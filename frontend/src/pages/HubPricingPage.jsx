@@ -33,7 +33,7 @@ function SaveStatus({ status }) {
   return null;
 }
 
-export default function HubPricingPage({ currentHub, updateCentrePrice, updateCentrePayment }) {
+export default function HubPricingPage({ currentHub, updateCentrePrice, updateCentrePayment, onAfterOrderSettingsUpdate }) {
   const [pricingStatus, setPricingStatus] = useState("");
   const [paymentStatus, setPaymentStatus] = useState("");
 
@@ -106,7 +106,7 @@ export default function HubPricingPage({ currentHub, updateCentrePrice, updateCe
         </Card>
       </div>
 
-      <HubAfterOrderSettingsCard currentCentre={currentHub} onSettingsUpdate={(settings) => { if (currentHub) currentHub.afterOrderSettings = settings; }} />
+      <HubAfterOrderSettingsCard currentCentre={currentHub} onSettingsUpdate={onAfterOrderSettingsUpdate} />
     </div>
   );
 }

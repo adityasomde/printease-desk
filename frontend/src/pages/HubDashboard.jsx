@@ -110,7 +110,7 @@ function formatDateTime(value) {
   });
 }
 
-export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus, refreshOrders, onOrderSaved, navigate }) {
+export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus, refreshOrders, onOrderSaved, onAfterOrderSettingsUpdate, navigate }) {
   const [agents, setAgents] = useState([]);
   const [agentPrinters, setAgentPrinters] = useState([]);
   const [printJobs, setPrintJobs] = useState([]);
@@ -415,7 +415,7 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
 
       <div className="grid gap-6 md:grid-cols-2 max-w-4xl">
         <HubLocationCard currentCentre={currentHub} />
-        <HubAfterOrderSettingsCard currentCentre={currentHub} onSettingsUpdate={(settings) => { if (currentHub) currentHub.afterOrderSettings = settings; }} />
+        <HubAfterOrderSettingsCard currentCentre={currentHub} onSettingsUpdate={onAfterOrderSettingsUpdate} />
       </div>
 
       <HubActiveOrdersManager

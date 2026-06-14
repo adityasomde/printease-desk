@@ -24,6 +24,7 @@ import {
   findCachedDocument,
   getDocumentCacheDirectory,
   getDocumentCacheMaxAgeDays,
+  getDocumentCacheMaxSizeBytes,
   setDocumentCacheDirectory,
 } from "./agent/documentCache.js";
 import { predownloadPendingDocuments, processNextJob } from "./agent/jobPoller.js";
@@ -50,7 +51,7 @@ protocol.registerSchemesAsPrivileged([
 
 const DEV_FRONTEND_URL = process.env.PRINTEASE_FRONTEND_URL || "http://127.0.0.1:5175";
 const USE_DEV_FRONTEND = process.env.PRINTEASE_USE_DEV_FRONTEND === "1";
-const VERSION = "0.1.44";
+const VERSION = "0.1.45";
 const HEARTBEAT_INTERVAL_MS = 25000;
 const PRINTER_SYNC_INTERVAL_MS = 30000;
 const JOB_POLL_INTERVAL_MS = 5000;
@@ -1419,6 +1420,7 @@ function registerIpcHandlers() {
       documentCache: {
         directory: getDocumentCacheDirectory(),
         maxAgeDays: getDocumentCacheMaxAgeDays(),
+        maxSizeBytes: getDocumentCacheMaxSizeBytes(),
       },
       printerResult,
     };

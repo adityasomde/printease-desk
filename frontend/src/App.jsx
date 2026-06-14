@@ -200,6 +200,13 @@ function normalizeCentre(centre) {
     colorSingle: pricing.colorSingle ?? centre.colorSingle ?? 2,
     colorDouble: pricing.colorDouble ?? centre.colorDouble ?? 3,
     watermarkCharge: pricing.watermarkCharge ?? centre.watermarkCharge ?? 2,
+    pricing: {
+      bwSingle: pricing.bwSingle ?? centre.bwSingle ?? 1,
+      bwDouble: pricing.bwDouble ?? centre.bwDouble ?? 1.5,
+      colorSingle: pricing.colorSingle ?? centre.colorSingle ?? 2,
+      colorDouble: pricing.colorDouble ?? centre.colorDouble ?? 3,
+      watermarkCharge: pricing.watermarkCharge ?? centre.watermarkCharge ?? 2,
+    },
     printerOnline: centre.printerOnline ?? centre.isOnline ?? false,
     // Location fields (safe to be undefined/null when not provided)
     locationEnabled: centre.locationEnabled ?? false,
@@ -209,6 +216,7 @@ function normalizeCentre(centre) {
     area: centre.area ?? null,
     city: centre.city ?? null,
     mapUpdatedAt: centre.mapUpdatedAt ?? null,
+    afterOrderSettings: centre.afterOrderSettings ?? centre.after_order_settings ?? {},
   };
 }
 
@@ -722,8 +730,8 @@ export default function App() {
       const leftUsage = (usageByCentre.get(String(left.id)) || 0) + (usageByCentre.get(String(left.code)) || 0);
       if (rightUsage !== leftUsage) return rightUsage - leftUsage;
 
-      const rightAvailable = String(right.status || "").toLowerCase() === "available" ? 1 : 0;
-      const leftAvailable = String(left.status || "").toLowerCase() === "available" ? 1 : 0;
+      const rightAvailable = right.printerOnline || String(right.status || "").toLowerCase() === "available" ? 1 : 0;
+      const leftAvailable = left.printerOnline || String(left.status || "").toLowerCase() === "available" ? 1 : 0;
       if (rightAvailable !== leftAvailable) return rightAvailable - leftAvailable;
 
       return String(left.name || "").localeCompare(String(right.name || ""));
@@ -2109,6 +2117,17 @@ export default function App() {
     setCentres((prev) => upsertCentre(prev, centre));
   }
 
+  function updateCentreAfterOrderSettings(settings) {
+    if (!currentHub) return;
+    setCentres((prev) =>
+      prev.map((centre) =>
+        centre.id === currentHub.id || centre.code === currentHub.code
+          ? { ...centre, afterOrderSettings: settings || {} }
+          : centre
+      )
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <Navbar
@@ -2220,6 +2239,7 @@ export default function App() {
                   updateOrderStatus={updateOrderStatus}
                   refreshOrders={() => loadOrdersForSession(currentUser, centres)}
                   onOrderSaved={applySavedOrderUpdate}
+                  onAfterOrderSettingsUpdate={updateCentreAfterOrderSettings}
                   navigate={navigate}
                   openProfile={openProfile}
                 />
@@ -2251,7 +2271,7 @@ export default function App() {
             path={ROUTES.hubPricing}
             element={
               currentUser?.role === "hub" ? (
-                <HubPricingPage currentHub={currentHub} updateCentrePrice={updateCentrePrice} updateCentrePayment={updateCentrePayment} />
+                <HubPricingPage currentHub={currentHub} updateCentrePrice={updateCentrePrice} updateCentrePayment={updateCentrePayment} onAfterOrderSettingsUpdate={updateCentreAfterOrderSettings} />
               ) : (
                 <RouteNotice title="Print Hub Login Required" message="Please login as a print hub to manage pricing and payment details." actionLabel="Login as Print Hub" onAction={() => startLogin("hub")} />
               )

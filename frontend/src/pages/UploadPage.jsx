@@ -262,6 +262,14 @@ export default function UploadPage({
       else if (key === "watermarkOpacity") setWatermarkOpacity(value);
       else if (key === "watermarkFontSize") setWatermarkFontSize(value);
       else if (key === "watermarkRotation") setWatermarkRotation(value);
+
+      setMultiFileConfigs((prev) => {
+        if (!prev?.[0]) return prev;
+        return {
+          ...prev,
+          0: { ...prev[0], [key]: value },
+        };
+      });
     } else {
       setMultiFileConfigs((prev) => {
         const next = { ...prev };

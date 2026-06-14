@@ -11,6 +11,7 @@ export function normalizeJobFiles(job) {
       fileUrl: file.fileUrl,
       fileHash: file.fileSha256 || file.fileHash,
       fileName: getSafeFileName(file),
+      fileType: file.fileType || "application/pdf",
       copies: file.copies || 1,
       printOptions: file.printOptions || {},
       printSequence: file.printSequence || 0
@@ -23,6 +24,7 @@ export function normalizeJobFiles(job) {
       fileUrl: job.fileUrl,
       fileHash: job.fileHash || job.fileSha256,
       fileName: 'document.pdf',
+      fileType: job.fileType || "application/pdf",
       copies: job.copies || 1,
       printOptions: job.printOptions || {},
       printSequence: 0

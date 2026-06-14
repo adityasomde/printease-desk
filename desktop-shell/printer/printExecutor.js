@@ -1,4 +1,16 @@
+import path from "node:path";
+
 let paused = false;
+
+function isPdfPrintable({ filePath, fileType, fileName } = {}) {
+  const normalizedType = String(fileType || "").toLowerCase();
+  if (normalizedType && normalizedType !== "application/pdf") {
+    return false;
+  }
+
+  const ext = path.extname(String(fileName || filePath || "")).toLowerCase();
+  return !ext || ext === ".pdf";
+}
 
 function unsupportedPlatform() {
   return {
@@ -46,7 +58,14 @@ export async function testPrint(printerName) {
   return printerModule.testPrint(printerName);
 }
 
-export async function printFile({ printerName, filePath, copies = 1, options = {} } = {}) {
+export async function printFile({
+  printerName,
+  filePath,
+  copies = 1,
+  options = {},
+  fileType,
+  fileName,
+} = {}) {
   if (paused) {
     return {
       success: false,
@@ -54,10 +73,34 @@ export async function printFile({ printerName, filePath, copies = 1, options = {
     };
   }
 
+  const resolvedFileType = fileType || options?.fileType || options?.printOptions?.fileType;
+  const resolvedFileName = fileName || options?.fileName || options?.printOptions?.fileName;
+
+  if (!isPdfPrintable({
+    filePath,
+    fileType: resolvedFileType,
+    fileName: resolvedFileName,
+  })) {
+    return {
+      success: false,
+      reasonCode: "UNSUPPORTED_LOCAL_PRINT_FILE_TYPE",
+      message: `Automatic printing is not supported for ${resolvedFileType || path.extname(resolvedFileName || filePath || "") || "this file type"}.`,
+    };
+  }
+
   const printerModule = await getPrinterModule();
   if (!printerModule?.printFile) return unsupportedPlatform();
 
-  const result = await printerModule.printFile({ printerName, filePath, copies, options });
+  const result = await printerModule.printFile({
+    printerName,
+    filePath,
+    copies,
+    options: {
+      ...options,
+      fileType: resolvedFileType || "application/pdf",
+      fileName: resolvedFileName,
+    },
+  });
   if (result && typeof result.success === 'boolean') {
     return result;
   }

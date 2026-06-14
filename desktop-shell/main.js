@@ -55,6 +55,7 @@ const VERSION = "0.1.45";
 const HEARTBEAT_INTERVAL_MS = 25000;
 const PRINTER_SYNC_INTERVAL_MS = 30000;
 const JOB_POLL_INTERVAL_MS = 5000;
+const PREDOWNLOAD_INTERVAL_MS = 90000;
 const DESKTOP_PROTOCOL_ORIGIN = "app://printease";
 const DESKTOP_AUTH_FILE = "desktop-auth.json";
 const DESKTOP_AGENT_FILE = "desktop-agent.json";
@@ -70,7 +71,9 @@ let latestPrinterResult = null;
 let heartbeatTimer = null;
 let printerSyncTimer = null;
 let jobPollTimer = null;
+let predownloadTimer = null;
 let isPollingJobs = false;
+let isPredownloading = false;
 let agentSession = {
   deviceId: "",
   deviceName: "",
@@ -1160,7 +1163,13 @@ function stopAgentRuntime(reason = "stopped") {
     jobPollTimer = null;
   }
 
+  if (predownloadTimer) {
+    clearInterval(predownloadTimer);
+    predownloadTimer = null;
+  }
+
   isPollingJobs = false;
+  isPredownloading = false;
   console.log("[DESKTOP AGENT BACKGROUND] stopped", reason);
   emitAgentSession();
   return {
@@ -1169,6 +1178,50 @@ function stopAgentRuntime(reason = "stopped") {
     reason,
     session: sanitizeAgentSession(),
   };
+}
+
+async function runPredownloadNow(reason = "manual") {
+  const pairingError = requirePairedAgent();
+  if (pairingError) return pairingError;
+
+  if (isPredownloading) {
+    return {
+      success: true,
+      skipped: true,
+      message: "Predownload already running.",
+      session: sanitizeAgentSession(),
+    };
+  }
+
+  isPredownloading = true;
+
+  try {
+    const result = await predownloadPendingDocuments({
+      agentToken: agentSession.accessToken,
+    });
+
+    if (result?.cached) {
+      console.log("[DESKTOP AGENT BACKGROUND] predownload cached pending documents", {
+        reason,
+        cached: result.cached,
+        checked: result.checked,
+        failures: Array.isArray(result.failures) ? result.failures.length : 0,
+      });
+    }
+
+    return {
+      ...result,
+      session: sanitizeAgentSession(),
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: error.message || "Could not predownload pending documents.",
+      session: sanitizeAgentSession(),
+    };
+  } finally {
+    isPredownloading = false;
+  }
 }
 
 async function pollJobsNow(reason = "manual", payload = {}) {
@@ -1190,22 +1243,6 @@ async function pollJobsNow(reason = "manual", payload = {}) {
   try {
     if (!payload.printerName && !resolveLocalPrinterName()) {
       await syncLatestPrinterStatus(`${reason}:resolve-printer`).catch(() => null);
-    }
-
-    const predownloadResult = await predownloadPendingDocuments({
-      agentToken: agentSession.accessToken,
-    }).catch((error) => ({
-      success: false,
-      message: error.message || "Could not predownload pending documents.",
-    }));
-
-    if (predownloadResult?.cached) {
-      console.log("[DESKTOP AGENT BACKGROUND] predownload cached pending documents", {
-        reason,
-        cached: predownloadResult.cached,
-        checked: predownloadResult.checked,
-        failures: Array.isArray(predownloadResult.failures) ? predownloadResult.failures.length : 0,
-      });
     }
 
     const printerName = payload.printerName || resolveLocalPrinterName();
@@ -1292,6 +1329,39 @@ async function pollJobsNow(reason = "manual", payload = {}) {
   }
 }
 
+function startPredownloadLoop(reason = "manual-start", payload = {}) {
+  const pairingError = requirePairedAgent();
+  if (pairingError) return pairingError;
+
+  if (predownloadTimer) {
+    return {
+      success: true,
+      message: "Predownload loop is already running.",
+      session: sanitizeAgentSession(),
+    };
+  }
+
+  const intervalMs = Math.max(60000, Number(payload.predownloadIntervalMs) || PREDOWNLOAD_INTERVAL_MS);
+  predownloadTimer = setInterval(() => {
+    runPredownloadNow("predownload-loop").catch((error) => {
+      console.warn("[DESKTOP AGENT BACKGROUND] predownload fail", error.message || error);
+    });
+  }, intervalMs);
+  predownloadTimer.unref?.();
+
+  runPredownloadNow(reason).catch((error) => {
+    console.warn("[DESKTOP AGENT BACKGROUND] initial predownload fail", error.message || error);
+  });
+
+  console.log("[DESKTOP AGENT BACKGROUND] predownload loop started", { reason, intervalMs });
+  return {
+    success: true,
+    message: "Predownload loop started.",
+    intervalMs,
+    session: sanitizeAgentSession(),
+  };
+}
+
 function startJobPollLoop(reason = "manual-start", payload = {}) {
   const pairingError = requirePairedAgent();
   if (pairingError) return pairingError;
@@ -1344,14 +1414,16 @@ async function startAgentRuntime(reason) {
   const loop = startHeartbeatLoop();
   const printerLoop = startPrinterSyncLoop();
   const jobLoop = startJobPollLoop(reason + ":job-poll");
+  const predownloadLoop = startPredownloadLoop(reason + ":predownload");
 
   return {
-    success: Boolean(heartbeat.success && loop.success && printerLoop.success && jobLoop.success),
+    success: Boolean(heartbeat.success && loop.success && printerLoop.success && jobLoop.success && predownloadLoop.success),
     heartbeat,
     printerResult,
     loop,
     printerLoop,
     jobLoop,
+    predownloadLoop,
     session: sanitizeAgentSession(),
   };
 }

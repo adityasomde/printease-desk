@@ -101,6 +101,24 @@ export async function findCachedDocument(documentId, expectedHash = "") {
   return null;
 }
 
+export async function removeCachedDocument(documentId, expectedHash = "") {
+  const cachedPath = await findCachedDocument(documentId, expectedHash);
+  if (!cachedPath) {
+    return { success: true, removed: false };
+  }
+
+  try {
+    await rm(cachedPath, { force: true });
+    return { success: true, removed: true, filePath: cachedPath };
+  } catch (error) {
+    return {
+      success: false,
+      removed: false,
+      message: error.message || "Could not remove cached document.",
+    };
+  }
+}
+
 export async function cacheReadableDocument({ documentId, fileName, expectedHash, responseBody } = {}) {
   const key = safeCacheKey(documentId || expectedHash || fileName);
   if (!key) {

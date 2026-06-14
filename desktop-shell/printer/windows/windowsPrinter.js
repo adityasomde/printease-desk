@@ -294,7 +294,7 @@ export async function printPdfFile({ filePath, printerName, options = {} } = {})
         code: "SUMATRA_MISSING",
         error: WINDOWS_HELPER_MISSING_MESSAGE,
         message: WINDOWS_HELPER_MISSING_MESSAGE,
-        reasonCode: "WINDOWS_PDF_ENGINE_NOT_FOUND",
+        reasonCode: "WINDOWS_PDF_PRINT_ENGINE_MISSING",
         diagnostics: helperDiagnostics,
         helpCommands: helpCommands(),
       };

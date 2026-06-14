@@ -1,6 +1,6 @@
 import { rm } from "node:fs/promises";
 import { backendRequest } from "./heartbeat.js";
-import { cacheReadableDocument, findCachedDocument } from "./documentCache.js";
+import { cacheReadableDocument, findCachedDocument, removeCachedDocument } from "./documentCache.js";
 import { printFile, stopPrinting } from "../printer/printExecutor.js";
 import { 
   normalizeJobFiles, 
@@ -111,6 +111,14 @@ async function getRemoteJobStatus({ agentToken, jobId } = {}) {
   } catch {
     return null;
   }
+}
+
+function isJobAuthorizedForPrint(job) {
+  return Boolean(
+    job?.paymentVerified === true ||
+    job?.approvedForPrint === true ||
+    job?.printable === true
+  );
 }
 
 function buildOrderScopedPrintOptions({ job, file, isLastFile }) {
@@ -274,6 +282,18 @@ export async function processNextJob({ agentToken, printerName } = {}) {
   if (!nextJob.success || !nextJob.job) return nextJob;
 
   const job = nextJob.job;
+
+  if (!isJobAuthorizedForPrint(job)) {
+    const error = new Error("Print job is not authorized for printing.");
+    error.reasonCode = "PRINT_NOT_AUTHORIZED";
+    return {
+      success: false,
+      message: error.message,
+      reasonCode: error.reasonCode,
+      job,
+    };
+  }
+
   const selectedPrinterName = printerName || job.printerName;
   const jobFiles = normalizeJobFiles(job);
   const downloads = [];
@@ -306,6 +326,8 @@ export async function processNextJob({ agentToken, printerName } = {}) {
         printerName: selectedPrinterName,
         filePath: download.filePath,
         copies: download.file.copies || job.copies || 1,
+        fileType: download.file.fileType || "application/pdf",
+        fileName: download.file.fileName || null,
         options: buildOrderScopedPrintOptions({
           job,
           file: download.file,
@@ -317,6 +339,13 @@ export async function processNextJob({ agentToken, printerName } = {}) {
         const error = new Error(printResult.message || printResult.error || "Local print command failed.");
         error.reasonCode = printResult.reasonCode || printResult.errorCode || "LOCAL_PRINT_FAILED";
         throw error;
+      }
+
+      if (download.file.documentId) {
+        await removeCachedDocument(
+          download.file.documentId,
+          getExpectedFileHash(download.file)
+        ).catch(() => {});
       }
 
       printedFiles.push({
@@ -363,13 +392,40 @@ export async function processNextJob({ agentToken, printerName } = {}) {
 
 export function createJobPoller(options = {}) {
   let timer = null;
+  let isProcessing = false;
+
+  async function runPollCycle(overrides = {}) {
+    if (isProcessing) {
+      return {
+        success: true,
+        skipped: true,
+        message: "Job poll already running.",
+      };
+    }
+
+    isProcessing = true;
+    try {
+      const pollOptions = { ...options, ...overrides };
+
+      if (pollOptions.runPredownload !== false && pollOptions.agentToken) {
+        await predownloadPendingDocuments({
+          agentToken: pollOptions.agentToken,
+          limit: pollOptions.predownloadLimit,
+        }).catch(() => null);
+      }
+
+      return await processNextJob(pollOptions);
+    } finally {
+      isProcessing = false;
+    }
+  }
 
   return {
     get isRunning() {
       return Boolean(timer);
     },
     async pollOnce(overrides = {}) {
-      return processNextJob({ ...options, ...overrides });
+      return runPollCycle(overrides);
     },
     start(overrides = {}) {
       if (timer) {
@@ -382,7 +438,7 @@ export function createJobPoller(options = {}) {
       const pollOptions = { ...options, ...overrides };
       const intervalMs = Math.max(3000, Number(pollOptions.intervalMs) || 5000);
       timer = setInterval(() => {
-        processNextJob(pollOptions).catch(() => {});
+        runPollCycle(pollOptions).catch(() => {});
       }, intervalMs);
 
       return {

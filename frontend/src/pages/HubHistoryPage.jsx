@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { BarChart3, Download, Eye, FileText, IndianRupee, Printer, ShieldCheck, X, Search, Filter, ArrowUpDown } from "lucide-react";
 import Card from "../components/Card";
+import InlineDocumentPreview from "../components/InlineDocumentPreview";
 import Metric from "../components/Metric";
 import StatusBadge from "../components/StatusBadge";
 import { downloadDocumentBlob, getDesktopCachedDocumentUrl, getOrderDocuments } from "../services/api";
@@ -167,6 +168,8 @@ export default function HubHistoryPage({ currentHub, hubOrders }) {
           setDocumentPreview({
             url: cachedUrl,
             name: document.fileName || "Document preview",
+            fileType: document.fileType || "",
+            documentId,
           });
           return;
         }
@@ -176,9 +179,15 @@ export default function HubHistoryPage({ currentHub, hubOrders }) {
       const localUrl = URL.createObjectURL(blob);
 
       if (mode === "view") {
+        const fileType = blob.type || document.fileType || "";
+        const name = document.fileName || "Document preview";
+        const isText = String(fileType).startsWith("text/") || /\.(txt|csv|json)$/i.test(name);
         setDocumentPreview({
           url: localUrl,
-          name: document.fileName || "Document preview",
+          name,
+          fileType,
+          documentId,
+          textContent: isText ? await blob.text() : "",
         });
         return;
       }
@@ -410,25 +419,25 @@ export default function HubHistoryPage({ currentHub, hubOrders }) {
       )}
 
       {documentPreview && (
-        <div className="fixed inset-0 z-[60] bg-slate-950/95 flex flex-col p-4 sm:p-6 backdrop-blur-sm">
-          <div className="flex items-center justify-between mb-4 flex-shrink-0">
-            <h3 className="text-white font-semibold truncate pr-4">{documentPreview.name}</h3>
-            <div className="flex items-center gap-3">
+        <div className="fixed inset-0 z-[60] flex items-end justify-center overflow-y-auto bg-slate-950/70 p-2 backdrop-blur-sm sm:items-center sm:p-4">
+          <div className="max-h-[96dvh] w-full max-w-5xl overflow-y-auto rounded-3xl bg-white p-3 shadow-2xl sm:max-h-[92vh] sm:p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h3 className="truncate pr-4 font-semibold text-slate-900">{documentPreview.name}</h3>
               <button
                 type="button"
                 onClick={() => setDocumentPreview(null)}
-                className="rounded-full bg-white/10 p-2 text-white hover:bg-white/20 transition"
+                className="rounded-full border p-2 text-slate-700 hover:bg-slate-50 transition"
                 aria-label="Close preview"
               >
                 <X size={20} />
               </button>
             </div>
-          </div>
-          <div className="flex-1 bg-white rounded-xl overflow-hidden">
-            <iframe 
-              src={documentPreview.url} 
-              className="w-full h-full border-0" 
-              title="Document Preview"
+            <InlineDocumentPreview
+              url={documentPreview.url}
+              fileName={documentPreview.name}
+              fileType={documentPreview.fileType}
+              textContent={documentPreview.textContent}
+              onDownload={() => openSignedDocument({ documentId: documentPreview.documentId, fileName: documentPreview.name }, "download")}
             />
           </div>
         </div>

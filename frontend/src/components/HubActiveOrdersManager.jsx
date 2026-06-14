@@ -15,7 +15,7 @@ import {
   XCircle,
 } from "lucide-react";
 import HubOrderConfigModal from "./HubOrderConfigModal";
-import InlineDocumentFrame from "./InlineDocumentFrame";
+import InlineDocumentPreview from "./InlineDocumentPreview";
 import StatusBadge from "./StatusBadge";
 import { hubStatusOptions } from "../data/demoData";
 import {
@@ -400,7 +400,12 @@ export default function HubActiveOrdersManager({
       if (mode === "view") {
         const cachedUrl = await getDesktopCachedDocumentUrl(documentId);
         if (cachedUrl) {
-          setDocumentPreview({ url: cachedUrl, name: document.fileName || "Document preview" });
+          setDocumentPreview({
+            url: cachedUrl,
+            name: document.fileName || "Document preview",
+            fileType: document.fileType || "",
+            documentId,
+          });
           return;
         }
       }
@@ -408,7 +413,14 @@ export default function HubActiveOrdersManager({
       const blob = await downloadDocumentBlob(documentId);
       const localUrl = URL.createObjectURL(blob);
       if (mode === "view") {
-        setDocumentPreview({ url: localUrl, name: document.fileName || "Document preview" });
+        let textContent = "";
+        const fileType = blob.type || document.fileType || "";
+        const name = document.fileName || "Document preview";
+        const isText = String(fileType).startsWith("text/") || /\.(txt|csv|json)$/i.test(name);
+        if (isText) {
+          textContent = await blob.text();
+        }
+        setDocumentPreview({ url: localUrl, name, fileType, textContent, documentId });
         return;
       }
       const link = window.document.createElement("a");
@@ -818,8 +830,8 @@ export default function HubActiveOrdersManager({
       )}
 
       {documentModalOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
-          <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto overscroll-contain rounded-3xl bg-white p-6 shadow-2xl" style={{ WebkitOverflowScrolling: "touch" }}>
+        <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-slate-950/50 p-2 sm:items-center sm:p-4">
+          <div className="max-h-[96dvh] w-full max-w-4xl overflow-y-auto overscroll-contain rounded-3xl bg-white p-4 shadow-2xl sm:max-h-[92vh] sm:p-6" style={{ WebkitOverflowScrolling: "touch" }}>
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h3 className="text-xl font-bold">Order Documents</h3>
@@ -868,7 +880,13 @@ export default function HubActiveOrdersManager({
                     <p className="truncate text-sm font-semibold text-slate-900">{documentPreview.name}</p>
                     <button type="button" onClick={() => setDocumentPreview(null)} className="rounded-xl border bg-white px-3 py-2 text-xs font-semibold">Close preview</button>
                   </div>
-                  <InlineDocumentFrame title={documentPreview.name} url={documentPreview.url} className="h-[70vh] w-full" />
+                  <InlineDocumentPreview
+                    url={documentPreview.url}
+                    fileName={documentPreview.name}
+                    fileType={documentPreview.fileType}
+                    textContent={documentPreview.textContent}
+                    onDownload={() => openSignedDocument({ documentId: documentPreview.documentId, fileName: documentPreview.name }, "download")}
+                  />
                 </div>
               )}
             </div>

@@ -64,7 +64,7 @@ export default function DocumentPreviewModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[100] flex items-end justify-center overflow-y-auto p-2 sm:items-center sm:p-4">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity duration-300"
@@ -72,10 +72,10 @@ export default function DocumentPreviewModal({
       />
 
       {/* Modal Container */}
-      <div className="relative z-10 flex h-full max-h-[85vh] w-full max-w-4xl flex-col rounded-3xl border border-slate-200/80 bg-white shadow-2xl transition-all duration-300 dark:border-slate-800/80 dark:bg-slate-900">
+      <div className="relative z-10 flex max-h-[96dvh] w-full max-w-4xl flex-col rounded-3xl border border-slate-200/80 bg-white shadow-2xl transition-all duration-300 dark:border-slate-800/80 dark:bg-slate-900 sm:max-h-[90vh]">
         
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 dark:border-slate-800">
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-slate-800 sm:px-6 sm:py-4">
           <div className="flex items-center gap-3 overflow-hidden">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800">
               {loading ? (
@@ -104,7 +104,7 @@ export default function DocumentPreviewModal({
         </div>
 
         {/* Content Body */}
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-6 bg-slate-50/50 dark:bg-slate-950/20" style={{ WebkitOverflowScrolling: "touch" }}>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-slate-50/50 p-3 dark:bg-slate-950/20 sm:p-6" style={{ WebkitOverflowScrolling: "touch" }}>
           {loading ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 py-12">
               <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />
@@ -134,9 +134,9 @@ export default function DocumentPreviewModal({
               </button>
             </div>
           ) : (
-            <div className="flex h-full min-h-[40vh] items-center justify-center">
+            <div className="flex min-h-[45vh] items-center justify-center">
               {previewKind === "pdf" && blobUrl && (
-                <InlineDocumentFrame url={blobUrl} title="PDF Document Preview" className="h-full min-h-[55vh] w-full shadow-inner dark:border-slate-800" />
+                <InlineDocumentFrame url={blobUrl} title="PDF Document Preview" className="h-[62vh] min-h-[420px] w-full shadow-inner dark:border-slate-800" />
               )}
 
               {previewKind === "image" && blobUrl && (
@@ -182,7 +182,7 @@ export default function DocumentPreviewModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 border-t border-slate-100 px-6 py-4 dark:border-slate-800">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 border-t border-slate-100 px-4 py-3 dark:border-slate-800 sm:px-6 sm:py-4">
           <button
             onClick={onClose}
             className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"

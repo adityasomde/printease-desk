@@ -34,6 +34,7 @@ import {
   readSupabaseSessionFromUrl,
 } from "./utils/supabaseAuth";
 import { handleDesktopAutoRegistration } from "./utils/desktopAutoRegistration";
+import { prepareBrowserPrintReadyFile } from "./utils/filePreparation/prepareBrowserPrintReadyFile";
 
 const ROUTES = {
   home: "/",
@@ -1328,7 +1329,7 @@ export default function App() {
     navigate("upload");
   }
 
-  async function preparePayment() {
+  async function preparePayment(preparedFilesByIndex = {}) {
     if (!selectedCentre) {
       setPaymentError("Please select a printing centre first.");
       navigate("centre");
@@ -1342,7 +1343,7 @@ export default function App() {
       return;
     }
     if (!filesToUpload.length && !reprintSourceDocuments.length) {
-      setPaymentError("Please upload a PDF document first.");
+      setPaymentError("Please upload a supported document first.");
       navigate("upload");
       return;
     }
@@ -1354,9 +1355,61 @@ export default function App() {
     try {
       const uploadedDocuments = [];
       if (filesToUpload.length) {
-        for (const file of filesToUpload) {
+        for (let index = 0; index < filesToUpload.length; index += 1) {
+          const file = filesToUpload[index];
+          const preparedState = preparedFilesByIndex?.[index];
+          if (preparedState?.status && preparedState.status !== "ready") {
+            throw new Error(preparedState.errorMessage || preparedState.message || "Document is not ready for payment yet.");
+          }
+
+          let printReadyFile = null;
+          let fileMeta = null;
+          if (preparedState) {
+            printReadyFile = preparedState.printReadyFile || null;
+            fileMeta = {
+              conversionSource: preparedState.conversionSource || (printReadyFile ? "browser" : "none"),
+              conversionPlacement: preparedState.conversionPlacement || (printReadyFile ? "browser" : "none"),
+              decision: preparedState.decision || { reasonCode: "PREPARED_BEFORE_PAYMENT", kind: preparedState.fileKind },
+              fileKind: preparedState.fileKind,
+            };
+          } else {
+            try {
+            const prepResult = await prepareBrowserPrintReadyFile(file, {
+              hubId: selectedCentre?.id || selectedCentre?.code,
+              hubLoad: selectedCentre?.hubLoad || {
+                queuedEstimatedSeconds: 0,
+                queuedOfficeCount: 0,
+                isOnline: selectedCentre?.printerOnline ?? true
+              },
+              userPreference: 'auto'
+            });
+            if (prepResult?.printReadyFile) {
+               printReadyFile = prepResult.printReadyFile;
+            }
+            fileMeta = prepResult;
+            } catch (e) {
+             if (import.meta.env.DEV) {
+               console.debug("Browser preparation skipped; uploading original file.", e);
+             }
+            }
+          }
+
           const formData = new FormData();
           formData.append("document", file);
+          
+          if (printReadyFile) {
+             formData.append("printReadyFile", printReadyFile);
+          }
+          if (fileMeta) {
+             formData.append("conversionSource", fileMeta.conversionSource || 'none');
+             formData.append("conversionPlacement", fileMeta.conversionPlacement || 'none');
+             formData.append("conversionReasonCode", fileMeta.decision?.reasonCode || 'unknown');
+             formData.append("fileKind", fileMeta.fileKind || fileMeta.decision?.kind || 'unknown');
+             formData.append("requiresDesktopPreparation", "false");
+             if (printReadyFile) {
+               formData.append("printReadyFileType", "application/pdf");
+             }
+          }
 
           const uploadData = await apiRequest("/api/uploads", {
             method: "POST",

@@ -1,29 +1,27 @@
 /**
  * User/browser-side print-ready preparation.
  *
- * This file only does light browser work. It never converts Office documents.
- * Heavy conversion stays on the hub desktop agent.
+ * Temporary simple mode:
+ * Do all possible preparation in the browser and bypass hybrid distribution.
+ * Office conversion is not attempted unless a browser converter is added later.
  */
 
-import { decideConversionPlacement, CONVERSION_PLACEMENT } from './conversionPlacementPolicy.js';
 import { canBrowserTryImageToPdf, detectUploadFileKind } from './detectUploadFileKind.js';
 import { convertImageToPdfInBrowser } from './imageToPdfBrowser.js';
 
+const CONVERSION_PLACEMENT = Object.freeze({
+  NONE: 'none',
+  BROWSER: 'browser',
+  MANUAL: 'manual',
+});
+
 export async function prepareBrowserPrintReadyFile(file, context = {}) {
   const kind = detectUploadFileKind(file);
-  const decision = decideConversionPlacement({
-    fileInfo: {
-      name: file.name,
-      type: file.type,
-      size: file.size,
-      kind,
-      width: context.width,
-      height: context.height,
-      pageCount: context.pageCount,
-    },
-    hubLoad: context.hubLoad || {},
-    userPreference: context.userPreference || 'auto',
-  });
+  const decision = {
+    placement: kind === 'pdf' ? CONVERSION_PLACEMENT.NONE : CONVERSION_PLACEMENT.BROWSER,
+    reasonCode: 'BROWSER_PREPARATION_FORCED',
+    kind,
+  };
 
   if (kind === 'pdf') {
     return {
@@ -36,7 +34,7 @@ export async function prepareBrowserPrintReadyFile(file, context = {}) {
     };
   }
 
-  if (decision.placement === CONVERSION_PLACEMENT.BROWSER && canBrowserTryImageToPdf(file)) {
+  if (canBrowserTryImageToPdf(file)) {
     const printReadyFile = await convertImageToPdfInBrowser(file, context.imagePdfOptions || {});
     return {
       originalFile: file,
@@ -48,13 +46,32 @@ export async function prepareBrowserPrintReadyFile(file, context = {}) {
     };
   }
 
+  if (kind === 'office') {
+    return {
+      originalFile: file,
+      printReadyFile: null,
+      conversionPlacement: CONVERSION_PLACEMENT.MANUAL,
+      conversionSource: 'none',
+      fileKind: kind,
+      decision: {
+        placement: CONVERSION_PLACEMENT.MANUAL,
+        reasonCode: 'BROWSER_OFFICE_CONVERSION_UNAVAILABLE',
+        kind,
+      },
+    };
+  }
+
   return {
     originalFile: file,
     printReadyFile: null,
-    conversionPlacement: decision.placement,
-    conversionSource: decision.placement === CONVERSION_PLACEMENT.DESKTOP ? 'desktop-required' : 'manual-or-unsupported',
+    conversionPlacement: CONVERSION_PLACEMENT.MANUAL,
+    conversionSource: 'none',
     fileKind: kind,
-    decision,
+    decision: {
+      placement: CONVERSION_PLACEMENT.MANUAL,
+      reasonCode: 'BROWSER_PREPARATION_UNAVAILABLE',
+      kind,
+    },
   };
 }
 

@@ -1,6 +1,7 @@
 import { PDFDocument } from 'pdf-lib';
 import { prepareBrowserPrintReadyFile } from './prepareBrowserPrintReadyFile';
 import { detectUploadFileKind } from './detectUploadFileKind';
+import { convertTextToPdfInBrowser } from './textToPdfBrowser';
 
 export const PREPARATION_STATUS = Object.freeze({
   IDLE: 'idle',
@@ -14,10 +15,6 @@ async function countPdfPages(file) {
   const bytes = await file.arrayBuffer();
   const pdf = await PDFDocument.load(bytes, { ignoreEncryption: true });
   return pdf.getPageCount();
-}
-
-async function readTextPreview(file) {
-  return file.text();
 }
 
 export async function prepareUploadPreview(file, context = {}) {
@@ -38,44 +35,63 @@ export async function prepareUploadPreview(file, context = {}) {
 
   if (kind === 'image') {
     const prepared = await prepareBrowserPrintReadyFile(file, context);
+    if (!prepared.printReadyFile) {
+      return {
+        status: PREPARATION_STATUS.FAILED,
+        fileKind: kind,
+        pageCount: null,
+        previewPdfUrl: '',
+        previewKind: 'unsupported',
+        printReadyFile: null,
+        conversionPlacement: 'manual',
+        conversionSource: 'none',
+        reasonCode: prepared.decision?.reasonCode || 'BROWSER_IMAGE_PREPARATION_FAILED',
+        errorMessage: 'Could not prepare this image in browser. Please upload as PDF.',
+      };
+    }
     const previewFile = prepared.printReadyFile || file;
     return {
       status: PREPARATION_STATUS.READY,
       fileKind: kind,
       pageCount: 1,
-      previewPdfUrl: prepared.printReadyFile ? URL.createObjectURL(previewFile) : URL.createObjectURL(file),
-      previewKind: prepared.printReadyFile ? 'pdf' : 'image',
-      printReadyFile: prepared.printReadyFile || null,
-      conversionPlacement: prepared.conversionPlacement,
-      conversionSource: prepared.conversionSource,
+      previewPdfUrl: URL.createObjectURL(previewFile),
+      previewKind: 'pdf',
+      printReadyFile: prepared.printReadyFile,
+      conversionPlacement: 'browser',
+      conversionSource: 'browser',
       decision: prepared.decision,
-      message: prepared.printReadyFile ? 'Image wrapped as print-ready PDF.' : 'Image page count ready.',
+      message: 'Image wrapped as print-ready PDF.',
     };
   }
 
   if (kind === 'text') {
+    const printReadyFile = await convertTextToPdfInBrowser(file, context.textPdfOptions || {});
+    const pageCount = await countPdfPages(printReadyFile);
     return {
       status: PREPARATION_STATUS.READY,
       fileKind: kind,
-      pageCount: 1,
-      previewPdfUrl: URL.createObjectURL(file),
-      previewKind: 'text',
-      textContent: await readTextPreview(file),
-      printReadyFile: null,
-      message: 'Text preview ready. Backend will verify before payment.',
+      pageCount,
+      previewPdfUrl: URL.createObjectURL(printReadyFile),
+      previewKind: 'pdf',
+      printReadyFile,
+      conversionPlacement: 'browser',
+      conversionSource: 'browser',
+      message: 'Text converted to print-ready PDF.',
     };
   }
 
   if (kind === 'office') {
     return {
-      status: PREPARATION_STATUS.PENDING_DESKTOP,
+      status: PREPARATION_STATUS.FAILED,
       fileKind: kind,
       pageCount: null,
       previewPdfUrl: '',
       previewKind: 'unsupported',
       printReadyFile: null,
-      reasonCode: 'DESKTOP_PREPARATION_REQUIRED',
-      message: 'Office documents need hub desktop preparation before exact pricing. Upload as PDF for immediate price.',
+      conversionPlacement: 'manual',
+      conversionSource: 'none',
+      reasonCode: 'BROWSER_OFFICE_CONVERSION_UNAVAILABLE',
+      errorMessage: 'Could not prepare this Office document in browser. Please export as PDF and upload again.',
     };
   }
 

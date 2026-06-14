@@ -4,7 +4,7 @@ import Card from "../components/Card";
 import DocumentPreviewModal from "../components/DocumentPreviewModal";
 import Row from "../components/Row";
 import { calculateTotalAmount, getPricePerPage, countSelectedPages } from "../utils/price";
-import { countSelectedPagesPreview, estimatePrintablePages, estimateGuestLimitExceeded, estimateSheets, estimatePricePreview } from "../utils/printEstimate";
+import { countSelectedPagesPreview, estimatePrintablePages, estimateGuestLimitExceeded, estimateSheets, estimatePricePreview, estimatePrintBreakdown } from "../utils/printEstimate";
 import { ALLOWED_UPLOAD_ACCEPT, isAllowedUploadFile } from "../constants/upload";
 import { detectUploadFileKind } from "../utils/filePreparation/detectUploadFileKind";
 import {
@@ -581,7 +581,7 @@ export default function UploadPage({
       navigate("centre", { state: { autoStartScanner: true, fromUpload: true } });
       return;
     }
-    preparePayment();
+    preparePayment(filePreparationState);
   };
 
   const selectedFileCount = documentFiles.length || (documentFile ? 1 : 0) || (reprintSourceDocuments ? reprintSourceDocuments.length : 0);
@@ -624,10 +624,18 @@ export default function UploadPage({
       const selectedCount = countSelectedPagesPreview(config.selectedPages, filePages) || filePages;
       const fileCopies = Number(config.copies || 1);
       const fileRate = getPricePerPage(selectedCentre, config.colorType || "bw", config.sideType || "single");
+      const breakdown = estimatePrintBreakdown({
+        pages: selectedCount,
+        copies: fileCopies,
+        sideType: config.sideType || "single",
+        pagesPerSheet: config.pagesPerSheet || 1,
+      });
       const fileTotal = estimatePricePreview({
         pages: selectedCount,
         copies: fileCopies,
         pricePerPage: fileRate,
+        sideType: config.sideType || "single",
+        pagesPerSheet: config.pagesPerSheet || 1,
         watermark: Boolean(config.watermark),
         watermarkCharge: selectedCentre?.watermarkCharge,
       });
@@ -642,6 +650,8 @@ export default function UploadPage({
         sideType: config.sideType || "single",
         rate: fileRate,
         total: fileTotal,
+        sheetSides: breakdown.sheetSides,
+        physicalSheets: breakdown.physicalSheets,
         preparationStatus: prepared?.status || PREPARATION_STATUS.IDLE,
         preparationMessage: prepared?.message || prepared?.errorMessage || "",
       };
@@ -649,9 +659,31 @@ export default function UploadPage({
   }, [displayFiles, isMulti, multiFileConfigs, selectedCentre, filePreparationState]);
 
   const localEstimatedTotal = useMemo(() => {
-    if (!isMulti) return totalAmount;
+    if (!isMulti) {
+      return estimatePricePreview({
+        pages: estimatedSelectedPageCount,
+        copies,
+        pricePerPage,
+        sideType,
+        pagesPerSheet,
+        watermark,
+        watermarkCharge: selectedCentre?.watermarkCharge,
+      });
+    }
     return multiEstimatedFiles.reduce((sum, file) => sum + file.total, 0);
-  }, [multiEstimatedFiles, totalAmount, isMulti]);
+  }, [multiEstimatedFiles, isMulti, estimatedSelectedPageCount, copies, pricePerPage, sideType, pagesPerSheet, watermark, selectedCentre?.watermarkCharge]);
+
+  const singleBreakdown = useMemo(() => estimatePrintBreakdown({
+    pages: estimatedSelectedPageCount,
+    copies,
+    sideType,
+    pagesPerSheet,
+  }), [estimatedSelectedPageCount, copies, sideType, pagesPerSheet]);
+
+  const guestEstimatedSelectedPages = useMemo(() => {
+    if (!isMulti) return Number(estimatedSelectedPageCount || 0);
+    return multiEstimatedFiles.reduce((sum, file) => sum + Number(file.selectedCount || 0), 0);
+  }, [isMulti, estimatedSelectedPageCount, multiEstimatedFiles]);
 
   const toggleSelectAll = () => {
     if (selectedFileIndexes.length === displayFiles.length) {
@@ -1011,6 +1043,7 @@ export default function UploadPage({
                   <div key={file.name} className="rounded-xl border border-slate-100 bg-slate-50 p-2">
                     <p className="mb-1 truncate font-semibold text-slate-900">{file.name}</p>
                     <Row label="Pages" value={`${file.selectedCount}/${file.pages}`} />
+                    <Row label="Physical sheets" value={file.physicalSheets} />
                     <Row label="Copies" value={file.copies} />
                     <Row label="Mode" value={`${file.colorType === "bw" ? "B/W" : "Color"} · ${file.sideType}`} />
                     <Row label="Rate" value={`₹${file.rate}`} />
@@ -1023,7 +1056,8 @@ export default function UploadPage({
                   <Row label="Selected Pages" value={backendPrice?.selectedPageCount || selectedPages || "All"} />
                   <Row label="Copies" value={copies} />
                   <Row label="Printable Pages" value={backendPrice?.printablePageCount || estimatePrintablePages(estimatedSelectedPageCount, copies)} />
-                  <Row label="Sheets" value={backendPrice?.sheetCount || estimateSheets(estimatedSelectedPageCount, copies, sideType, pagesPerSheet)} />
+                  <Row label="Physical Sheets" value={backendPrice?.physicalSheetCount || singleBreakdown.physicalSheets} />
+                  <Row label="Sheet sides" value={backendPrice?.sheetCount || singleBreakdown.sheetSides} />
                   <Row label="Print Type" value={colorType === "bw" ? "B/W" : "Color"} />
                   <Row label="Side" value={sideType} />
                   <Row label="Pages/Sheet" value={pagesPerSheet} />
@@ -1047,6 +1081,7 @@ export default function UploadPage({
                      </div>
                      <div className="grid gap-x-4 gap-y-1 text-xs sm:grid-cols-2">
                        <Row label="Pages" value={`${file.selectedCount}/${file.pages}`} />
+                       <Row label="Physical sheets" value={file.physicalSheets} />
                        <Row label="Copies" value={file.copies} />
                        <Row label="Mode" value={`${file.colorType === "bw" ? "B/W" : "Color"} · ${file.sideType}`} />
                        <Row label="Rate" value={`₹${file.rate}`} />
@@ -1062,7 +1097,8 @@ export default function UploadPage({
                  <Row label="Selected Pages" value={backendPrice?.selectedPageCount || selectedPages || "All"} />
                  <Row label="Copies" value={copies} />
                  <Row label="Printable Pages" value={backendPrice?.printablePageCount || estimatePrintablePages(estimatedSelectedPageCount, copies)} />
-                 <Row label="Sheets" value={backendPrice?.sheetCount || estimateSheets(estimatedSelectedPageCount, copies, sideType, pagesPerSheet)} />
+                 <Row label="Physical Sheets" value={backendPrice?.physicalSheetCount || singleBreakdown.physicalSheets} />
+                 <Row label="Sheet sides" value={backendPrice?.sheetCount || singleBreakdown.sheetSides} />
                  <Row label="Print Type" value={colorType === "bw" ? "B/W" : "Color"} />
                  <Row label="Side" value={sideType} />
                  <Row label="Orientation" value={orientation} />
@@ -1086,13 +1122,13 @@ export default function UploadPage({
 
           {!currentUser && (
             <div className={`mb-4 rounded-xl border p-4 text-sm ${
-              estimateGuestLimitExceeded(isMulti ? localEstimatedTotal / (pricePerPage || 1) : estimatePrintablePages(estimatedSelectedPageCount, copies), currentUser)
+              estimateGuestLimitExceeded(guestEstimatedSelectedPages, currentUser)
                 ? "border-rose-200 bg-rose-50 text-rose-800"
                 : "border-amber-200 bg-amber-50 text-amber-800"
             }`}>
-              {estimateGuestLimitExceeded(isMulti ? localEstimatedTotal / (pricePerPage || 1) : estimatePrintablePages(estimatedSelectedPageCount, copies), currentUser) ? (
+              {estimateGuestLimitExceeded(guestEstimatedSelectedPages, currentUser) ? (
                 <>
-                  <p className="font-semibold">⚠️ Guest limit exceeded ({isMulti ? Math.ceil(localEstimatedTotal / (pricePerPage || 1)) : estimatePrintablePages(estimatedSelectedPageCount, copies)} printable pages).</p>
+                  <p className="font-semibold">Guest limit exceeded ({guestEstimatedSelectedPages} selected pages).</p>
                   <p className="mt-1">Please login to print more than 5 pages.</p>
                 </>
               ) : (
@@ -1102,7 +1138,7 @@ export default function UploadPage({
                 </>
               )}
               <button onClick={() => startLogin("user")} className={`mt-3 rounded-xl px-4 py-2 font-semibold text-white ${
-                estimateGuestLimitExceeded(isMulti ? localEstimatedTotal / (pricePerPage || 1) : estimatePrintablePages(estimatedSelectedPageCount, copies), currentUser)
+                estimateGuestLimitExceeded(guestEstimatedSelectedPages, currentUser)
                   ? "bg-rose-900 hover:bg-rose-800"
                   : "bg-amber-900 hover:bg-amber-800"
               }`}>Login instead</button>

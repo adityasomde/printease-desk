@@ -16,7 +16,7 @@ try {
 
   const bridge = {
     isDesktop: true,
-    bridgeVersion: "0.1.43-cjs",
+    bridgeVersion: "0.1.44-cjs",
     agent: agentBridge,
     printer: printerBridge,
     getDesktopStatus: () => ipcRenderer.invoke("desktop:status"),

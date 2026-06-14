@@ -73,7 +73,7 @@ export default function HubPrinterTestWizard({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-6" style={{ WebkitOverflowScrolling: "touch" }}>
           {errorMsg && (
             <div className="mb-4 rounded-xl bg-rose-50 p-4 text-sm font-medium text-rose-600">
               {errorMsg}

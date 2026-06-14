@@ -104,7 +104,7 @@ export default function DocumentPreviewModal({
         </div>
 
         {/* Content Body */}
-        <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50 dark:bg-slate-950/20">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-6 bg-slate-50/50 dark:bg-slate-950/20" style={{ WebkitOverflowScrolling: "touch" }}>
           {loading ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 py-12">
               <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />

@@ -242,7 +242,7 @@ export default function HubOrderConfigModal({
         </div>
 
         {/* Content Body */}
-        <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50 dark:bg-slate-950/20">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-6 bg-slate-50/50 dark:bg-slate-950/20" style={{ WebkitOverflowScrolling: "touch" }}>
           {errorMsg && (
             <div className="mb-4 flex items-center gap-3 rounded-2xl bg-rose-50 p-4 text-sm font-medium text-rose-600 dark:bg-rose-950/20 dark:text-rose-400">
               <ShieldAlert className="h-5 w-5 shrink-0" />

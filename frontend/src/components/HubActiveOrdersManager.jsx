@@ -819,7 +819,7 @@ export default function HubActiveOrdersManager({
 
       {documentModalOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
-          <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+          <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto overscroll-contain rounded-3xl bg-white p-6 shadow-2xl" style={{ WebkitOverflowScrolling: "touch" }}>
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h3 className="text-xl font-bold">Order Documents</h3>

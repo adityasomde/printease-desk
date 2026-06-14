@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import path from 'path';
+import { toPrintReadyPdfName } from './printPreparation/fileNameUtils.js';
 
 export function normalizeJobFiles(job) {
   if (!job) return [];
@@ -48,12 +49,12 @@ export function getExpectedFileHash(file) {
 export function getSafeFileName(file) {
   const original = file.fileName || 'document.pdf';
   const fileType = file.fileType || 'application/pdf';
-  let ext = path.extname(original).toLowerCase() || '.pdf';
   
   if (fileType === 'application/pdf') {
-    ext = '.pdf';
+    return toPrintReadyPdfName(original);
   }
 
-  const base = path.basename(original, path.extname(original)).replace(/[^a-zA-Z0-9-_]/g, '-').slice(0, 50);
+  let ext = path.extname(original).toLowerCase() || '.pdf';
+  const base = path.basename(original, path.extname(original)).replace(/[<>:"/\\|?*\x00-\x1F]/g, "_").slice(0, 80);
   return `${base || 'document'}${ext}`;
 }

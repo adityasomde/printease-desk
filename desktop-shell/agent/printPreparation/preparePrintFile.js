@@ -20,6 +20,7 @@ import { findPrintReadyPdf, savePrintReadyPdf } from './printReadyCache.js';
 import { convertImageToPdf } from './imageToPdf.js';
 import { convertOfficeToPdf } from './officeToPdf.js';
 import { convertTextToPdf } from './textToPdf.js';
+import { toPrintReadyPdfName } from './fileNameUtils.js';
 
 async function makeTempConversionDir() {
   return fs.mkdtemp(path.join(os.tmpdir(), 'printease-convert-'));
@@ -79,6 +80,7 @@ export async function preparePrintFile({
     return {
       success: true,
       filePath: cached.filePath,
+      fileName: toPrintReadyPdfName(fileName),
       fileType: 'application/pdf',
       kind,
       conversionSource: cached.metadata?.conversionSource || 'cache',
@@ -121,6 +123,7 @@ export async function preparePrintFile({
     return {
       success: true,
       filePath: saved.filePath,
+      fileName: toPrintReadyPdfName(fileName),
       fileType: 'application/pdf',
       kind,
       conversionSource: conversionResult.conversionSource,

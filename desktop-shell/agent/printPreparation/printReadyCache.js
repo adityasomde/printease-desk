@@ -8,6 +8,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { toPrintReadyPdfName } from './fileNameUtils.js';
 
 const CACHE_VERSION = 'print-ready-v1';
 
@@ -42,9 +43,9 @@ export function buildPrintReadyCacheKey({ sha256, fileName = '', kind = '', conv
 export async function getPrintReadyPaths({ baseDir, sha256, fileName, kind, conversionProfile } = {}) {
   const cacheDir = getPrintReadyCacheDir(baseDir);
   const key = buildPrintReadyCacheKey({ sha256, fileName, kind, conversionProfile });
-  const safeName = safePart(fileName || 'document');
-  const pdfPath = path.join(cacheDir, `${key}-${safeName}.pdf`);
-  const metaPath = path.join(cacheDir, `${key}-${safeName}.json`);
+  const cleanPdfName = toPrintReadyPdfName(fileName || 'document');
+  const pdfPath = path.join(cacheDir, `${key}-${cleanPdfName}`);
+  const metaPath = path.join(cacheDir, `${key}-${cleanPdfName}.json`);
   return { cacheDir, key, pdfPath, metaPath };
 }
 

@@ -2,6 +2,7 @@ import { rm, readFile } from "node:fs/promises";
 import path from "node:path";
 import { PDFDocument } from "pdf-lib";
 import { backendRequest } from "./heartbeat.js";
+import { toPrintReadyPdfName } from "./printPreparation/fileNameUtils.js";
 import { cacheReadableDocument, findCachedDocument, removeCachedDocument, getDocumentCacheDirectory } from "./documentCache.js";
 import { printFile, stopPrinting } from "../printer/printExecutor.js";
 import { preparePrintFile } from "./printPreparation/preparePrintFile.js";
@@ -381,6 +382,7 @@ export async function processNextJob({ agentToken, printerName } = {}) {
       downloads.push({ 
         ...download, 
         filePath: prepResult.filePath,
+        fileName: prepResult.fileName || toPrintReadyPdfName(file.fileName),
         fileType: prepResult.fileType,
         file 
       });
@@ -398,7 +400,7 @@ export async function processNextJob({ agentToken, printerName } = {}) {
         filePath: download.filePath,
         copies: download.file.copies || job.copies || 1,
         fileType: download.fileType || download.file.fileType || "application/pdf",
-        fileName: path.basename(download.filePath) || download.file.fileName || null,
+        fileName: download.fileName || toPrintReadyPdfName(download.file.fileName),
         options: buildOrderScopedPrintOptions({
           job,
           file: download.file,

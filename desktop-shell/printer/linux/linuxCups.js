@@ -3,7 +3,7 @@ import { mkdtemp, rm, unlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import { preparePdfForPrinting } from "../pdfPrintPreparation.js";
+import { preparePdfForPrinting, resolveDuplexForPlatform } from "../pdfPrintPreparation.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -324,11 +324,18 @@ export async function printFile({ printerName, filePath, copies = 1, options = {
   const profile = profiles.find(p => p.osPlatform === 'linux') || options.printerProfile || {};
   const printOptions = options.printOptions || options || {};
 
-  // Pre-process PDF if required (rotation / page order)
+  // Pre-process PDF if required (rotation / page order / N-up imposition)
   let activeFilePath = filePath;
   let cleanupPdf = () => {};
+  let finalSheetOrientation = 'portrait';
+  let pagesPerSheetApplied = false;
+
   try {
-    const prep = await preparePdfForPrinting(filePath, printOptions, profile);
+    const prep = await preparePdfForPrinting({
+      inputPdfPath: filePath,
+      printOptions,
+      printerProfile: profile
+    });
     if (prep.tempFilePath) {
       activeFilePath = prep.tempFilePath;
       cleanupPdf = prep.cleanup;
@@ -336,6 +343,8 @@ export async function printFile({ printerName, filePath, copies = 1, options = {
     if (prep.copiesHandledInPdf) {
       safeCopies = 1;
     }
+    finalSheetOrientation = prep.finalSheetOrientation || 'portrait';
+    pagesPerSheetApplied = prep.pagesPerSheetApplied || false;
   } catch (prepError) {
     console.error("[CUPS] PDF Prep failed:", prepError);
     // Continue with original file if preparation fails
@@ -349,8 +358,10 @@ export async function printFile({ printerName, filePath, copies = 1, options = {
       String(safeCopies),
     ];
 
+    // Only pass page range to lp if page range was NOT already sliced in preparePdfForPrinting
+    const pageRangeWasSliced = Boolean(activeFilePath !== filePath);
     const pages = options.pages?.range || options.selectedPages || printOptions?.pages?.range;
-    if (pages && String(pages).toLowerCase() !== "all") {
+    if (pages && String(pages).toLowerCase() !== "all" && !pageRangeWasSliced) {
       args.push("-P", String(pages));
     }
 
@@ -361,30 +372,21 @@ export async function printFile({ printerName, filePath, copies = 1, options = {
       args.push("-o", "ColorModel=Gray");
     }
 
+    // Resolve duplex binding
     const sideType = printOptions?.sideType || options.sides || printOptions?.sides;
-    let duplexBinding = printOptions?.duplexBinding || 'auto';
-    let orientation = options.orientation || printOptions?.orientation || 'auto';
+    const duplexBinding = printOptions?.duplexBinding || 'auto';
+    const targetDuplex = resolveDuplexForPlatform({
+      sides: sideType,
+      finalSheetOrientation,
+      duplexBinding
+    });
 
-    if (orientation === 'auto') {
-      orientation = profile.defaultOrientation || 'portrait';
-    }
-
-    if (sideType === 'single' || sideType === 'one_sided') {
+    if (targetDuplex === 'one-sided') {
       args.push("-o", "sides=one-sided");
-    } else if (sideType === 'double' || sideType === 'two_sided') {
-      if (duplexBinding === 'auto') {
-        if (orientation === 'landscape') {
-          duplexBinding = profile.landscapeDuplexBinding || profile.defaultDuplexBinding || 'short-edge';
-        } else {
-          duplexBinding = profile.defaultDuplexBinding || 'long-edge';
-        }
-      }
-      
-      if (duplexBinding === "long-edge" || sideType === "two_sided_long_edge") {
-        args.push("-o", "sides=two-sided-long-edge");
-      } else if (duplexBinding === "short-edge" || sideType === "two_sided_short_edge") {
-        args.push("-o", "sides=two-sided-short-edge");
-      }
+    } else if (targetDuplex === 'long-edge') {
+      args.push("-o", "sides=two-sided-long-edge");
+    } else if (targetDuplex === 'short-edge') {
+      args.push("-o", "sides=two-sided-short-edge");
     }
 
     const paperSize = options.paperSize || printOptions?.paperSize;
@@ -392,10 +394,24 @@ export async function printFile({ printerName, filePath, copies = 1, options = {
       args.push("-o", `media=${paperSize}`);
     }
 
-    if (orientation === "landscape") {
+    // Handle orientation
+    let finalOrientation = options.orientation || printOptions?.orientation || 'auto';
+    if (finalOrientation === 'auto') {
+      finalOrientation = finalSheetOrientation;
+    }
+
+    if (finalOrientation === "landscape") {
       args.push("-o", "landscape");
-    } else if (orientation === "portrait") {
+    } else if (finalOrientation === "portrait") {
       args.push("-o", "portrait");
+    }
+
+    // Pass number-up setting
+    const pagesPerSheet = Number(printOptions?.pagesPerSheet || options.pagesPerSheet || 1);
+    if (!pagesPerSheetApplied && pagesPerSheet > 1) {
+      args.push("-o", `number-up=${pagesPerSheet}`, "-o", "number-up-layout=lrtb");
+    } else {
+      args.push("-o", "number-up=1");
     }
 
     const scaleMode = printOptions?.scaleMode || profile.scaleMode || 'fit-to-page';

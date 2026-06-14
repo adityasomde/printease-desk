@@ -2,49 +2,236 @@ import { PDFDocument, degrees, StandardFonts, rgb } from 'pdf-lib';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { imposePdf } from './pdfImposition.js';
+
+/**
+ * Parses a page range string or array of pages into a 1-indexed sorted page list.
+ */
+function parseRange(rangeStr, totalPages) {
+  const raw = String(rangeStr || '').trim();
+  if (!raw || raw.toLowerCase() === 'all') {
+    return Array.from({ length: totalPages }, (_, i) => i + 1);
+  }
+  const selected = new Set();
+  for (const part of raw.split(',')) {
+    const token = part.trim();
+    if (!token) continue;
+    if (/^\d+$/.test(token)) {
+      const page = Number(token);
+      if (page >= 1 && page <= totalPages) selected.add(page);
+    } else {
+      const match = token.match(/^(\d+)\s*-\s*(\d+)$/);
+      if (match) {
+        const start = Number(match[1]);
+        const end = Number(match[2]);
+        if (start <= end && start >= 1 && end <= totalPages) {
+          for (let p = start; p <= end; p++) {
+            selected.add(p);
+          }
+        }
+      }
+    }
+  }
+  const result = Array.from(selected).sort((a, b) => a - b);
+  return result.length > 0 ? result : Array.from({ length: totalPages }, (_, i) => i + 1);
+}
+
+function getWatermarkText(orderInfo, watermark) {
+  if (watermark.type === 'custom_text' && watermark.text) return watermark.text;
+  if (watermark.type === 'pickup_code' && orderInfo?.pickupCode) return `Pickup ${orderInfo.pickupCode}`;
+  if (watermark.type === 'date_time') return new Date().toLocaleString('en-IN');
+  return orderInfo?.orderCode ? `Order ${orderInfo.orderCode}` : 'PrintEase';
+}
+
+function getWatermarkPosition(position, pageWidth, pageHeight, textWidth, fontSize) {
+  const margin = 24;
+  const positions = {
+    top_left: [margin, pageHeight - margin - fontSize],
+    top_center: [(pageWidth - textWidth) / 2, pageHeight - margin - fontSize],
+    top_right: [pageWidth - textWidth - margin, pageHeight - margin - fontSize],
+    center: [(pageWidth - textWidth) / 2, (pageHeight - fontSize) / 2],
+    bottom_left: [margin, margin],
+    bottom_center: [(pageWidth - textWidth) / 2, margin],
+    bottom_right: [pageWidth - textWidth - margin, margin]
+  };
+
+  return positions[position] || positions.bottom_right;
+}
+
+/**
+ * Resolves the target duplex option for printing depending on final orientation.
+ */
+export function resolveDuplexForPlatform({ sides, finalSheetOrientation, duplexBinding }) {
+  const isOneSided = (sides === 'one_sided' || sides === 'single' || sides === 'one-sided' || sides === 'simplex');
+  if (isOneSided) {
+    return 'one-sided';
+  }
+
+  // Explicit duplexBinding override
+  if (duplexBinding === 'long-edge' || duplexBinding === 'short-edge') {
+    return duplexBinding;
+  }
+
+  // Explicit short edge side type
+  if (sides === 'two_sided_short_edge') {
+    return 'short-edge';
+  }
+
+  // Default auto-mapping rule
+  if (finalSheetOrientation === 'landscape') {
+    return 'short-edge';
+  }
+  return 'long-edge';
+}
 
 /**
  * Pre-processes a PDF file if the printer profile, print options, or after-order settings require manual adjustments.
- * 
- * @param {string} inputFilePath 
- * @param {object} printOptions 
- * @param {object} printerProfile 
- * @returns {Promise<{ tempFilePath: string | null, cleanup: () => void }>}
+ * Supports page selection, watermarks, imposition (N-up), and after-order page appends.
+ *
+ * @param {string|object} inputFilePathOrObj
+ * @param {object} [printOptions]
+ * @param {object} [printerProfile]
+ * @returns {Promise<{ tempFilePath: string | null, copiesHandledInPdf: number, finalSheetOrientation: string, pagesPerSheetApplied: boolean, cleanup: () => void }>}
  */
-export async function preparePdfForPrinting(inputFilePath, printOptions = {}, printerProfile = {}) {
-  // Determine if correction or insertion is needed based on profile or options
-  let backSideRotation = printOptions.backSideRotation || printerProfile.backSideRotation || 'auto';
-  let reversePageOrder = printOptions.pageOrder === 'reverse' || printerProfile.reversePageOrder;
-  const requestedCopies = Math.max(1, Math.min(Number(printOptions.copies) || 1, 99));
-  
-  const afterOrderSettings = printOptions.afterOrderSettings;
-  const insertEnabled =
-    Boolean(afterOrderSettings?.enabled) &&
-    printOptions.orderInsertScope === "order" &&
-    printOptions.isLastFile === true;
+export async function preparePdfForPrinting(inputFilePathOrObj, printOptions = {}, printerProfile = {}) {
+  let inputFilePath;
+  let options = printOptions;
+  let profile = printerProfile;
 
-  const requiresRotation = backSideRotation === 'rotate-180';
-  
-  let requestedOrientation = printOptions.orientation || printerProfile.defaultOrientation || 'auto';
-  const isWindows = process.platform === 'win32';
-  const requiresOrientationRotation = isWindows && (requestedOrientation === 'landscape' || requestedOrientation === 'portrait');
-  
-  if (!requiresRotation && !reversePageOrder && !insertEnabled && !requiresOrientationRotation) {
-    return { tempFilePath: null, cleanup: () => {} }; // No correction/insertion/rotation needed
+  if (inputFilePathOrObj && typeof inputFilePathOrObj === 'object') {
+    inputFilePath = inputFilePathOrObj.inputPdfPath || inputFilePathOrObj.inputFilePath;
+    options = inputFilePathOrObj.printOptions || {};
+    profile = inputFilePathOrObj.printerProfile || {};
+  } else {
+    inputFilePath = inputFilePathOrObj;
   }
 
-  console.log(`[PDF PREP] Processing PDF: ${inputFilePath}`);
-  if (requiresRotation) console.log(`[PDF PREP] Rotating even pages by 180 degrees.`);
-  if (reversePageOrder) console.log(`[PDF PREP] Reversing page order.`);
-  if (insertEnabled) console.log(`[PDF PREP] Appending slip/banner page after order.`);
-  if (requiresOrientationRotation) console.log(`[PDF PREP] Adjusting page rotation for Windows ${requestedOrientation} mode.`);
+  console.log(`[PDF PREP] Preparing PDF: ${inputFilePath}`);
 
-  const originalPdfBytes = fs.readFileSync(inputFilePath);
-  let pdfDoc = await PDFDocument.load(originalPdfBytes);
+  let backSideRotation = options.backSideRotation || profile.backSideRotation || 'auto';
+  let reversePageOrder = options.pageOrder === 'reverse' || profile.reversePageOrder;
+  const requestedCopies = Math.max(1, Math.min(Number(options.copies) || 1, 99));
 
-  // When the order-level slip/blank page is enabled, OS-level copies would
-  // repeat the appended page once per copy. Bake only the last document copies
-  // into the prepared PDF, then the printer module sends that PDF as one copy.
+  const afterOrderSettings = options.afterOrderSettings || {};
+  const insertEnabled =
+    Boolean(afterOrderSettings?.enabled) &&
+    options.orderInsertScope === "order" &&
+    options.isLastFile === true;
+
+  const requiresRotation = backSideRotation === 'rotate-180';
+
+  let requestedOrientation = options.orientation || profile.defaultOrientation || 'auto';
+  const isWindows = process.platform === 'win32';
+  const requiresOrientationRotation = isWindows && (requestedOrientation === 'landscape' || requestedOrientation === 'portrait');
+
+  // We will track files to clean up
+  const cleanups = [];
+  let activePdfPath = inputFilePath;
+
+  // 1. Slicing page range and/or Watermarking
+  const pagesMode = options.pages?.mode;
+  const watermarkEnabled = options.watermark?.enabled === true;
+  
+  if (pagesMode === 'custom' || watermarkEnabled) {
+    console.log(`[PDF PREP] Applying slicing (${pagesMode}) or watermark (${watermarkEnabled}).`);
+    const originalPdfBytes = fs.readFileSync(activePdfPath);
+    const doc = await PDFDocument.load(originalPdfBytes);
+    const totalPages = doc.getPageCount();
+
+    // Slicing
+    let targetDoc = doc;
+    if (pagesMode === 'custom') {
+      const selected = options.pages?.selected || parseRange(options.pages?.range, totalPages);
+      console.log(`[PDF PREP] Slicing range: ${selected.join(',')}`);
+      targetDoc = await PDFDocument.create();
+      const copied = await targetDoc.copyPages(doc, selected.map(p => p - 1));
+      copied.forEach(p => targetDoc.addPage(p));
+    }
+
+    // Watermark
+    if (watermarkEnabled) {
+      const watermark = options.watermark || {};
+      const orderInfo = options.orderInfo || {};
+      console.log(`[PDF PREP] Rendering watermark text.`);
+      const font = await targetDoc.embedFont(StandardFonts.HelveticaBold);
+      const text = getWatermarkText(orderInfo, watermark);
+      const fontSize = Number(watermark.fontSize) || 18;
+      const opacity = Math.max(0.05, Math.min(Number(watermark.opacity) || 0.18, 0.6));
+      const rotation = Number(watermark.rotation) || 0;
+
+      for (const page of targetDoc.getPages()) {
+        const { width, height } = page.getSize();
+        const textWidth = font.widthOfTextAtSize(text, fontSize);
+        const [x, y] = getWatermarkPosition(watermark.position, width, height, textWidth, fontSize);
+
+        page.drawText(text, {
+          x,
+          y,
+          size: fontSize,
+          font,
+          color: rgb(0.15, 0.18, 0.23),
+          opacity,
+          rotate: degrees(rotation)
+        });
+      }
+    }
+
+    const modifiedBytes = await targetDoc.save();
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "printease-sliced-wm-"));
+    const tempFilePath = path.join(tempDir, "sliced-wm.pdf");
+    fs.writeFileSync(tempFilePath, modifiedBytes);
+    
+    activePdfPath = tempFilePath;
+    cleanups.push(() => {
+      try {
+        fs.unlinkSync(tempFilePath);
+        fs.rmdirSync(tempDir);
+      } catch (err) {}
+    });
+  }
+
+  // 2. Imposition (N-up)
+  const pagesPerSheet = Number(options.pagesPerSheet) || 1;
+  let pagesPerSheetApplied = false;
+  let finalSheetOrientation = 'portrait';
+
+  if (pagesPerSheet > 1) {
+    const paperSize = options.paperSize || profile.defaultPaperSize || 'A4';
+    const impositionResult = await imposePdf({
+      inputPdfPath: activePdfPath,
+      pagesPerSheet,
+      paperSize,
+      orientation: requestedOrientation
+    });
+
+    activePdfPath = impositionResult.filePath;
+    pagesPerSheetApplied = true;
+    finalSheetOrientation = impositionResult.finalSheetOrientation;
+    cleanups.push(impositionResult.cleanup);
+  } else {
+    // Detect orientation from page 1 of active PDF
+    try {
+      const bytes = fs.readFileSync(activePdfPath);
+      const doc = await PDFDocument.load(bytes);
+      const pages = doc.getPages();
+      if (pages.length > 0) {
+        const { width, height } = pages[0].getSize();
+        const rot = pages[0].getRotation().angle;
+        const isRotated90or270 = rot === 90 || rot === 270;
+        const actualWidth = isRotated90or270 ? height : width;
+        const actualHeight = isRotated90or270 ? width : height;
+        finalSheetOrientation = (actualWidth > actualHeight) ? 'landscape' : 'portrait';
+      }
+    } catch (err) {
+      console.warn(`[PDF PREP] Failed to auto-detect orientation, defaulting to portrait.`, err);
+    }
+  }
+
+  // 3. Post-imposition processing (Baking copies, inserting after-order slip, rotation/reversal)
+  // Let's load the active PDF for final touches
+  const finalPdfBytes = fs.readFileSync(activePdfPath);
+  let pdfDoc = await PDFDocument.load(finalPdfBytes);
+
   const copiesHandledInPdf = insertEnabled && requestedCopies > 1 ? requestedCopies : 0;
   if (copiesHandledInPdf) {
     const repeatedDoc = await PDFDocument.create();
@@ -65,7 +252,6 @@ export async function preparePdfForPrinting(inputFilePath, printOptions = {}, pr
     const { width, height } = firstPage.getSize();
     const newPage = pdfDoc.addPage([width, height]);
 
-    // Check type of page
     const type = afterOrderSettings.type || 'blank';
     if (type === 'custom' || type === 'watermark') {
       const lines = [];
@@ -75,11 +261,11 @@ export async function preparePdfForPrinting(inputFilePath, printOptions = {}, pr
         }
       } else if (type === 'watermark') {
         const meta = afterOrderSettings.watermarkMetadata || {};
-        const info = printOptions.orderInfo || {};
+        const info = options.orderInfo || {};
         if (meta.clientName && info.clientName) lines.push(`Client: ${info.clientName}`);
         if (meta.pickupCode && info.pickupCode) lines.push(`Pickup Code: ${info.pickupCode}`);
         if (meta.printerId) {
-          const pName = info.printerName || printOptions.printerName || 'N/A';
+          const pName = info.printerName || options.printerName || 'N/A';
           lines.push(`Printer ID: ${pName}`);
         }
         if (meta.serialNo && (info.orderCode || info.jobId)) {
@@ -101,7 +287,6 @@ export async function preparePdfForPrinting(inputFilePath, printOptions = {}, pr
         const x = rawX;
         const y = height - rawY; // relative to top
 
-        // Calculate size for optional border box
         let maxWidth = 0;
         for (const line of lines) {
           const w = font.widthOfTextAtSize(line, fontSize);
@@ -157,9 +342,8 @@ export async function preparePdfForPrinting(inputFilePath, printOptions = {}, pr
     }
   }
 
-  // If page order needs to be reversed, we copy pages backwards
+  // Reverse page order if requested
   let targetDoc = pdfDoc;
-  
   if (reversePageOrder) {
     targetDoc = await PDFDocument.create();
     const currentPages = pdfDoc.getPages();
@@ -180,7 +364,7 @@ export async function preparePdfForPrinting(inputFilePath, printOptions = {}, pr
     }
   }
 
-  // Programmatically rotate pages for Windows landscape/portrait printing
+  // Rotate pages for Windows landscape/portrait printing
   if (requiresOrientationRotation) {
     const finalPages = targetDoc.getPages();
     for (const page of finalPages) {
@@ -196,23 +380,32 @@ export async function preparePdfForPrinting(inputFilePath, printOptions = {}, pr
     }
   }
 
-  const modifiedPdfBytes = await targetDoc.save();
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "printease-corrected-"));
-  const tempFilePath = path.join(tempDir, "corrected.pdf");
-  fs.writeFileSync(tempFilePath, modifiedPdfBytes);
+  const finalBytes = await targetDoc.save();
+  const finalTempDir = fs.mkdtempSync(path.join(os.tmpdir(), "printease-prep-"));
+  const finalTempFilePath = path.join(finalTempDir, "prepared.pdf");
+  fs.writeFileSync(finalTempFilePath, finalBytes);
 
-  console.log(`[PDF PREP] Generated corrected PDF: ${tempFilePath}`);
+  console.log(`[PDF PREP] Generated final prepared PDF: ${finalTempFilePath}`);
 
   return {
-    tempFilePath,
+    tempFilePath: finalTempFilePath,
     copiesHandledInPdf,
+    finalSheetOrientation,
+    pagesPerSheetApplied,
     cleanup: () => {
+      // Cleanup all temp files in the cleanups queue
+      for (const cleanupFn of cleanups) {
+        try {
+          cleanupFn();
+        } catch (err) {}
+      }
+      // Cleanup final file
       try {
-        fs.unlinkSync(tempFilePath);
-        fs.rmdirSync(tempDir);
-        console.log(`[PDF PREP] Cleaned up temp PDF: ${tempFilePath}`);
+        fs.unlinkSync(finalTempFilePath);
+        fs.rmdirSync(finalTempDir);
+        console.log(`[PDF PREP] Cleaned up final temp PDF: ${finalTempFilePath}`);
       } catch (err) {
-        console.error(`[PDF PREP] Failed to cleanup temp PDF:`, err);
+        console.error(`[PDF PREP] Failed to clean up final temp PDF:`, err);
       }
     }
   };

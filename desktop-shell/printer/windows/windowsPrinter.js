@@ -5,7 +5,7 @@ import { execFile } from "node:child_process";
 import { createRequire } from "node:module";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
-import { preparePdfForPrinting } from "../pdfPrintPreparation.js";
+import { preparePdfForPrinting, resolveDuplexForPlatform } from "../pdfPrintPreparation.js";
 
 const require = createRequire(import.meta.url);
 const { app } = require("electron");
@@ -206,7 +206,7 @@ function validatePdf(filePath) {
   }
 }
 
-function buildPrintSettings(options = {}, profile = {}) {
+function buildPrintSettings(options = {}, profile = {}, finalSheetOrientation = 'portrait', pageRangeWasSliced = false) {
   const settings = [];
   const printOptions = options.printOptions || {};
 
@@ -214,36 +214,26 @@ function buildPrintSettings(options = {}, profile = {}) {
   if (copies > 1) settings.push(`${copies}x`);
 
   const pages = options.pages?.range || options.selectedPages || printOptions.pages?.range;
-  if (pages && String(pages).toLowerCase() !== "all") settings.push(String(pages));
+  if (pages && String(pages).toLowerCase() !== "all" && !pageRangeWasSliced) settings.push(String(pages));
 
   const colorMode = options.colorMode || printOptions.colorMode;
   if (colorMode === "color") settings.push("color");
   if (colorMode === "black_white" || colorMode === "monochrome") settings.push("monochrome");
 
   const sideType = printOptions.sideType || options.sides || printOptions.sides;
-  let duplexBinding = printOptions.duplexBinding || 'auto';
-  let orientation = options.orientation || printOptions.orientation || 'auto';
+  const duplexBinding = printOptions.duplexBinding || 'auto';
+  const targetDuplex = resolveDuplexForPlatform({
+    sides: sideType,
+    finalSheetOrientation,
+    duplexBinding
+  });
 
-  if (orientation === 'auto') {
-    orientation = profile.defaultOrientation || 'portrait';
-  }
-
-  if (sideType === 'single' || sideType === 'one_sided') {
+  if (targetDuplex === 'one-sided') {
     settings.push("simplex");
-  } else if (sideType === 'double' || sideType === 'two_sided') {
-    if (duplexBinding === 'auto') {
-      if (orientation === 'landscape') {
-        duplexBinding = profile.landscapeDuplexBinding || profile.defaultDuplexBinding || 'short-edge';
-      } else {
-        duplexBinding = profile.defaultDuplexBinding || 'long-edge';
-      }
-    }
-    
-    if (duplexBinding === "long-edge" || sideType === "two_sided_long_edge") {
-      settings.push("duplexlong");
-    } else if (duplexBinding === "short-edge" || sideType === "two_sided_short_edge") {
-      settings.push("duplexshort");
-    }
+  } else if (targetDuplex === 'long-edge') {
+    settings.push("duplexlong");
+  } else if (targetDuplex === 'short-edge') {
+    settings.push("duplexshort");
   }
 
   const paperSize = options.paperSize || printOptions.paperSize;
@@ -307,8 +297,15 @@ export async function printPdfFile({ filePath, printerName, options = {} } = {})
 
     let activeFilePath = filePath;
     let cleanupPdf = () => {};
+    let finalSheetOrientation = 'portrait';
+    let pagesPerSheetApplied = false;
+
     try {
-      const prep = await preparePdfForPrinting(filePath, printOptions, profile);
+      const prep = await preparePdfForPrinting({
+        inputPdfPath: filePath,
+        printOptions,
+        printerProfile: profile
+      });
       if (prep.tempFilePath) {
         activeFilePath = prep.tempFilePath;
         cleanupPdf = prep.cleanup;
@@ -323,11 +320,14 @@ export async function printPdfFile({ filePath, printerName, options = {} } = {})
           },
         };
       }
+      finalSheetOrientation = prep.finalSheetOrientation || 'portrait';
+      pagesPerSheetApplied = prep.pagesPerSheetApplied || false;
     } catch (prepError) {
       console.error("[WINDOWS] PDF Prep failed:", prepError);
     }
 
-    const settings = buildPrintSettings(settingsOptions, profile);
+    const pageRangeWasSliced = Boolean(activeFilePath !== filePath);
+    const settings = buildPrintSettings(settingsOptions, profile, finalSheetOrientation, pageRangeWasSliced);
     const args = [
       "-silent",
       "-print-to",

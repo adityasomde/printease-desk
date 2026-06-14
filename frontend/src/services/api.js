@@ -337,8 +337,14 @@ async function fetchSignedDocumentBlob(documentId) {
   }
 
   const blob = await response.blob();
-  const fallbackType = data.document?.fileType || blob.type || "application/octet-stream";
-  const typedBlob = blob.type ? blob : new Blob([blob], { type: fallbackType });
+  const rawType = (blob.type || "").toLowerCase();
+  const isGenericType = !rawType || rawType === "application/octet-stream";
+  const bestType = isGenericType
+    ? (data.document?.fileType || rawType || "application/octet-stream")
+    : rawType;
+  const typedBlob = bestType !== rawType
+    ? new Blob([blob], { type: bestType })
+    : blob;
   documentBlobCache.set(cacheKey, typedBlob);
   return typedBlob;
 }

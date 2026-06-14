@@ -49,7 +49,7 @@ export function useDocumentPreview() {
 
     try {
       const blob = await getDocumentPreviewBlob(docId);
-      const mime = blob.type.toLowerCase();
+      const mime = (blob.type || "").toLowerCase();
       let kind = "unsupported";
 
       if (mime === "application/pdf") {
@@ -58,6 +58,14 @@ export function useDocumentPreview() {
         kind = "image";
       } else if (mime === "text/plain" || mime === "text/csv" || mime === "application/json") {
         kind = "text";
+      }
+
+      // Fallback: infer from file extension when MIME is generic
+      if (kind === "unsupported" && name) {
+        const ext = (name.split(".").pop() || "").toLowerCase();
+        if (ext === "pdf") kind = "pdf";
+        else if (["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"].includes(ext)) kind = "image";
+        else if (["txt", "csv", "json", "log"].includes(ext)) kind = "text";
       }
 
       if (kind === "text") {

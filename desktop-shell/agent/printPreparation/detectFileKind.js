@@ -18,10 +18,18 @@ export function detectDesktopFileKind({ fileName = '', fileType = '' } = {}) {
   if (mime === 'application/pdf' || ext === '.pdf') return 'pdf';
 
   if (
-    mime.startsWith('image/') ||
-    ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp', '.tif', '.tiff', '.heic', '.heif'].includes(ext)
+    ['image/jpeg', 'image/png'].includes(mime) ||
+    ['.jpg', '.jpeg', '.png'].includes(ext)
   ) {
     return 'image';
+  }
+
+  // WebP/GIF/TIFF/BMP/HEIC need sharp which is not installed.
+  if (
+    ['image/webp', 'image/gif', 'image/bmp', 'image/tiff', 'image/heic'].includes(mime) ||
+    ['.webp', '.gif', '.bmp', '.tif', '.tiff', '.heic', '.heif'].includes(ext)
+  ) {
+    return 'unsupported';
   }
 
   if (

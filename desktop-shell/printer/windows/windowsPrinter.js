@@ -303,6 +303,7 @@ export async function printPdfFile({ filePath, printerName, options = {} } = {})
     const profiles = options.printerProfiles || [];
     const profile = profiles.find(p => p.osPlatform === 'win32') || options.printerProfile || {};
     const printOptions = options.printOptions || options || {};
+    let settingsOptions = options;
 
     let activeFilePath = filePath;
     let cleanupPdf = () => {};
@@ -312,11 +313,21 @@ export async function printPdfFile({ filePath, printerName, options = {} } = {})
         activeFilePath = prep.tempFilePath;
         cleanupPdf = prep.cleanup;
       }
+      if (prep.copiesHandledInPdf) {
+        settingsOptions = {
+          ...options,
+          copies: 1,
+          printOptions: {
+            ...(options.printOptions || {}),
+            copies: 1,
+          },
+        };
+      }
     } catch (prepError) {
       console.error("[WINDOWS] PDF Prep failed:", prepError);
     }
 
-    const settings = buildPrintSettings(options, profile);
+    const settings = buildPrintSettings(settingsOptions, profile);
     const args = [
       "-silent",
       "-print-to",

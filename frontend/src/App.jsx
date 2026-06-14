@@ -1775,6 +1775,27 @@ export default function App() {
       }
     });
     setMultiFileConfigs(initialConfigs);
+    if (docsWithId.length === 1 && initialConfigs[0]) {
+      const restored = initialConfigs[0];
+      setPages(Number(restored.pages || docsWithId[0].pageCount || pages || 1));
+      setSelectedPages(restored.selectedPages || "");
+      setCopies(Number(restored.copies || 1));
+      setColorType(restored.colorType || "bw");
+      setSideType(restored.sideType || "single");
+      setPaperSize(restored.paperSize || "A4");
+      setPagesPerSheet(Number(restored.pagesPerSheet || 1));
+      setOrientation(restored.orientation || "auto");
+      setPrintDpi(Number(restored.printDpi || 300));
+      setScaleMode(restored.scaleMode || "original");
+      setMarginMode(restored.marginMode || "default");
+      setWatermark(Boolean(restored.watermark));
+      setWatermarkType(restored.watermarkType || "order_code");
+      setWatermarkText(restored.watermarkText || "");
+      setWatermarkPosition(restored.watermarkPosition || "bottom_right");
+      setWatermarkOpacity(Number(restored.watermarkOpacity || 0.18));
+      setWatermarkFontSize(Number(restored.watermarkFontSize || 18));
+      setWatermarkRotation(Number(restored.watermarkRotation || 0));
+    }
     setReprintSourceDocuments(docs);
     setReprintDocumentExpired(false);
 

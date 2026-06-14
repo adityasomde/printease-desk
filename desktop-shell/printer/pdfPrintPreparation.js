@@ -15,6 +15,7 @@ export async function preparePdfForPrinting(inputFilePath, printOptions = {}, pr
   // Determine if correction or insertion is needed based on profile or options
   let backSideRotation = printOptions.backSideRotation || printerProfile.backSideRotation || 'auto';
   let reversePageOrder = printOptions.pageOrder === 'reverse' || printerProfile.reversePageOrder;
+  const requestedCopies = Math.max(1, Math.min(Number(printOptions.copies) || 1, 99));
   
   const afterOrderSettings = printOptions.afterOrderSettings;
   const insertEnabled =
@@ -39,7 +40,23 @@ export async function preparePdfForPrinting(inputFilePath, printOptions = {}, pr
   if (requiresOrientationRotation) console.log(`[PDF PREP] Adjusting page rotation for Windows ${requestedOrientation} mode.`);
 
   const originalPdfBytes = fs.readFileSync(inputFilePath);
-  const pdfDoc = await PDFDocument.load(originalPdfBytes);
+  let pdfDoc = await PDFDocument.load(originalPdfBytes);
+
+  // When the order-level slip/blank page is enabled, OS-level copies would
+  // repeat the appended page once per copy. Bake only the last document copies
+  // into the prepared PDF, then the printer module sends that PDF as one copy.
+  const copiesHandledInPdf = insertEnabled && requestedCopies > 1 ? requestedCopies : 0;
+  if (copiesHandledInPdf) {
+    const repeatedDoc = await PDFDocument.create();
+    const sourceIndexes = pdfDoc.getPages().map((_, index) => index);
+    for (let copyIndex = 0; copyIndex < copiesHandledInPdf; copyIndex++) {
+      const copiedPages = await repeatedDoc.copyPages(pdfDoc, sourceIndexes);
+      copiedPages.forEach((page) => repeatedDoc.addPage(page));
+    }
+    pdfDoc = repeatedDoc;
+    console.log(`[PDF PREP] Baked ${copiesHandledInPdf} copies into PDF so order insert page is appended once.`);
+  }
+
   const pages = pdfDoc.getPages();
 
   // If insertion is enabled, copy first page size and append a page
@@ -188,6 +205,7 @@ export async function preparePdfForPrinting(inputFilePath, printOptions = {}, pr
 
   return {
     tempFilePath,
+    copiesHandledInPdf,
     cleanup: () => {
       try {
         fs.unlinkSync(tempFilePath);
@@ -199,4 +217,3 @@ export async function preparePdfForPrinting(inputFilePath, printOptions = {}, pr
     }
   };
 }
-

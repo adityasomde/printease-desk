@@ -317,7 +317,7 @@ export async function printFile({ printerName, filePath, copies = 1, options = {
   }
 
   const optionCopies = options?.copies || options?.printOptions?.copies;
-  const safeCopies = Math.max(1, Math.min(Number(optionCopies || copies) || 1, 99));
+  let safeCopies = Math.max(1, Math.min(Number(optionCopies || copies) || 1, 99));
 
   // Determine effective profile from available profiles or passed options
   const profiles = options.printerProfiles || [];
@@ -332,6 +332,9 @@ export async function printFile({ printerName, filePath, copies = 1, options = {
     if (prep.tempFilePath) {
       activeFilePath = prep.tempFilePath;
       cleanupPdf = prep.cleanup;
+    }
+    if (prep.copiesHandledInPdf) {
+      safeCopies = 1;
     }
   } catch (prepError) {
     console.error("[CUPS] PDF Prep failed:", prepError);

@@ -5,6 +5,7 @@ import DocumentPreviewModal from "../components/DocumentPreviewModal";
 import Row from "../components/Row";
 import { calculateTotalAmount, getPricePerPage, countSelectedPages } from "../utils/price";
 import { countSelectedPagesPreview, estimatePrintablePages, estimateGuestLimitExceeded, estimateSheets, estimatePricePreview } from "../utils/printEstimate";
+import { ALLOWED_UPLOAD_ACCEPT, isAllowedUploadFile } from "../constants/upload";
 
 export default function UploadPage({
   currentUser,
@@ -193,7 +194,7 @@ export default function UploadPage({
     }
 
     const handlePaste = (e) => {
-      const files = Array.from(e.clipboardData?.files || []).filter((f) => f.type === "application/pdf");
+      const files = Array.from(e.clipboardData?.files || []).filter(isAllowedUploadFile);
       if (files.length > 0) {
         setBackendPrice?.(null);
         if (setReprintSourceDocuments) setReprintSourceDocuments([]);
@@ -661,10 +662,10 @@ export default function UploadPage({
 
         <div className="mt-6">
           <label className="cursor-pointer rounded-2xl border border-dashed bg-slate-50 p-6 text-center hover:bg-slate-100 flex flex-col mb-4">
-            <input type="file" accept="application/pdf" multiple onChange={handleFileChange} className="hidden" />
+            <input type="file" accept={ALLOWED_UPLOAD_ACCEPT} multiple onChange={handleFileChange} className="hidden" />
             {displayFiles.length > 0 ? <FileText className="mx-auto mb-3" size={36} /> : <Upload className="mx-auto mb-3" size={36} />}
-            <p className="font-semibold">{selectedFileLabel || "Choose one or more PDFs"}</p>
-            <p className="text-sm text-slate-500">{selectedFileCount ? (selectedFileSize ? `${Math.ceil(selectedFileSize / 1024)} KB selected` : "Documents selected from history") : "Select multiple PDF files from your file manager"}</p>
+            <p className="font-semibold">{selectedFileLabel || "Choose one or more documents"}</p>
+            <p className="text-sm text-slate-500">{selectedFileCount ? (selectedFileSize ? `${Math.ceil(selectedFileSize / 1024)} KB selected` : "Documents selected from history") : "Select multiple supported files from your file manager"}</p>
           </label>
 
           {!isMulti && (

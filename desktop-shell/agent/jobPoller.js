@@ -1,7 +1,8 @@
 import { rm } from "node:fs/promises";
 import { backendRequest } from "./heartbeat.js";
-import { cacheReadableDocument, findCachedDocument, removeCachedDocument } from "./documentCache.js";
+import { cacheReadableDocument, findCachedDocument, removeCachedDocument, getDocumentCacheDirectory } from "./documentCache.js";
 import { printFile, stopPrinting } from "../printer/printExecutor.js";
+import { preparePrintFile } from "./printPreparation/preparePrintFile.js";
 import { 
   normalizeJobFiles, 
   validateJobFile, 
@@ -245,6 +246,18 @@ export async function predownloadPendingDocuments({ agentToken, limit = 15 } = {
       });
 
       if (cached.success) {
+        try {
+          await preparePrintFile({
+            filePath: cached.filePath,
+            fileName: file.fileName || "document.pdf",
+            fileType: file.fileType || "application/pdf",
+            sha256: expectedHash,
+            cacheBaseDir: getDocumentCacheDirectory()
+          });
+        } catch (e) {
+          console.warn("Predownload preparation failed:", e);
+        }
+
         cachedFiles.push({
           documentId,
           orderId: file.orderId || null,
@@ -312,7 +325,28 @@ export async function processNextJob({ agentToken, printerName } = {}) {
       await assertJobStillPrintable({ agentToken, jobId: job.jobId });
       const download = await downloadJobFile(job, file);
       if (!download.success) throw new Error(download.message);
-      downloads.push({ ...download, file });
+      
+      const expectedHash = getExpectedFileHash(file);
+      const prepResult = await preparePrintFile({
+        filePath: download.filePath,
+        fileName: file.fileName || "document.pdf",
+        fileType: file.fileType || "application/pdf",
+        sha256: expectedHash,
+        cacheBaseDir: getDocumentCacheDirectory()
+      });
+
+      if (!prepResult.success) {
+        const error = new Error(prepResult.message || "Print file preparation failed");
+        error.reasonCode = prepResult.reasonCode || "PREPARATION_FAILED";
+        throw error;
+      }
+
+      downloads.push({ 
+        ...download, 
+        filePath: prepResult.filePath,
+        fileType: prepResult.fileType,
+        file 
+      });
     }
 
     await markJobStatus({ agentToken, jobId: job.jobId, status: "printing" });
@@ -326,7 +360,7 @@ export async function processNextJob({ agentToken, printerName } = {}) {
         printerName: selectedPrinterName,
         filePath: download.filePath,
         copies: download.file.copies || job.copies || 1,
-        fileType: download.file.fileType || "application/pdf",
+        fileType: download.fileType || download.file.fileType || "application/pdf",
         fileName: download.file.fileName || null,
         options: buildOrderScopedPrintOptions({
           job,
@@ -341,13 +375,6 @@ export async function processNextJob({ agentToken, printerName } = {}) {
         throw error;
       }
 
-      if (download.file.documentId) {
-        await removeCachedDocument(
-          download.file.documentId,
-          getExpectedFileHash(download.file)
-        ).catch(() => {});
-      }
-
       printedFiles.push({
         documentId: download.file.documentId || null,
         fileName: download.file.fileName || null,
@@ -358,6 +385,22 @@ export async function processNextJob({ agentToken, printerName } = {}) {
     await assertJobStillPrintable({ agentToken, jobId: job.jobId });
 
     await markJobStatus({ agentToken, jobId: job.jobId, status: "completed" });
+
+    const cleanupTargets = new Map();
+    for (const download of downloads) {
+      const documentId = download.file.documentId;
+      if (!documentId) continue;
+
+      const expectedHash = getExpectedFileHash(download.file);
+      cleanupTargets.set(`${documentId}:${expectedHash || ""}`, {
+        documentId,
+        expectedHash,
+      });
+    }
+
+    for (const target of cleanupTargets.values()) {
+      await removeCachedDocument(target.documentId, target.expectedHash).catch(() => {});
+    }
 
     return {
       success: true,

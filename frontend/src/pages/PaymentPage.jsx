@@ -58,6 +58,7 @@ export default function PaymentPage({
   const selectedPageCount = Number(backendPrice?.selectedPageCount || order?.selectedPageCount || pages || 0);
   const centreUpi = selectedCentre?.upiId || "";
   const upiQrUrl = selectedCentre?.upiQrImageUrl || "";
+  const isMultiFileOrder = Array.isArray(backendPrice?.files) && backendPrice.files.length > 1;
 
   const handlePaymentClick = () => {
     const printablePages = backendPrice?.printablePageCount || (selectedPageCount * (copies || 1));
@@ -100,15 +101,21 @@ export default function PaymentPage({
           <Row label="Selected Pages" value={backendPrice?.selectedPageCount || pages} />
           <Row label="Printable Pages" value={backendPrice?.printablePageCount || Number(pages || 0) * Number(copies || 0)} />
           <Row label="Sheets" value={backendPrice?.sheetCount || "-"} />
-          <Row label="Copies" value={copies} />
-          <Row label="Rate" value={formatCurrency(rate)} />
+          {isMultiFileOrder ? (
+            <Row label="Copies / Rate" value="Shown per file below" />
+          ) : (
+            <>
+              <Row label="Copies" value={copies} />
+              <Row label="Rate" value={formatCurrency(rate)} />
+            </>
+          )}
           <div className="border-t pt-3">
             <OrderSummaryRow label="Total Amount" value={formatCurrency(amount)} highlight />
           </div>
         </div>
 
         {/* Multi-file breakdown */}
-        {backendPrice?.files?.length > 1 && (
+        {isMultiFileOrder && (
           <div className="mt-4 space-y-2 rounded-2xl border p-4 text-sm">
             <p className="font-semibold">Files</p>
             {backendPrice.files.map((file) => (

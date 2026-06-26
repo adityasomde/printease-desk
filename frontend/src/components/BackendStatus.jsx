@@ -43,6 +43,8 @@ export default function BackendStatus() {
   const isConnected = status === "connected";
   const isLoading = status === "loading";
 
+  if (isConnected || isLoading) return null;
+
   return (
     <section
       className={`mb-6 rounded-lg border px-4 py-3 text-sm shadow-sm ${

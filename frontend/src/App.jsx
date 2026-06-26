@@ -2237,10 +2237,6 @@ export default function App() {
         openProfile={openProfile}
       />
 
-      <div className={`border-b px-4 py-2 text-center text-xs font-semibold ${desktopAvailable ? "bg-emerald-50 text-emerald-800" : "bg-slate-100 text-slate-700"}`}>
-        PrintEase secure mode · official Render backend · desktop bridge {desktopAvailable ? "connected" : "not connected"}
-      </div>
-
       <main className="mx-auto max-w-6xl px-4 pb-28 pt-8 md:pb-8">
         <BackendStatus />
 

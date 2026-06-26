@@ -57,27 +57,6 @@ export async function getPredownloadCandidates({ agentToken, limit = 15 } = {}) 
   }
 }
 
-export async function getPendingVerificationJobs({ agentToken, limit = 15 } = {}) {
-  if (!agentToken) {
-    return {
-      success: false,
-      message: "Pair the desktop before polling jobs.",
-    };
-  }
-
-  try {
-    return await backendRequest({
-      endpoint: `/agent/jobs/verify?limit=${encodeURIComponent(String(limit))}`,
-      agentToken,
-    });
-  } catch (error) {
-    return {
-      success: false,
-      message: error.message || "Could not fetch pending verification jobs.",
-      status: error.status || 0,
-    };
-  }
-}
 
 export async function markJobStatus({ agentToken, jobId, status, reasonCode, reasonText } = {}) {
   if (!agentToken || !jobId || !status) {
@@ -494,93 +473,7 @@ export async function processNextJob({ agentToken, printerName } = {}) {
   }
 }
 
-export async function processVerificationJobs({ agentToken, limit = 15 } = {}) {
-  const candidates = await getPendingVerificationJobs({ agentToken, limit });
-  if (!candidates.success) return candidates;
 
-  const files = Array.isArray(candidates.files) ? candidates.files : [];
-  let checked = 0;
-
-  for (const file of files) {
-    const documentId = file.documentId;
-    const expectedHash = getExpectedFileHash({
-      fileHash: file.fileSha256 || file.fileHash,
-    });
-
-    if (!documentId || !file.fileUrl || !expectedHash) continue;
-
-    try {
-      const alreadyCached = await findCachedDocument(documentId, expectedHash);
-      let cachedPath = alreadyCached;
-
-      if (!cachedPath) {
-        const response = await fetch(file.fileUrl);
-        if (!response.ok || !response.body) continue;
-
-        const cached = await cacheReadableDocument({
-          documentId,
-          fileName: file.fileName || "document.pdf",
-          expectedHash,
-          responseBody: response.body,
-        });
-        
-        if (!cached.success) continue;
-        cachedPath = cached.filePath;
-      }
-
-      const prepResult = await preparePrintFile({
-        filePath: cachedPath,
-        fileName: file.fileName || "document.pdf",
-        fileType: file.fileType || "application/pdf",
-        sha256: expectedHash,
-        cacheBaseDir: getDocumentCacheDirectory()
-      });
-
-      let preparedPageCount = null;
-      let status = 'failed';
-      let errorCode = prepResult.reasonCode || 'UNKNOWN_ERROR';
-      let errorMessage = prepResult.message || 'Failed to prepare print file';
-      let printReadySha256 = null;
-
-      if (prepResult.success && prepResult.filePath) {
-        try {
-          const pdfBytes = await readFile(prepResult.filePath);
-          const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
-          preparedPageCount = pdfDoc.getPageCount();
-          status = 'prepared';
-          errorCode = null;
-          errorMessage = null;
-          
-          const crypto = await import('crypto');
-          printReadySha256 = crypto.createHash('sha256').update(pdfBytes).digest('hex');
-        } catch (pdfErr) {
-          errorCode = 'PDF_PARSE_ERROR';
-          errorMessage = 'Failed to count pages in converted PDF';
-        }
-      }
-
-      await backendRequest({
-        endpoint: `/agent/jobs/${encodeURIComponent(file.orderId)}/verify-result`,
-        method: "POST",
-        agentToken,
-        body: {
-          documentId: file.documentId,
-          preparedPageCount,
-          preparationStatus: status,
-          errorCode,
-          errorMessage,
-          printReadySha256
-        }
-      });
-      
-      checked++;
-    } catch (e) {
-      console.warn("Verification preparation failed:", e);
-    }
-  }
-
-  return { success: true, mode: "verification", checked };
-}
 
 export function createJobPoller(options = {}) {
   let timer = null;
@@ -600,11 +493,6 @@ export function createJobPoller(options = {}) {
       const pollOptions = { ...options, ...overrides };
 
       if (pollOptions.runPredownload !== false && pollOptions.agentToken) {
-        await processVerificationJobs({
-          agentToken: pollOptions.agentToken,
-          limit: pollOptions.predownloadLimit,
-        }).catch(() => null);
-
         await predownloadPendingDocuments({
           agentToken: pollOptions.agentToken,
           limit: pollOptions.predownloadLimit,

@@ -8,6 +8,7 @@
 
 import { canBrowserTryImageToPdf, detectUploadFileKind } from './detectUploadFileKind.js';
 import { convertImageToPdfInBrowser } from './imageToPdfBrowser.js';
+import { convertGenericFileToPdfInBrowser } from './localUniversalConverter.js';
 
 const CONVERSION_PLACEMENT = Object.freeze({
   NONE: 'none',
@@ -46,16 +47,17 @@ export async function prepareBrowserPrintReadyFile(file, context = {}) {
     };
   }
 
-  if (kind === 'office') {
+  if (kind === 'office' || kind === 'archive' || kind === 'unsupported') {
+    const printReadyFile = await convertGenericFileToPdfInBrowser(file);
     return {
       originalFile: file,
-      printReadyFile: null,
-      conversionPlacement: CONVERSION_PLACEMENT.MANUAL,
-      conversionSource: 'none',
+      printReadyFile,
+      conversionPlacement: CONVERSION_PLACEMENT.BROWSER,
+      conversionSource: 'browser-universal',
       fileKind: kind,
       decision: {
-        placement: CONVERSION_PLACEMENT.MANUAL,
-        reasonCode: 'BROWSER_OFFICE_CONVERSION_UNAVAILABLE',
+        placement: CONVERSION_PLACEMENT.BROWSER,
+        reasonCode: 'BROWSER_UNIVERSAL_CONVERSION',
         kind,
       },
     };

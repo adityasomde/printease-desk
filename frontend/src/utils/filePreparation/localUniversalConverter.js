@@ -59,7 +59,7 @@ async function convertDocxToPdf(file) {
   try {
     const opt = {
       margin: 10,
-      filename: file.name.replace(/\.[^/.]+$/, "") + ".pdf",
+      filename: file.name,
       image: { type: 'jpeg', quality: 0.98 },
       html2canvas: { scale: 2, useCORS: true },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
@@ -94,7 +94,7 @@ async function createFallbackPdf(file) {
   
   const opt = {
     margin: 10,
-    filename: file.name.replace(/\.[^/.]+$/, "") + ".pdf",
+    filename: file.name,
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
   };
 

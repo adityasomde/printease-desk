@@ -88,10 +88,12 @@ export async function prepareUploadPreview(file, context = {}) {
       previewPdfUrl: '',
       previewKind: 'unsupported',
       printReadyFile: null,
-      conversionPlacement: 'manual',
-      conversionSource: 'none',
+      conversionPlacement: 'desktop',
+      conversionSource: kind === 'office' ? 'desktop-libreoffice-headless' : 'desktop-agent',
       reasonCode: 'DESKTOP_PREPARATION_PENDING',
-      message: 'Waiting for hub to process...',
+      message: kind === 'office'
+        ? 'Will be converted by the hub desktop after you continue to payment.'
+        : 'Will be prepared by the hub desktop after you continue to payment.',
       errorMessage: '',
     };
   }

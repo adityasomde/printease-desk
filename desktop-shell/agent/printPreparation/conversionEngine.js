@@ -1,8 +1,17 @@
 /**
  * Conversion engine detection.
  *
- * LibreOffice is NOT bundled by this implementation.
- * The hub machine should install LibreOffice separately if Office conversion is needed.
+ * Priority order for finding LibreOffice:
+ *   1. Bundled copy inside the Electron app's resources (vendor/libreoffice/)
+ *   2. Any paths passed via `extraPaths`
+ *   3. Common system installation paths (platform-specific)
+ *   4. PATH fallback (soffice / libreoffice on PATH)
+ *
+ * When the app is packaged by electron-builder, the bundled copy lives at:
+ *   process.resourcesPath/vendor/libreoffice/<platform>/program/soffice[.exe]
+ *
+ * During development (npm run dev), process.resourcesPath may not exist,
+ * so we fall through to system-installed LibreOffice automatically.
  */
 
 import fs from 'node:fs/promises';
@@ -35,13 +44,45 @@ function runCommand(command, args = [], { timeoutMs = 8000 } = {}) {
   });
 }
 
+/**
+ * Returns the path to the bundled soffice binary inside the packaged Electron app.
+ * Returns null if not found (e.g. during development or if not yet downloaded).
+ */
+function getBundledSofficePath(platform) {
+  // In a packaged Electron app, process.resourcesPath points to the resources/ dir
+  const resourcesPath = typeof process !== 'undefined' && process.resourcesPath
+    ? process.resourcesPath
+    : null;
+
+  if (!resourcesPath) return null;
+
+  if (platform === 'win32') {
+    return path.join(resourcesPath, 'vendor', 'libreoffice', 'win', 'program', 'soffice.exe');
+  }
+  return path.join(resourcesPath, 'vendor', 'libreoffice', 'linux', 'program', 'soffice');
+}
+
 export async function findLibreOfficeExecutable({ platform = process.platform, extraPaths = [] } = {}) {
   const candidates = [];
 
+  // 1. Bundled copy inside the packaged app (highest priority)
+  const bundledPath = getBundledSofficePath(platform);
+  if (bundledPath) {
+    candidates.push(bundledPath);
+  }
+
+  // 2. Also check relative vendor/ dir (for dev mode when running from source)
+  const devVendorPath = platform === 'win32'
+    ? path.resolve('vendor', 'libreoffice', 'win', 'program', 'soffice.exe')
+    : path.resolve('vendor', 'libreoffice', 'linux', 'program', 'soffice');
+  candidates.push(devVendorPath);
+
+  // 3. Any extra paths provided by caller
   for (const item of extraPaths) {
     if (item) candidates.push(item);
   }
 
+  // 4. Common system installation paths
   if (platform === 'win32') {
     candidates.push(
       'C:\\Program Files\\LibreOffice\\program\\soffice.exe',
@@ -53,7 +94,7 @@ export async function findLibreOfficeExecutable({ platform = process.platform, e
     candidates.push('/usr/bin/libreoffice', '/usr/bin/soffice', '/snap/bin/libreoffice');
   }
 
-  // PATH fallback. spawn can resolve these names.
+  // 5. PATH fallback. spawn can resolve these names.
   candidates.push('soffice', 'libreoffice');
 
   for (const candidate of candidates) {
@@ -66,6 +107,7 @@ export async function findLibreOfficeExecutable({ platform = process.platform, e
       return {
         found: true,
         executable: candidate,
+        bundled: candidate === bundledPath,
         versionText: `${result.stdout || ''}${result.stderr || ''}`.trim(),
       };
     }
@@ -74,9 +116,11 @@ export async function findLibreOfficeExecutable({ platform = process.platform, e
   return {
     found: false,
     executable: null,
+    bundled: false,
     reasonCode: 'CONVERSION_ENGINE_MISSING',
-    message: 'LibreOffice/soffice was not found. Install LibreOffice to convert Office documents automatically.',
+    message: 'LibreOffice/soffice was not found. Install LibreOffice or ensure the bundled copy is present.',
   };
 }
 
 export { runCommand };
+

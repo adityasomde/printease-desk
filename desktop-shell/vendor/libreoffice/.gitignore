@@ -1,0 +1,8 @@
+# LibreOffice Headless Bundled Binaries
+#
+# These are downloaded by: npm run download:libreoffice
+# They are NOT committed to git because they are ~200-300 MB per platform.
+# The download script fetches them before building the installer.
+
+linux/
+win/

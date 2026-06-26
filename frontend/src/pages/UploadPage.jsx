@@ -335,7 +335,7 @@ export default function UploadPage({
     const firstFile = files[0] || null;
     const hasOfficeFile = files.some((file) => detectUploadFileKind(file) === "office");
     setUploadNotice(hasOfficeFile
-      ? "DOCX, PPTX and XLSX can take longer or fail in the web browser. For faster and more accurate results, export as PDF first or use the Android app when available."
+      ? "DOCX, PPTX and XLSX files will be converted to PDF by the print hub's desktop agent after you continue. This usually takes 10–30 seconds. You'll see the exact page count and price once conversion completes."
       : "");
     setDocumentFiles(files);
     setDocumentFile(firstFile);
@@ -365,7 +365,7 @@ export default function UploadPage({
       if (files.length > 0) {
         const hasOfficeFile = files.some((file) => detectUploadFileKind(file) === "office");
         setUploadNotice(hasOfficeFile
-          ? "DOCX, PPTX and XLSX can take longer or fail in the web browser. For faster and more accurate results, export as PDF first or use the Android app when available."
+          ? "DOCX, PPTX and XLSX files will be converted to PDF by the print hub's desktop agent after you continue. This usually takes 10–30 seconds. You'll see the exact page count and price once conversion completes."
           : "");
         setBackendPrice?.(null);
         if (setReprintSourceDocuments) setReprintSourceDocuments([]);
@@ -621,16 +621,18 @@ export default function UploadPage({
 
   const preparationItems = Object.values(filePreparationState);
   const hasPreparingFiles = preparationItems.some((item) => item?.status === PREPARATION_STATUS.PREPARING);
+  const hasPendingDesktopFiles = preparationItems.some((item) => item?.status === PREPARATION_STATUS.PENDING_DESKTOP);
+  const pendingDesktopCount = preparationItems.filter((item) => item?.status === PREPARATION_STATUS.PENDING_DESKTOP).length;
   const failedPreparation = preparationItems.find((item) => item?.status === PREPARATION_STATUS.FAILED);
   const readyPreparationCount = preparationItems.filter((item) => item?.status === PREPARATION_STATUS.READY).length;
   const activePreparationCount = preparationItems.filter((item) =>
-    item?.status === PREPARATION_STATUS.PREPARING
+    item?.status === PREPARATION_STATUS.PREPARING || item?.status === PREPARATION_STATUS.PENDING_DESKTOP
   ).length;
   const preparationProgress = selectedFileCount
-    ? Math.round((readyPreparationCount / selectedFileCount) * 100)
+    ? Math.round(((readyPreparationCount + pendingDesktopCount) / selectedFileCount) * 100)
     : 0;
   const hasUsableCentrePricing = Boolean(selectedCentre) && Number(pricePerPage || 0) > 0;
-  const priceReady = selectedFileCount > 0 && hasUsableCentrePricing && !hasPreparingFiles && !failedPreparation;
+  const priceReady = selectedFileCount > 0 && hasUsableCentrePricing && !hasPreparingFiles && !failedPreparation && !hasPendingDesktopFiles;
   const canContinueForPayment = selectedFileCount > 0 && hasUsableCentrePricing && !hasPreparingFiles && !failedPreparation;
   const priceSummaryLabel = hasPreparingFiles
     ? "Calculating price..."
@@ -643,14 +645,25 @@ export default function UploadPage({
         : "Total";
   const priceSummaryHelp = hasPreparingFiles
     ? "Converting and counting your selected files."
-    : failedPreparation
-      ? failedPreparation.errorMessage || "Remove the failed file or upload it as PDF."
-      : !hasUsableCentrePricing
-        ? "Select a print centre with pricing before checkout."
-      : "Exact price verified based on uploaded files.";
-  const singlePricePending = hasPreparingFiles || failedPreparation;
+    : hasPendingDesktopFiles
+      ? "Office files (DOCX, PPTX, XLSX) will be converted by the hub desktop after you continue. Exact price appears after backend verification."
+      : failedPreparation
+        ? failedPreparation.errorMessage || "Remove the failed file or upload it as PDF."
+        : !hasUsableCentrePricing
+          ? "Select a print centre with pricing before checkout."
+        : "Exact price verified based on uploaded files.";
+  const singlePricePending = hasPreparingFiles || hasPendingDesktopFiles || failedPreparation;
   const displayMoney = (value) => (value === null || value === undefined || Number.isNaN(Number(value)) ? "Pending" : `₹${value}`);
   const displayCount = (value) => (value === null || value === undefined || value === "" || Number.isNaN(Number(value)) ? "Pending" : value);
+  const continueLabel = paymentLoading
+    ? "Preparing order..."
+    : !selectedCentre
+      ? "Select & Continue"
+      : hasPendingDesktopFiles
+        ? "Continue for hub bill"
+        : !priceReady
+          ? "Calculating price..."
+          : "Continue to Payment";
 
   const multiEstimatedFiles = useMemo(() => {
     if (!isMulti) return [];
@@ -925,7 +938,7 @@ export default function UploadPage({
 
           {uploadNotice && (
             <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-              <p className="font-semibold">Office document preparation may take longer on web.</p>
+              <p className="font-semibold">Office file — hub conversion in progress</p>
               <p className="mt-1">{uploadNotice}</p>
             </div>
           )}
@@ -1006,7 +1019,9 @@ export default function UploadPage({
                               ? `${filePreparationState[index].pageCount || conf.pages || "?"}p`
                               : filePreparationState[index].status === PREPARATION_STATUS.FAILED
                                   ? "failed"
-                                  : "calc"}
+                                  : filePreparationState[index].status === PREPARATION_STATUS.PENDING_DESKTOP
+                                    ? "converting..."
+                                    : "calc"}
                           </span>
                         )}
                         <span className="bg-slate-200 px-2 py-0.5 rounded text-slate-700">{conf.colorType === 'bw' ? 'B/W' : 'Color'}</span>
@@ -1081,9 +1096,9 @@ export default function UploadPage({
           }`}>
             {priceSummaryHelp}
             {(hasPreparingFiles || activePreparationCount > 0) && (
-              <div className="flex items-center gap-3">
+              <div className="mt-2 flex items-center gap-3">
                 <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-700">
-                  <span>Preparing files</span>
+                  <span>{hasPendingDesktopFiles && !hasPreparingFiles ? "Ready for hub conversion" : "Preparing files"}</span>
                   <span className="flex h-1.5 w-1.5">
                     <span className="absolute inline-flex h-1.5 w-1.5 animate-ping rounded-full bg-emerald-400 opacity-75"></span>
                     <span
@@ -1154,7 +1169,7 @@ export default function UploadPage({
                        <Row label="Copies" value={file.copies} />
                        <Row label="Mode" value={`${file.colorType === "bw" ? "B/W" : "Color"} · ${file.sideType}`} />
                        <Row label="Rate" value={file.rate ? `₹${file.rate}` : "Pending"} />
-                       <Row label="Status" value={file.preparationStatus === PREPARATION_STATUS.READY ? "Ready" : file.preparationStatus === PREPARATION_STATUS.FAILED ? "Failed" : "Calculating"} />
+                       <Row label="Status" value={file.preparationStatus === PREPARATION_STATUS.READY ? "Ready" : file.preparationStatus === PREPARATION_STATUS.FAILED ? "Failed" : file.preparationStatus === PREPARATION_STATUS.PENDING_DESKTOP ? "Hub converting..." : "Calculating"} />
                      </div>
                    </div>
                  ))}
@@ -1223,7 +1238,7 @@ export default function UploadPage({
             )}
 
             <button onClick={handlePaymentClick} disabled={!canContinueForPayment || paymentLoading} className="flex-1 rounded-2xl bg-slate-900 px-2 py-3 text-sm font-semibold text-white disabled:opacity-40 md:mt-3 md:w-full md:px-4 md:text-base">
-              {paymentLoading ? "Calculating..." : !priceReady ? "Calculating price..." : (!selectedCentre ? "Select & Continue" : "Continue to Payment")}
+              {continueLabel}
             </button>
           </div>
         </Card>
@@ -1260,8 +1275,8 @@ export default function UploadPage({
           fileType={localPreview.type}
           fileSize={localPreview.size}
           textContent={localPreview.textContent}
-          loading={false}
-          error=""
+          loading={Boolean(localPreview.loading)}
+          error={localPreview.error || ""}
           onDownload={() => {
             const a = window.document.createElement("a");
             a.href = localPreview.url;

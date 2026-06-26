@@ -40,6 +40,10 @@ extraResources:
     to: "vendor/win/SumatraPDF.exe"
   - from: "vendor/win/THIRD_PARTY_NOTICES.md"
     to: "vendor/win/THIRD_PARTY_NOTICES.md"
+  - from: "vendor/libreoffice/win"
+    to: "vendor/libreoffice/win"
+    filter:
+      - "**/*"
 win:
   target:
     - target: nsis

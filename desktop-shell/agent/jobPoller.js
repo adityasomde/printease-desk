@@ -205,6 +205,67 @@ export async function downloadJobFile(job, file = null) {
   });
 }
 
+async function reportDesktopPreparationResult({ agentToken, file, cachedFilePath, expectedHash }) {
+  if (!file.requiresDesktopPreparation || file.preparationStatus !== "pending") {
+    return null;
+  }
+
+  const prepResult = await preparePrintFile({
+    filePath: cachedFilePath,
+    fileName: file.fileName || "document.pdf",
+    fileType: file.fileType || "application/pdf",
+    sha256: expectedHash,
+    cacheBaseDir: getDocumentCacheDirectory()
+  });
+
+  let preparedPageCount = null;
+  let status = "failed";
+  let errorCode = prepResult.reasonCode || "UNKNOWN_ERROR";
+  let errorMessage = prepResult.message || "Failed to prepare print file";
+  let convertedPdfBytes = null;
+
+  if (prepResult.success && prepResult.filePath) {
+    try {
+      convertedPdfBytes = await readFile(prepResult.filePath);
+      const pdfDoc = await PDFDocument.load(convertedPdfBytes, { ignoreEncryption: true });
+      preparedPageCount = pdfDoc.getPageCount();
+      status = "prepared";
+      errorCode = null;
+      errorMessage = null;
+    } catch {
+      errorCode = "PDF_PARSE_ERROR";
+      errorMessage = "Failed to count pages in converted PDF";
+      convertedPdfBytes = null;
+    }
+  }
+
+  // The backend independently verifies the uploaded PDF and becomes the source
+  // of truth for page count, hash, pricing, and bill confirmation.
+  const formData = new FormData();
+  formData.append("orderFileId", file.orderFileId);
+  formData.append("documentId", file.documentId);
+  formData.append("preparationStatus", status);
+  if (preparedPageCount) formData.append("preparedPageCount", String(preparedPageCount));
+  if (errorCode) formData.append("errorCode", errorCode);
+  if (errorMessage) formData.append("errorMessage", errorMessage);
+
+  if (convertedPdfBytes && status === "prepared") {
+    const blob = new Blob([convertedPdfBytes], { type: "application/pdf" });
+    formData.append(
+      "printReadyFile",
+      blob,
+      file.fileName?.replace(/\.[^.]+$/, ".pdf") || "converted.pdf"
+    );
+  }
+
+  return backendRequest({
+    endpoint: "/agent/preparation-result",
+    method: "POST",
+    agentToken,
+    body: formData
+  });
+}
+
 export async function predownloadPendingDocuments({ agentToken, limit = 15 } = {}) {
   const candidates = await getPredownloadCandidates({ agentToken, limit });
   if (!candidates.success) return candidates;
@@ -223,6 +284,21 @@ export async function predownloadPendingDocuments({ agentToken, limit = 15 } = {
 
     const alreadyCached = await findCachedDocument(documentId, expectedHash);
     if (alreadyCached) {
+      try {
+        await reportDesktopPreparationResult({
+          agentToken,
+          file,
+          cachedFilePath: alreadyCached,
+          expectedHash
+        });
+      } catch (error) {
+        failures.push({
+          documentId,
+          orderId: file.orderId || null,
+          message: error.message || "Cached document preparation failed.",
+        });
+      }
+
       cachedFiles.push({
         documentId,
         orderId: file.orderId || null,
@@ -251,48 +327,12 @@ export async function predownloadPendingDocuments({ agentToken, limit = 15 } = {
 
       if (cached.success) {
         try {
-          const prepResult = await preparePrintFile({
-            filePath: cached.filePath,
-            fileName: file.fileName || "document.pdf",
-            fileType: file.fileType || "application/pdf",
-            sha256: expectedHash,
-            cacheBaseDir: getDocumentCacheDirectory()
+          await reportDesktopPreparationResult({
+            agentToken,
+            file,
+            cachedFilePath: cached.filePath,
+            expectedHash
           });
-
-          if (file.requiresDesktopPreparation && file.preparationStatus === 'pending') {
-            let preparedPageCount = null;
-            let status = 'failed';
-            let errorCode = prepResult.reasonCode || 'UNKNOWN_ERROR';
-            let errorMessage = prepResult.message || 'Failed to prepare print file';
-
-            if (prepResult.success && prepResult.filePath) {
-              try {
-                const pdfBytes = await readFile(prepResult.filePath);
-                const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
-                preparedPageCount = pdfDoc.getPageCount();
-                status = 'prepared';
-                errorCode = null;
-                errorMessage = null;
-              } catch (pdfErr) {
-                errorCode = 'PDF_PARSE_ERROR';
-                errorMessage = 'Failed to count pages in converted PDF';
-              }
-            }
-
-            await backendRequest({
-              endpoint: "/agent/preparation-result",
-              method: "POST",
-              agentToken,
-              body: {
-                orderFileId: file.orderFileId,
-                documentId: file.documentId,
-                preparedPageCount,
-                preparationStatus: status,
-                errorCode,
-                errorMessage
-              }
-            });
-          }
         } catch (e) {
           console.warn("Predownload preparation failed:", e);
         }

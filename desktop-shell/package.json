@@ -1,6 +1,6 @@
 {
   "name": "printease-desktop-shell",
-  "version": "0.1.69",
+  "version": "0.1.70",
   "private": true,
   "type": "module",
   "packageManager": "traversal@0.0.0",
@@ -21,10 +21,13 @@
     "start": "node scripts/run-electron-app.cjs",
     "pack": "npm_config_loglevel=error node scripts/run-electron-builder.cjs --dir",
     "dist": "npm_config_loglevel=error node scripts/run-electron-builder.cjs --publish never",
-    "dist:win": "cross-env PE_TARGET_PLATFORM=win32 electron-builder --config electron-builder.win.yml --win nsis --publish never",
+    "dist:win": "node scripts/download-libreoffice.js --platform win32 && cross-env PE_TARGET_PLATFORM=win32 electron-builder --config electron-builder.win.yml --win nsis --publish never",
     "verify:package": "node scripts/verify-package-files.cjs",
-    "dist:linux": "cross-env PE_TARGET_PLATFORM=linux npm_config_loglevel=error electron-builder --config electron-builder.linux.yml --linux AppImage deb --publish never && node scripts/create-linux-blockmaps.cjs",
-    "dist:appimage": "cross-env PE_TARGET_PLATFORM=linux npm_config_loglevel=error electron-builder --config electron-builder.linux.yml --linux AppImage --publish never && node scripts/create-linux-blockmaps.cjs",
+    "dist:linux": "node scripts/download-libreoffice.js --copy-local --platform linux && cross-env PE_TARGET_PLATFORM=linux npm_config_loglevel=error electron-builder --config electron-builder.linux.yml --linux AppImage deb --publish never && node scripts/create-linux-blockmaps.cjs",
+    "dist:appimage": "node scripts/download-libreoffice.js --copy-local --platform linux && cross-env PE_TARGET_PLATFORM=linux npm_config_loglevel=error electron-builder --config electron-builder.linux.yml --linux AppImage --publish never && node scripts/create-linux-blockmaps.cjs",
+    "download:libreoffice": "node scripts/download-libreoffice.js",
+    "download:libreoffice:linux": "node scripts/download-libreoffice.js --platform linux --copy-local",
+    "download:libreoffice:win": "node scripts/download-libreoffice.js --platform win32",
     "release:gui": "node tools/release-gui/start.cjs"
   },
   "devDependencies": {
@@ -75,6 +78,13 @@
       {
         "from": "vendor/win/THIRD_PARTY_NOTICES.md",
         "to": "vendor/win/THIRD_PARTY_NOTICES.md"
+      },
+      {
+        "from": "vendor/libreoffice",
+        "to": "vendor/libreoffice",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "win": {

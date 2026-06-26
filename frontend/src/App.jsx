@@ -1397,19 +1397,12 @@ export default function App() {
             }
           }
 
-          /**
-           * Modified Upload Logic (June 2026)
-           * Purpose: Prevents DOCX/PPTX files from being sent to the backend and agent.
-           * By sending ONLY the `printReadyFile` (which is the local PDF conversion result),
-           * the backend simply treats it as a standard PDF upload. This completely removes
-           * the need for the desktop agent to perform document conversion for Office files.
-           * 
-           * Dependencies:
-           * - printReadyFile: The converted PDF (from prepareBrowserPrintReadyFile)
-           * - file: The original file selected by the user
-           * 
-           * Logic: If a local print-ready PDF was generated, we upload THAT as the 'document'.
-           * Otherwise, we fallback to uploading the original file.
+          /*
+           * Browser-safe files may upload a verified print-ready PDF immediately.
+           * Office files intentionally upload the original and carry
+           * requiresDesktopPreparation=true. The paired hub desktop then converts
+           * them with LibreOffice, uploads the PDF, and the backend verifies page
+           * count/hash before confirming the final bill.
            */
           const formData = new FormData();
           
@@ -1451,7 +1444,12 @@ export default function App() {
       for (const doc of uploadedDocuments) {
         if (doc.pageCount) totalPagesSum += Number(doc.pageCount);
       }
-      const trustedPageCount = totalPagesSum > 0 ? totalPagesSum : pages;
+      const hasDesktopPreparationUploads = uploadedDocuments.some((document) => document.requiresDesktopPreparation);
+      const trustedPageCount = totalPagesSum > 0
+        ? totalPagesSum
+        : hasDesktopPreparationUploads
+          ? 0
+          : pages;
 
       if (trustedPageCount !== pages) {
         setPages(trustedPageCount);
@@ -1506,7 +1504,7 @@ export default function App() {
             return {
               documentId: document.id,
               documentName: document.fileName,
-              pages: document.pageCount || config.pages || 1,
+              pages: document.pageCount || (document.requiresDesktopPreparation ? 0 : config.pages),
               selectedPages: config.selectedPages,
               copies: config.copies,
               colorType: config.colorType,

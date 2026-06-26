@@ -16,10 +16,17 @@ function createHeaders(agentToken) {
 }
 
 export async function backendRequest({ endpoint, method = "GET", agentToken, body }) {
+  const isFormData = body instanceof FormData;
+  const headers = createHeaders(agentToken);
+  
+  if (isFormData) {
+    delete headers["Content-Type"];
+  }
+
   const response = await fetch(`${getApiBaseUrl()}${endpoint}`, {
     method,
-    headers: createHeaders(agentToken),
-    body: body ? JSON.stringify(body) : undefined,
+    headers,
+    body: isFormData ? body : (body ? JSON.stringify(body) : undefined),
   });
 
   const data = await response.json().catch(() => ({}));

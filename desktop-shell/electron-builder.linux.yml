@@ -36,6 +36,10 @@ extraResources:
     filter:
       - "**/*"
       - "!**/*.md"
+  - from: "vendor/libreoffice/linux"
+    to: "vendor/libreoffice/linux"
+    filter:
+      - "**/*"
 linux:
   target:
     - target: AppImage

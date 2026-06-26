@@ -78,7 +78,7 @@ function isOrderCancelled(order) {
 function isPaymentPending(order) {
   if (isOrderCancelled(order)) return false;
   const value = String(order?.paymentStatus || order?.payment_status || "").toLowerCase();
-  return value === "pending" || value === "unpaid" || !value;
+  return value === "pending" || value === "unpaid" || value === "requested";
 }
 
 const CLOSED_STATUSES = new Set(["collected", "refund_requested", "printing_failed", "cancelled"]);
@@ -548,34 +548,14 @@ export default function HubActiveOrdersManager({
           ))}
         </select>
         <div className="flex flex-wrap gap-1.5">
-          {canPauseOrder(order) && (
-            <button
-              type="button"
-              onClick={() => quickUpdateOrderStatus(order, "Paused")}
-              disabled={statusActionId === `${orderId}:Paused`}
-              className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-semibold text-slate-700 disabled:opacity-50"
-            >
-              <PauseCircle size={13} /> {statusActionId === `${orderId}:Paused` ? "Saving" : "Pause"}
-            </button>
-          )}
-          {normalizeStatus(order.status) === "paused" && (
-            <button
-              type="button"
-              onClick={() => quickUpdateOrderStatus(order, isPaymentVerified(order) ? "Payment Verified" : "Payment Pending")}
-              disabled={statusActionId.startsWith(`${orderId}:`)}
-              className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 px-2 py-1 text-xs font-semibold text-emerald-700 disabled:opacity-50"
-            >
-              Resume
-            </button>
-          )}
           {canCancelOrder(order) && (
             <button
               type="button"
-              onClick={() => quickUpdateOrderStatus(order, "Cancelled")}
-              disabled={statusActionId === `${orderId}:Cancelled`}
+              onClick={() => quickUpdateOrderStatus(order, "cancelled")}
+              disabled={statusActionId === `${orderId}:cancelled`}
               className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-2 py-1 text-xs font-semibold text-rose-700 disabled:opacity-50"
             >
-              <XCircle size={13} /> {statusActionId === `${orderId}:Cancelled` ? "Saving" : "Cancel"}
+              <XCircle size={13} /> {statusActionId === `${orderId}:cancelled` ? "Saving" : "Cancel"}
             </button>
           )}
         </div>
@@ -739,34 +719,14 @@ export default function HubActiveOrdersManager({
                       ))}
                     </select>
                     <div className="mt-2 flex flex-wrap gap-1.5">
-                      {canPauseOrder(order) && (
-                        <button
-                          type="button"
-                          onClick={() => quickUpdateOrderStatus(order, "Paused")}
-                          disabled={statusActionId === `${orderId}:Paused`}
-                          className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-semibold text-slate-700 disabled:opacity-50"
-                        >
-                          <PauseCircle size={13} /> {statusActionId === `${orderId}:Paused` ? "Saving" : "Pause"}
-                        </button>
-                      )}
-                      {normalizeStatus(order.status) === "paused" && (
-                        <button
-                          type="button"
-                          onClick={() => quickUpdateOrderStatus(order, isPaymentVerified(order) ? "Payment Verified" : "Payment Pending")}
-                          disabled={statusActionId.startsWith(`${orderId}:`)}
-                          className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 px-2 py-1 text-xs font-semibold text-emerald-700 disabled:opacity-50"
-                        >
-                          Resume
-                        </button>
-                      )}
                       {canCancelOrder(order) && (
                         <button
                           type="button"
-                          onClick={() => quickUpdateOrderStatus(order, "Cancelled")}
-                          disabled={statusActionId === `${orderId}:Cancelled`}
+                          onClick={() => quickUpdateOrderStatus(order, "cancelled")}
+                          disabled={statusActionId === `${orderId}:cancelled`}
                           className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-2 py-1 text-xs font-semibold text-rose-700 disabled:opacity-50"
                         >
-                          <XCircle size={13} /> {statusActionId === `${orderId}:Cancelled` ? "Saving" : "Cancel"}
+                          <XCircle size={13} /> {statusActionId === `${orderId}:cancelled` ? "Saving" : "Cancel"}
                         </button>
                       )}
                     </div>

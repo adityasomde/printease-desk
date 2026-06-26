@@ -65,15 +65,10 @@ export const orderStatuses = [
 ];
 
 export const hubStatusOptions = [
-  "Payment Verified",
-  "Accepted by Centre",
-  "Queued for Printing",
-  "Sent to Agent",
-  "Printing",
-  "Paused",
-  "Ready for Pickup",
-  "Collected",
-  "Printing Failed",
-  "Cancelled",
-  "Refund Requested",
+  "payment_collected",
+  "queued_for_print",
+  "printing",
+  "completed",
+  "failed",
+  "cancelled"
 ];

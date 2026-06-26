@@ -9,9 +9,9 @@ export function createPrintOrder({ selectedCentre, documentName, pages, copies, 
     pages: Number(pages),
     copies: Number(copies),
     amount: totalAmount,
-    status: "Payment Verified",
+    status: "queued_for_print",
     date: "Today",
-    paymentStatus: "Verified",
+    paymentStatus: "requested",
     pickupCode,
   };
 }

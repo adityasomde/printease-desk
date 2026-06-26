@@ -25,7 +25,7 @@ const paymentOptions = [
 
 function formatCurrency(value) {
   const num = Number(value);
-  if (isNaN(num) || num === 0) return "₹0.00";
+  if (isNaN(num)) return "Pending";
   return `₹${num.toFixed(2)}`;
 }
 
@@ -59,6 +59,13 @@ export default function PaymentPage({
   const centreUpi = selectedCentre?.upiId || "";
   const upiQrUrl = selectedCentre?.upiQrImageUrl || "";
   const isMultiFileOrder = Array.isArray(backendPrice?.files) && backendPrice.files.length > 1;
+  const orderStatus = String(order?.status || "").toLowerCase();
+  const billStatus = String(order?.billStatus || order?.bill_status || "").toLowerCase();
+  const isBillPending =
+    orderStatus === "awaiting_hub_bill_confirmation" ||
+    orderStatus === "draft_uploaded" ||
+    billStatus === "awaiting_hub_confirmation" ||
+    Boolean(backendPrice?.files?.some?.((file) => file?.pricingPending));
 
   const handlePaymentClick = () => {
     const printablePages = backendPrice?.printablePageCount || (selectedPageCount * (copies || 1));
@@ -70,7 +77,9 @@ export default function PaymentPage({
   };
 
   const buttonLabel =
-    paymentMethod === "razorpay"
+    isBillPending
+      ? "Bill pending"
+      : paymentMethod === "razorpay"
       ? `Pay ${formatCurrency(amount)}`
       : paymentMethod === "upi_qr"
         ? `Generate UPI QR · ${formatCurrency(amount)}`
@@ -83,12 +92,12 @@ export default function PaymentPage({
         : "Creating request...";
   const ButtonIcon = paymentMethod === "razorpay" ? CreditCard : paymentMethod === "upi_qr" ? QrCode : Clock;
 
-  const isDisabled = paymentLoading || amount <= 0;
+  const isDisabled = paymentLoading || isBillPending || amount <= 0;
 
   return (
-    <div className="mx-auto max-w-2xl pb-6">
-      <Card>
-        <h2 className="text-2xl font-bold">Payment</h2>
+    <div className="mx-auto max-w-2xl pb-[calc(7rem+env(safe-area-inset-bottom))] md:pb-6">
+      <Card className="p-3 sm:p-5">
+        <h2 className="text-xl sm:text-2xl font-bold min-w-0">Payment</h2>
         <p className="mt-2 text-slate-600">
           Choose manual collection for shop-owner confirmation, or use Razorpay when online payments are enabled.
         </p>
@@ -110,7 +119,7 @@ export default function PaymentPage({
             </>
           )}
           <div className="border-t pt-3">
-            <OrderSummaryRow label="Total Amount" value={formatCurrency(amount)} highlight />
+            <OrderSummaryRow label="Total Amount" value={isBillPending ? "Pending" : formatCurrency(amount)} highlight />
           </div>
         </div>
 
@@ -129,7 +138,7 @@ export default function PaymentPage({
         )}
 
         {/* Payment method selector */}
-        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+        <div className="mt-5 grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-3">
           {paymentOptions.map((option) => {
             const Icon = option.icon;
             const active = paymentMethod === option.id;
@@ -157,12 +166,11 @@ export default function PaymentPage({
           })}
         </div>
 
-        {/* Centre UPI details */}
         <div className="mt-4 rounded-2xl border p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between min-w-0">
+            <div className="min-w-0">
               <p className="font-semibold">UPI ID</p>
-              <p className="mt-1 break-all text-sm text-slate-600">{centreUpi || "This centre has not added a UPI ID."}</p>
+              <p className="mt-1 break-words text-sm text-slate-600">{centreUpi || "This centre has not added a UPI ID."}</p>
             </div>
             <ShieldCheck className="text-emerald-600" size={24} />
           </div>
@@ -182,7 +190,13 @@ export default function PaymentPage({
         </div>
 
         {/* Validation: zero amount */}
-        {amount <= 0 && !paymentLoading && (
+        {isBillPending && !paymentLoading && (
+          <p className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700">
+            Bill confirmation is pending. The hub desktop must finish document preparation before payment can be requested.
+          </p>
+        )}
+
+        {amount <= 0 && !isBillPending && !paymentLoading && (
           <p className="mt-4 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-semibold text-orange-700">
             Order amount is ₹0. Please check your print settings and try again.
           </p>
@@ -200,13 +214,13 @@ export default function PaymentPage({
       <div className="h-24 md:hidden"></div>
 
       {/* Floating Action Bar */}
-      <div className="fixed bottom-[84px] left-4 right-4 z-40 rounded-2xl border bg-white/90 p-2 shadow-2xl backdrop-blur md:static md:bottom-auto md:z-auto md:mt-6 md:block md:border-0 md:bg-transparent md:p-0 md:shadow-none md:backdrop-blur-none">
+      <div className="fixed bottom-[calc(84px+env(safe-area-inset-bottom))] left-2 right-2 sm:left-4 sm:right-4 z-40 rounded-2xl border bg-white/90 p-2 shadow-2xl backdrop-blur md:static md:bottom-auto md:z-auto md:mt-6 md:block md:border-0 md:bg-transparent md:p-0 md:shadow-none md:backdrop-blur-none">
         <button
           disabled={isDisabled}
           onClick={handlePaymentClick}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:opacity-70 md:rounded-2xl"
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-3 sm:px-4 py-3 text-sm sm:text-base font-semibold whitespace-normal leading-tight text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:opacity-70 md:rounded-2xl"
         >
-          <ButtonIcon size={18} /> {paymentLoading ? loadingLabel : buttonLabel}
+          <ButtonIcon size={18} className="shrink-0" /> <span className="break-words">{paymentLoading ? loadingLabel : buttonLabel}</span>
         </button>
       </div>
     </div>

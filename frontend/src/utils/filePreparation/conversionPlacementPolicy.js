@@ -277,11 +277,22 @@ export function decideConversionPlacement({ fileInfo = {}, hubLoad = {}, userPre
     };
   }
 
-  // Office files stay desktop-side because browser conversion is unreliable.
+  // Browser best-effort for small Office files (e.g. < 5MB).
+  // Larger Office files require manual hub review (MANUAL) instead of auto desktop conversion.
   if (kind === FILE_KIND.OFFICE) {
+    if (fileSizeBytes <= 5 * MB) {
+      return {
+        placement: CONVERSION_PLACEMENT.BROWSER,
+        reasonCode: 'SMALL_OFFICE_BROWSER_ATTEMPT',
+        kind,
+        browserSeconds,
+        desktopSeconds,
+      };
+    }
+
     return {
-      placement: CONVERSION_PLACEMENT.DESKTOP,
-      reasonCode: hubFreeSoon ? 'OFFICE_DESKTOP_HUB_FREE_SOON' : 'OFFICE_REQUIRES_DESKTOP_ENGINE',
+      placement: CONVERSION_PLACEMENT.MANUAL,
+      reasonCode: 'COMPLEX_OFFICE_REQUIRES_HUB_REVIEW',
       kind,
       browserSeconds,
       desktopSeconds,

@@ -178,6 +178,19 @@ export default function UploadPage({
 
   useEffect(() => {
     filePreparationStateRef.current = filePreparationState;
+    
+    // Check if any office file was prepared in the browser
+    const hasBrowserOfficePreview = Object.values(filePreparationState).some(
+      (item) => item?.status === PREPARATION_STATUS.READY && item?.fileKind === "office" && item?.previewKind === "pdf"
+    );
+
+    if (hasBrowserOfficePreview) {
+      const warningKey = "printease_office_accuracy_warning_seen";
+      if (!sessionStorage.getItem(warningKey)) {
+        window.alert("Office document preview is browser-generated and may not be 100% accurate. For precise layout, please convert your file to PDF before uploading, or wait for hub review.");
+        sessionStorage.setItem(warningKey, "true");
+      }
+    }
   }, [filePreparationState]);
 
   const displayFiles = useMemo(() => {

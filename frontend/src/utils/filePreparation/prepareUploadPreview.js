@@ -82,16 +82,16 @@ export async function prepareUploadPreview(file, context = {}) {
 
   if (kind === 'office') {
     return {
-      status: PREPARATION_STATUS.FAILED,
+      status: PREPARATION_STATUS.READY,
       fileKind: kind,
-      pageCount: null,
+      pageCount: 1, // Hub will recalculate real page count
       previewPdfUrl: '',
       previewKind: 'unsupported',
       printReadyFile: null,
       conversionPlacement: 'manual',
       conversionSource: 'none',
       reasonCode: 'BROWSER_OFFICE_CONVERSION_UNAVAILABLE',
-      errorMessage: 'Could not prepare this Office document in browser. Please export as PDF and upload again.',
+      message: 'Office document will be prepared by the hub.',
     };
   }
 

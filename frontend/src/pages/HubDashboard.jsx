@@ -349,7 +349,7 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
         </button>
       </div>
 
-      <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
+      <div className="grid gap-4 grid-cols-1 min-[380px]:grid-cols-2 md:grid-cols-4">
         <Metric title="Total Orders" value={ordersForHub.length} icon={<FileText />} />
         <Metric title="Active Orders" value={pendingOrders} icon={<Printer />} />
         <Metric title="Pages Printed" value={totalPages} icon={<BarChart3 />} />

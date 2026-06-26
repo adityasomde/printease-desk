@@ -63,7 +63,6 @@ export default function PaymentPage({
   const billStatus = String(order?.billStatus || order?.bill_status || "").toLowerCase();
   const isBillPending =
     orderStatus === "awaiting_hub_bill_confirmation" ||
-    orderStatus === "draft_uploaded" ||
     billStatus === "awaiting_hub_confirmation" ||
     Boolean(backendPrice?.files?.some?.((file) => file?.pricingPending));
 

@@ -2,6 +2,7 @@ import { PDFDocument } from 'pdf-lib';
 import { prepareBrowserPrintReadyFile } from './prepareBrowserPrintReadyFile';
 import { detectUploadFileKind } from './detectUploadFileKind';
 import { convertTextToPdfInBrowser } from './textToPdfBrowser';
+import { convertGenericFileToPdfInBrowser } from './localUniversalConverter';
 
 export const PREPARATION_STATUS = Object.freeze({
   IDLE: 'idle',
@@ -80,18 +81,20 @@ export async function prepareUploadPreview(file, context = {}) {
     };
   }
 
-  if (kind === 'office') {
+  if (kind === 'office' || kind === 'archive' || kind === 'unsupported') {
+    const printReadyFile = await convertGenericFileToPdfInBrowser(file);
+    const pageCount = await countPdfPages(printReadyFile);
     return {
-      status: PREPARATION_STATUS.PENDING_DESKTOP,
+      status: PREPARATION_STATUS.READY,
       fileKind: kind,
-      pageCount: null,
-      previewPdfUrl: '',
-      previewKind: 'unsupported',
-      printReadyFile: null,
-      conversionPlacement: 'desktop',
-      conversionSource: 'none',
-      reasonCode: 'DESKTOP_OFFICE_CONVERSION_REQUIRED',
-      message: 'Office document will be converted and counted by the hub desktop before payment.',
+      pageCount,
+      previewPdfUrl: URL.createObjectURL(printReadyFile),
+      previewKind: 'pdf',
+      printReadyFile,
+      conversionPlacement: 'browser',
+      conversionSource: 'browser',
+      reasonCode: 'LOCAL_UNIVERSAL_CONVERSION',
+      message: 'File converted locally to print-ready PDF.',
       errorMessage: '',
     };
   }
@@ -104,7 +107,7 @@ export async function prepareUploadPreview(file, context = {}) {
     previewKind: 'unsupported',
     printReadyFile: null,
     reasonCode: 'UNSUPPORTED_PREVIEW_TYPE',
-    errorMessage: 'This file type cannot be priced or previewed safely yet. Please upload as PDF.',
+    errorMessage: 'This file type cannot be priced or previewed safely. Please upload as PDF.',
   };
 }
 

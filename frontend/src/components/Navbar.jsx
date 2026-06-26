@@ -30,7 +30,7 @@ function MobileNavButton({ label, icon, active, onClick }) {
   return (
     <button
       onClick={onClick}
-      className={`flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[11px] font-semibold ${active ? "bg-slate-900 text-white" : "text-slate-600"
+      className={`flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl sm:rounded-2xl px-1 sm:px-2 py-1.5 sm:py-2 text-[10px] sm:text-[11px] font-semibold ${active ? "bg-slate-900 text-white" : "text-slate-600"
         }`}
     >
       {icon}
@@ -125,8 +125,8 @@ export default function Navbar({
         </div>
       </header>
 
-      <nav className="fixed inset-x-0 bottom-0 z-50 border-t bg-white/95 px-2 py-2 shadow-2xl backdrop-blur md:hidden">
-        <div className="mx-auto flex max-w-md gap-1">
+      <nav className="fixed inset-x-0 bottom-0 z-50 border-t bg-white/95 px-1 py-1 sm:px-2 sm:py-2 pb-[calc(0.25rem+env(safe-area-inset-bottom))] shadow-2xl backdrop-blur md:hidden overflow-x-auto">
+        <div className="mx-auto flex w-full max-w-md gap-0.5 sm:gap-1">
           <MobileNavButton label="Home" active={page === "home"} icon={<Home size={18} />} onClick={() => navigate("home")} />
           <MobileNavButton label="Scan" active={page === "centre"} icon={<QrCode size={18} />} onClick={() => navigate("centre")} />
           <MobileNavButton label="Upload" active={page === "upload"} icon={<Upload size={18} />} onClick={() => navigate("upload")} />

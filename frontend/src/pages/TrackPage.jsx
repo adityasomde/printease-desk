@@ -13,7 +13,7 @@ const orderStatuses = [
 ];
 
 const statusMap = {
-  draft_uploaded: "Awaiting Hub Bill Confirmation",
+  draft_uploaded: "Draft Uploaded",
   awaiting_hub_bill_confirmation: "Awaiting Hub Bill Confirmation",
   bill_confirmed: "Bill Confirmed",
   payment_requested: "Payment Requested",
@@ -39,7 +39,7 @@ function isPaymentPending(order) {
 
 function isAwaitingHub(order) {
   const value = String(order?.status || "").toLowerCase();
-  return ["draft_uploaded", "awaiting_hub_bill_confirmation"].includes(value);
+  return ["awaiting_hub_bill_confirmation"].includes(value);
 }
 
 export default function TrackPage({

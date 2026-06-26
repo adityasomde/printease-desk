@@ -274,11 +274,6 @@ export function getOrderDocuments(orderId) {
   return apiRequest(`/api/orders/${encodeURIComponent(orderId)}/documents`);
 }
 
-export function confirmOrderBill(orderId) {
-  return apiRequest(`/api/hubs/orders/${orderId}/confirm-bill`, {
-    method: "POST",
-  });
-}
 
 export function reprintOrder(orderId, options = {}) {
   return apiRequest(`/api/orders/${encodeURIComponent(orderId)}/reprint`, {

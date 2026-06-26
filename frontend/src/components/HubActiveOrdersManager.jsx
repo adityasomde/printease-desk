@@ -40,6 +40,7 @@ function displayStatus(status) {
   const normalized = normalizeStatus(status);
   const labels = {
     draft_uploaded: "Draft Uploaded",
+    awaiting_hub_bill_confirmation: "Hub Bill Pending",
     payment_requested: "Payment Requested",
     payment_collected: "Payment Collected",
     payment_pending: "Payment Pending",
@@ -76,6 +77,28 @@ function isPaymentPending(order) {
   if (isOrderCancelled(order)) return false;
   const value = normalizeStatus(order?.paymentStatus || order?.payment_status);
   return value === "pending" || value === "unpaid" || value === "requested" || value === "payment_requested";
+}
+
+function isBillPending(order) {
+  const status = normalizeStatus(order?.rawStatus || order?.status);
+  const billStatus = normalizeStatus(order?.billStatus || order?.bill_status);
+  const snapshot = order?.priceSnapshot || order?.price_snapshot || {};
+  return Boolean(
+    order?.pricingPending ||
+    snapshot?.pricingPending ||
+    status === "awaiting_hub_bill_confirmation" ||
+    billStatus === "awaiting_hub_confirmation"
+  );
+}
+
+function displayOrderAmount(order) {
+  return isBillPending(order) || Number(order?.amount || 0) <= 0
+    ? "Pending"
+    : `₹${order.amount}`;
+}
+
+function displayOrderPages(order) {
+  return isBillPending(order) || !order?.pages ? "Pending" : `${order.pages} × ${order.copies || 1}`;
 }
 
 const CLOSED_STATUSES = new Set(["collected", "refund_requested", "printing_failed", "cancelled"]);
@@ -128,10 +151,12 @@ function canConfigureOrder(order, job) {
 function OrderBadges({ order, job }) {
   const paymentVerified = isPaymentVerified(order);
   const paymentPending = isPaymentPending(order);
+  const billPending = isBillPending(order);
   return (
     <div className="flex flex-wrap gap-1.5">
       <StatusBadge color={paymentVerified ? "green" : "amber"}>{label(order.paymentStatus)}</StatusBadge>
       <StatusBadge>{displayStatus(order.status)}</StatusBadge>
+      {billPending && <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700">Hub conversion pending</span>}
       {paymentPending && <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700">Pending</span>}
       {paymentVerified && <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">Paid</span>}
       {job && <span className="rounded-full bg-sky-50 px-2.5 py-1 text-[11px] font-bold text-sky-700">{displayStatus(job.status)}</span>}
@@ -448,6 +473,7 @@ export default function HubActiveOrdersManager({
     const sendEnabled = canSendToAgent(order);
     const paymentPending = isPaymentPending(order);
     const paymentVerified = isPaymentVerified(order);
+    const billPending = isBillPending(order);
     const orderCancelled = isOrderCancelled(order);
     const cancelledBeforePayment = orderCancelled && !paymentVerified;
     const canConfigure = canConfigureOrder(order, job);
@@ -472,7 +498,12 @@ export default function HubActiveOrdersManager({
           </button>
         )}
 
-        {paymentPending && (
+        {billPending && (
+          <p className="rounded-xl border border-blue-200 bg-blue-50 px-2 py-2 text-xs font-semibold text-blue-700">
+            Hub desktop is converting/verifying this order before the final bill.
+          </p>
+        )}
+        {paymentPending && !billPending && (
           <button
             onClick={() => markCashCollected(order)}
             disabled={collectingOrderId === orderId || normalizeStatus(order.paymentStatus) === "draft"}
@@ -593,11 +624,11 @@ export default function HubActiveOrdersManager({
                   <p className="truncate text-sm font-black text-slate-950">{order.id}</p>
                   <p className="mt-1 truncate text-xs text-slate-500">{order.document}</p>
                 </div>
-                <p className="rounded-xl bg-white px-2.5 py-1 text-sm font-black text-slate-950">₹{order.amount}</p>
+                <p className="rounded-xl bg-white px-2.5 py-1 text-sm font-black text-slate-950">{displayOrderAmount(order)}</p>
               </div>
               <div className="mt-3 grid gap-2 text-xs text-slate-600">
                 <p><span className="font-semibold text-slate-900">{order.customerName || "Customer"}</span>{order.customerMobile ? ` · ${order.customerMobile}` : ""}</p>
-                <p>{order.pages} pages × {order.copies} copies · {order.date || "recent"}</p>
+                <p>{displayOrderPages(order)} · {order.date || "recent"}</p>
                 <OrderBadges order={order} job={job} />
               </div>
               <div className="mt-4 grid gap-3">
@@ -630,6 +661,7 @@ export default function HubActiveOrdersManager({
               const sendEnabled = canSendToAgent(order);
               const paymentPending = isPaymentPending(order);
               const paymentVerified = isPaymentVerified(order);
+              const billPending = isBillPending(order);
               const orderCancelled = isOrderCancelled(order);
               const cancelledBeforePayment = orderCancelled && !paymentVerified;
               const canConfigure = canConfigureOrder(order, job);
@@ -664,14 +696,17 @@ export default function HubActiveOrdersManager({
                       )}
                     </div>
                   </td>
-                  <td className="px-3 py-4 whitespace-nowrap font-medium">{order.pages} × {order.copies}</td>
-                  <td className="px-3 py-4 whitespace-nowrap font-bold">₹{order.amount}</td>
+                  <td className="px-3 py-4 whitespace-nowrap font-medium">{displayOrderPages(order)}</td>
+                  <td className="px-3 py-4 whitespace-nowrap font-bold">{displayOrderAmount(order)}</td>
                   <td className="px-3 py-4">
                     <StatusBadge color={paymentVerified ? "green" : "amber"}>{label(order.paymentStatus)}</StatusBadge>
                     {cancelledBeforePayment && (
                       <p className="mt-1 text-xs font-semibold text-rose-600">Cancelled before payment.</p>
                     )}
-                    {paymentPending && (
+                    {billPending && (
+                      <p className="mt-1 text-xs font-semibold text-blue-700">Hub conversion and bill verification pending.</p>
+                    )}
+                    {paymentPending && !billPending && (
                       <p className="mt-1 text-xs text-slate-500">Awaiting payment.</p>
                     )}
                     {paymentVerified && (
@@ -713,7 +748,12 @@ export default function HubActiveOrdersManager({
                           Cancelled before payment. Cash collection is disabled.
                         </p>
                       )}
-                      {paymentPending && (
+                      {billPending && (
+                        <p className="rounded-xl border border-blue-200 bg-blue-50 px-2 py-2 text-xs font-semibold text-blue-700">
+                          Conversion/bill pending. Cash collection unlocks after the verified bill is ready.
+                        </p>
+                      )}
+                      {paymentPending && !billPending && (
                         <button
                           onClick={() => markCashCollected(order)}
                           disabled={collectingOrderId === orderId || normalizeStatus(order.paymentStatus) === "draft"}

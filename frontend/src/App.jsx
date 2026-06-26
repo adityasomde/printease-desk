@@ -375,6 +375,18 @@ function normalizeOrder(order, centreList = []) {
   const centreCodeFromOrder = order.centreCode || order.centre_code;
   const centre = centreList.find((item) => item.id === centreId || item.code === centreCodeFromOrder);
   const orderCode = order.orderCode || order.order_code || order.id;
+  const rawStatus = order.status || "";
+  const rawBillStatus = order.billStatus || order.bill_status || "";
+  const rawPages = order.pages ?? order.printablePageCount ?? order.printable_page_count ?? order.selectedPageCount ?? order.selected_page_count ?? null;
+  const normalizedPages = Number(rawPages);
+  const priceSnapshot = order.priceSnapshot || order.price_snapshot || null;
+  const pricingPending = Boolean(
+    order.pricingPending ||
+    order.pricing_pending ||
+    priceSnapshot?.pricingPending ||
+    String(rawStatus).toLowerCase() === "awaiting_hub_bill_confirmation" ||
+    String(rawBillStatus).toLowerCase() === "awaiting_hub_confirmation"
+  );
 
   return {
     id: orderCode,
@@ -385,10 +397,13 @@ function normalizeOrder(order, centreList = []) {
     customerName: extractCustomerName(order) || "Customer",
     customerMobile: order.customerMobile || order.customer_mobile || order.userMobile || order.user_mobile || order.customer?.mobile || order.user?.mobile || order.mobile || "",
     document: order.documentName || order.document_name || order.document || "Uploaded Document",
-    pages: Number(order.pages || order.printablePageCount || order.printable_page_count || order.selectedPageCount || order.selected_page_count || 1),
+    pages: Number.isFinite(normalizedPages) && normalizedPages > 0 ? normalizedPages : null,
     copies: Number(order.copies || 1),
     amount: Number(order.amount ?? (order.totalAmountPaise || order.total_amount_paise ? Number(order.totalAmountPaise || order.total_amount_paise) / 100 : 0)),
-    status: toDisplayLabel(order.status || "Payment Pending"),
+    rawStatus,
+    status: toDisplayLabel(rawStatus || "Payment Pending"),
+    billStatus: rawBillStatus,
+    pricingPending,
     date: formatOrderDate(order.createdAt || order.created_at || order.date),
     paymentStatus: toDisplayLabel(order.paymentStatus || order.payment_status || "Pending"),
     pickupCode: order.pickupCode || order.pickup_code || "",
@@ -396,7 +411,7 @@ function normalizeOrder(order, centreList = []) {
     latestConfiguredByRole: order.latestConfiguredByRole || order.latest_configured_by_role || null,
     latestConfiguredAt: order.latestConfiguredAt || order.latest_configured_at || null,
     latestConfigSource: order.latestConfigSource || order.latest_config_source || null,
-    priceSnapshot: order.priceSnapshot || order.price_snapshot || null,
+    priceSnapshot,
     printConfigSnapshot: order.printConfigSnapshot || order.print_config_snapshot || order.printOptions || order.print_options || null,
   };
 }

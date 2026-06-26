@@ -25,8 +25,32 @@ const paymentOptions = [
 
 function formatCurrency(value) {
   const num = Number(value);
-  if (isNaN(num)) return "Pending";
+  if (isNaN(num) || num <= 0) return "Pending";
   return `₹${num.toFixed(2)}`;
+}
+
+function normalizeStatus(value) {
+  return String(value || "").toLowerCase().replace(/[\s-]+/g, "_");
+}
+
+function hasPendingPricing(price, order) {
+  const rawStatus = normalizeStatus(order?.rawStatus || order?.status);
+  const billStatus = normalizeStatus(order?.billStatus || order?.bill_status);
+  const snapshot = order?.priceSnapshot || order?.price_snapshot || {};
+  const files = Array.isArray(price?.files)
+    ? price.files
+    : Array.isArray(snapshot?.breakdown)
+      ? snapshot.breakdown
+      : [];
+
+  return Boolean(
+    price?.pricingPending ||
+    order?.pricingPending ||
+    snapshot?.pricingPending ||
+    rawStatus === "awaiting_hub_bill_confirmation" ||
+    billStatus === "awaiting_hub_confirmation" ||
+    files.some((file) => file?.pricingPending || file?.reasonCode === "DESKTOP_PREPARATION_PENDING")
+  );
 }
 
 function OrderSummaryRow({ label, value, highlight = false }) {
@@ -53,14 +77,15 @@ export default function PaymentPage({
   paymentLoading,
   paymentError,
 }) {
-  const amount = backendPrice?.totalAmount ?? order?.amount ?? 0;
-  const rate = backendPrice?.pricePerPage ?? backendPrice?.files?.[0]?.pricePerPage ?? 0;
+  const isPricingPending = hasPendingPricing(backendPrice, order);
+  const amount = isPricingPending ? null : (backendPrice?.totalAmount ?? order?.amount ?? null);
+  const rate = isPricingPending ? null : (backendPrice?.pricePerPage ?? backendPrice?.files?.[0]?.pricePerPage ?? null);
   const selectedPageCount = Number(backendPrice?.selectedPageCount || order?.selectedPageCount || pages || 0);
   const centreUpi = selectedCentre?.upiId || "";
   const upiQrUrl = selectedCentre?.upiQrImageUrl || "";
   const isMultiFileOrder = Array.isArray(backendPrice?.files) && backendPrice.files.length > 1;
-  const orderStatus = String(order?.status || "").toLowerCase();
-  const isPricingPending = Boolean(backendPrice?.files?.some?.((file) => file?.pricingPending));
+  const displayValue = (value) => (isPricingPending ? "Pending" : (value || value === 0 ? value : "Pending"));
+  const displayMoney = (value) => (isPricingPending ? "Pending" : formatCurrency(value));
 
   const handlePaymentClick = () => {
     const printablePages = backendPrice?.printablePageCount || (selectedPageCount * (copies || 1));
@@ -73,7 +98,7 @@ export default function PaymentPage({
 
   const buttonLabel =
     isPricingPending
-      ? "Pricing pending"
+      ? "Waiting for hub bill"
       : paymentMethod === "razorpay"
       ? `Pay ${formatCurrency(amount)}`
       : paymentMethod === "upi_qr"
@@ -87,7 +112,7 @@ export default function PaymentPage({
         : "Creating request...";
   const ButtonIcon = paymentMethod === "razorpay" ? CreditCard : paymentMethod === "upi_qr" ? QrCode : Clock;
 
-  const isDisabled = paymentLoading || isPricingPending || amount <= 0;
+  const isDisabled = paymentLoading || isPricingPending || !amount || amount <= 0;
 
   return (
     <div className="mx-auto max-w-2xl pb-[calc(7rem+env(safe-area-inset-bottom))] md:pb-6">
@@ -101,20 +126,20 @@ export default function PaymentPage({
         <div className="mt-6 space-y-3 rounded-2xl bg-slate-50 p-4">
           <Row label="Centre" value={selectedCentre?.name || "N/A"} />
           <Row label="Document" value={documentName || "Uploaded Document"} />
-          <Row label="Original Pages" value={backendPrice?.originalPageCount || pages} />
-          <Row label="Selected Pages" value={backendPrice?.selectedPageCount || pages} />
-          <Row label="Printable Pages" value={backendPrice?.printablePageCount || Number(pages || 0) * Number(copies || 0)} />
-          <Row label="Sheets" value={backendPrice?.sheetCount || "-"} />
+          <Row label="Original Pages" value={displayValue(backendPrice?.originalPageCount || pages)} />
+          <Row label="Selected Pages" value={displayValue(backendPrice?.selectedPageCount || pages)} />
+          <Row label="Printable Pages" value={displayValue(backendPrice?.printablePageCount || (Number(pages || 0) > 0 ? Number(pages || 0) * Number(copies || 0) : null))} />
+          <Row label="Sheets" value={displayValue(backendPrice?.sheetCount)} />
           {isMultiFileOrder ? (
             <Row label="Copies / Rate" value="Shown per file below" />
           ) : (
             <>
               <Row label="Copies" value={copies} />
-              <Row label="Rate" value={formatCurrency(rate)} />
+              <Row label="Rate" value={displayMoney(rate)} />
             </>
           )}
           <div className="border-t pt-3">
-            <OrderSummaryRow label="Total Amount" value={isPricingPending ? "Pending" : formatCurrency(amount)} highlight />
+            <OrderSummaryRow label="Total Amount" value={displayMoney(amount)} highlight />
           </div>
         </div>
 
@@ -125,8 +150,8 @@ export default function PaymentPage({
             {backendPrice.files.map((file) => (
               <Row
                 key={file.documentId || file.fileName}
-                label={`${file.fileName || "PDF"} — ${file.selectedPageCount}p × ${file.copies}`}
-                value={formatCurrency(file.totalAmount)}
+                label={`${file.fileName || "Document"} — ${file.pricingPending ? "pending" : `${file.selectedPageCount}p × ${file.copies}`}`}
+                value={file.pricingPending ? "Pending" : formatCurrency(file.totalAmount)}
               />
             ))}
           </div>
@@ -187,13 +212,13 @@ export default function PaymentPage({
         {/* Validation: zero amount */}
         {isPricingPending && !paymentLoading && (
           <p className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700">
-            Document preparation is pending. The print hub desktop must process the file before payment can be requested.
+            Hub conversion is pending. The desktop agent must convert and verify the file before the final bill/payment request can be created.
           </p>
         )}
 
         {amount <= 0 && !isPricingPending && !paymentLoading && (
           <p className="mt-4 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-semibold text-orange-700">
-            Order amount is ₹0. Please check your print settings and try again.
+            The order price is unavailable. Please check your print settings and try again.
           </p>
         )}
 

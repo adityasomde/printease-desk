@@ -578,11 +578,13 @@ export default function UploadPage({
     }
 
     if (!isMulti) {
+      const prepared = filePreparationState[0];
+      const isWaitingForDesktop = prepared?.status === PREPARATION_STATUS.PENDING_DESKTOP;
       if (copies === "" || Number(copies) <= 0) {
         window.alert("Please enter a valid number of copies (at least 1).");
         return;
       }
-      if (pages === "" || Number(pages) <= 0) {
+      if (!isWaitingForDesktop && (pages === "" || Number(pages) <= 0)) {
         window.alert("Please enter a valid number of pages (at least 1).");
         return;
       }
@@ -596,7 +598,8 @@ export default function UploadPage({
           window.alert(`Please enter a valid number of copies (at least 1) for document: "${displayFiles[i].name}".`);
           return;
         }
-        if (filePages === "" || Number(filePages) <= 0) {
+        const isWaitingForDesktop = prepared?.status === PREPARATION_STATUS.PENDING_DESKTOP;
+        if (!isWaitingForDesktop && (filePages === "" || Number(filePages) <= 0)) {
           window.alert(`Please enter a valid number of pages (at least 1) for document: "${displayFiles[i].name}".`);
           return;
         }
@@ -646,7 +649,7 @@ export default function UploadPage({
   const priceSummaryHelp = hasPreparingFiles
     ? "Converting and counting your selected files."
     : hasPendingDesktopFiles
-      ? "Office files (DOCX, PPTX, XLSX) will be converted by the hub desktop after you continue. Exact price appears after backend verification."
+      ? "Office files are ready to send for hub desktop conversion. No page count or bill is final until backend verification completes."
       : failedPreparation
         ? failedPreparation.errorMessage || "Remove the failed file or upload it as PDF."
         : !hasUsableCentrePricing

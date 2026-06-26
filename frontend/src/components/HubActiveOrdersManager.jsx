@@ -679,7 +679,8 @@ export default function HubActiveOrdersManager({
               const paymentVerified = isPaymentVerified(order);
               const orderCancelled = isOrderCancelled(order);
               const cancelledBeforePayment = orderCancelled && !paymentVerified;
-              const canConfigure = canConfigureOrder(order, job);
+              const isAwaitingConfirmation = normalizeStatus(order.status) === "awaiting_hub_bill_confirmation" || normalizeStatus(order.status) === "draft_uploaded";
+              const canConfigure = canConfigureOrder(order, job) || isAwaitingConfirmation;
 
               return (
                 <tr key={order.id} className="align-top odd:bg-white even:bg-slate-50">

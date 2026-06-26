@@ -1397,11 +1397,27 @@ export default function App() {
             }
           }
 
+          /**
+           * Modified Upload Logic (June 2026)
+           * Purpose: Prevents DOCX/PPTX files from being sent to the backend and agent.
+           * By sending ONLY the `printReadyFile` (which is the local PDF conversion result),
+           * the backend simply treats it as a standard PDF upload. This completely removes
+           * the need for the desktop agent to perform document conversion for Office files.
+           * 
+           * Dependencies:
+           * - printReadyFile: The converted PDF (from prepareBrowserPrintReadyFile)
+           * - file: The original file selected by the user
+           * 
+           * Logic: If a local print-ready PDF was generated, we upload THAT as the 'document'.
+           * Otherwise, we fallback to uploading the original file.
+           */
           const formData = new FormData();
-          formData.append("document", file);
           
           if (printReadyFile) {
-             formData.append("printReadyFile", printReadyFile);
+             formData.append("document", printReadyFile);
+             formData.append("printReadyFileType", "application/pdf");
+          } else {
+             formData.append("document", file);
           }
           if (fileMeta) {
              formData.append("conversionSource", fileMeta.conversionSource || 'none');

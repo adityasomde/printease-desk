@@ -14,8 +14,6 @@ const orderStatuses = [
 
 const statusMap = {
   draft_uploaded: "Draft Uploaded",
-  awaiting_hub_bill_confirmation: "Awaiting Hub Bill Confirmation",
-  bill_confirmed: "Bill Confirmed",
   payment_requested: "Payment Requested",
   payment_collected: "Payment Collected",
   queued_for_print: "Queued for Printing",
@@ -34,13 +32,10 @@ function normalizeStatus(status) {
 
 function isPaymentPending(order) {
   const value = String(order?.status || "").toLowerCase();
-  return ["bill_confirmed", "payment_requested"].includes(value);
+  return ["payment_requested"].includes(value);
 }
 
-function isAwaitingHub(order) {
-  const value = String(order?.status || "").toLowerCase();
-  return ["awaiting_hub_bill_confirmation"].includes(value);
-}
+
 
 export default function TrackPage({
   order,
@@ -60,7 +55,6 @@ export default function TrackPage({
   const currentStatus = normalizeStatus(order.status);
   const activeIndex = orderStatuses.indexOf(currentStatus);
   const paymentPending = isPaymentPending(order);
-  const awaitingHub = isAwaitingHub(order);
   const isCancelled = String(order.status).toLowerCase() === "cancelled";
   const razorpayQrImageUrl = upiQr?.source === "centre" ? "" : upiQr?.imageUrl || upiQr?.image_url || "";
   const centreQrImageUrl = centreUpiQrImageUrl || (upiQr?.source === "centre" ? upiQr?.imageUrl || upiQr?.image_url : "");
@@ -94,17 +88,7 @@ export default function TrackPage({
         </div>
       )}
 
-      {awaitingHub && !isCancelled && (
-        <div className="mt-5 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
-          <div className="flex items-start gap-3">
-            <Clock className="mt-0.5 text-blue-600" size={20} />
-            <div>
-              <p className="font-semibold text-blue-700">Awaiting Hub Bill Confirmation</p>
-              <p className="mt-1">Your document has been uploaded. Please wait for the hub to review the document complexity and confirm the final print bill. You can proceed with payment once the hub confirms the total.</p>
-            </div>
-          </div>
-        </div>
-      )}
+
 
       {paymentPending && !isCancelled && (
         <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
@@ -170,7 +154,7 @@ export default function TrackPage({
         </div>
       )}
 
-      {!paymentPending && !awaitingHub && !isCancelled && (
+      {!paymentPending && !isCancelled && (
         <p className="mt-5 rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">
           Payment completed. Print job queued/sent to desktop agent when an online printer is available.
         </p>

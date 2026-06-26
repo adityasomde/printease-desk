@@ -3,7 +3,14 @@ import html2pdf from 'html2pdf.js';
 
 /**
  * Universal local converter
- * Converts DOCX files to HTML using Mammoth, then to PDF using html2pdf.js.
+ * Purpose: Converts office documents (like DOCX) into PDF entirely within the browser.
+ * Added: June 2026, to remove the backend/desktop agent requirement for simple document preview and page counting.
+ * Dependencies:
+ *  - mammoth: Used to convert DOCX files into raw HTML.
+ *  - html2pdf.js: Used to render that HTML onto a canvas and generate a PDF file.
+ * 
+ * @param {File} file - The original File object uploaded by the user via the file input.
+ * @returns {Promise<File>} A Promise that resolves to the generated print-ready PDF File object.
  */
 export async function convertGenericFileToPdfInBrowser(file) {
   const extension = file.name.split('.').pop()?.toLowerCase();
@@ -16,6 +23,14 @@ export async function convertGenericFileToPdfInBrowser(file) {
   // We'll create a basic PDF that says "Preview not available" but preserves the file name.
   return await createFallbackPdf(file);
 }
+
+/**
+ * Converts a DOCX file into a PDF file.
+ * Purpose: Provides a fast, local way to get page counts and previews for DOCX without a backend.
+ * Dependencies: mammoth for DOCX -> HTML extraction, html2pdf.js for HTML -> PDF generation.
+ * @param {File} file - The DOCX file to convert.
+ * @returns {Promise<File>} The converted PDF File object.
+ */
 
 async function convertDocxToPdf(file) {
   const arrayBuffer = await file.arrayBuffer();
@@ -59,6 +74,13 @@ async function convertDocxToPdf(file) {
   }
 }
 
+/**
+ * Creates a placeholder PDF for unsupported file types (like PPTX).
+ * Purpose: Allows the system to treat unsupported files as PDFs so they can still go through the standard upload pipeline (page counting will result in 1 page).
+ * Added: June 2026, to simplify the upload flow and avoid desktop agent dependency for unsupported files.
+ * @param {File} file - The unsupported file (e.g. PPTX).
+ * @returns {Promise<File>} A placeholder PDF File object.
+ */
 async function createFallbackPdf(file) {
   const container = document.createElement('div');
   container.innerHTML = `
@@ -72,10 +94,10 @@ async function createFallbackPdf(file) {
   
   const opt = {
     margin: 10,
-    filename: file.name + ".pdf",
+    filename: file.name.replace(/\.[^/.]+$/, "") + ".pdf",
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
   };
 
   const pdfBlob = await html2pdf().set(opt).from(container).output('blob');
-  return new File([pdfBlob], file.name + ".pdf", { type: 'application/pdf' });
+  return new File([pdfBlob], opt.filename, { type: 'application/pdf' });
 }

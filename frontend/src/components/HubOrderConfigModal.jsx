@@ -264,7 +264,7 @@ export default function HubOrderConfigModal({
     };
 
     if (hasPendingCalculation) {
-      setErrorMsg("Page count or hub pricing is still pending. Confirm the bill after preparation finishes.");
+      setErrorMsg("Document preparation is still pending. Wait for the hub desktop to finish before saving.");
       setSubmitting(false);
       return;
     }

@@ -1157,7 +1157,7 @@ export default function UploadPage({
                      </div>
                    </div>
                  ))}
-                 <p className="text-xs text-slate-500">Office files can continue for hub desktop preparation; payment unlocks after the converted page count confirms the bill.</p>
+
                </div>
             ) : (
                <>

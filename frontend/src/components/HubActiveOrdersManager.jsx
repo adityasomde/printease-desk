@@ -67,7 +67,7 @@ function displayStatus(status) {
 }
 
 function isPaymentVerified(order) {
-  const value = String(order?.paymentStatus || order?.payment_status || "").toLowerCase();
+  const value = normalizeStatus(order?.paymentStatus || order?.payment_status);
   return value === "verified" || value === "collected" || value === "paid" || value.includes("verif");
 }
 
@@ -77,8 +77,8 @@ function isOrderCancelled(order) {
 
 function isPaymentPending(order) {
   if (isOrderCancelled(order)) return false;
-  const value = String(order?.paymentStatus || order?.payment_status || "").toLowerCase();
-  return value === "pending" || value === "unpaid" || value === "requested";
+  const value = normalizeStatus(order?.paymentStatus || order?.payment_status);
+  return value === "pending" || value === "unpaid" || value === "requested" || value === "payment_requested";
 }
 
 const CLOSED_STATUSES = new Set(["collected", "refund_requested", "printing_failed", "cancelled"]);
@@ -122,7 +122,7 @@ function canCancelOrder(order) {
 }
 
 function canConfigureOrder(order, job) {
-  const isManualPayment = ["draft", "pending", "collected"].includes(String(order.paymentStatus || "").toLowerCase());
+  const isManualPayment = ["draft", "not_requested", "pending", "requested", "payment_requested", "collected"].includes(normalizeStatus(order.paymentStatus));
   const isClosed = ["printed", "completed", "cancelled"].includes(String(order.status || "").toLowerCase());
   const hasActiveJobs = Boolean(job || (order.printJobs && order.printJobs.length > 0));
   return isManualPayment && !isClosed && !hasActiveJobs && !order.configLockedAt;

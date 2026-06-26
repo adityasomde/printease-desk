@@ -65,6 +65,7 @@ export default function UploadPage({
 
   const [localPreview, setLocalPreview] = useState(null);
   const [filePreparationState, setFilePreparationState] = useState({});
+  const [uploadNotice, setUploadNotice] = useState("");
 
   function releasePreparationState(state = filePreparationState) {
     Object.values(state || {}).forEach(revokePreparationPreview);
@@ -329,6 +330,10 @@ export default function UploadPage({
     if (setReprintDocumentExpired) setReprintDocumentExpired(false);
     const files = Array.from(event.target.files || []);
     const firstFile = files[0] || null;
+    const hasOfficeFile = files.some((file) => detectUploadFileKind(file) === "office");
+    setUploadNotice(hasOfficeFile
+      ? "DOCX, PPTX and XLSX can take longer or fail in the web browser. For faster and more accurate results, export as PDF first or use the Android app when available."
+      : "");
     setDocumentFiles(files);
     setDocumentFile(firstFile);
     if (!firstFile) {
@@ -355,6 +360,10 @@ export default function UploadPage({
     const handlePaste = (e) => {
       const files = Array.from(e.clipboardData?.files || []).filter(isAllowedUploadFile);
       if (files.length > 0) {
+        const hasOfficeFile = files.some((file) => detectUploadFileKind(file) === "office");
+        setUploadNotice(hasOfficeFile
+          ? "DOCX, PPTX and XLSX can take longer or fail in the web browser. For faster and more accurate results, export as PDF first or use the Android app when available."
+          : "");
         setBackendPrice?.(null);
         if (setReprintSourceDocuments) setReprintSourceDocuments([]);
         if (setReprintDocumentExpired) setReprintDocumentExpired(false);
@@ -610,13 +619,24 @@ export default function UploadPage({
   const hasPreparingFiles = preparationItems.some((item) => item?.status === PREPARATION_STATUS.PREPARING);
   const hasPendingDesktopFiles = preparationItems.some((item) => item?.status === PREPARATION_STATUS.PENDING_DESKTOP);
   const failedPreparation = preparationItems.find((item) => item?.status === PREPARATION_STATUS.FAILED);
-  const priceReady = selectedFileCount > 0 && !hasPreparingFiles && !hasPendingDesktopFiles && !failedPreparation;
+  const readyPreparationCount = preparationItems.filter((item) => item?.status === PREPARATION_STATUS.READY).length;
+  const activePreparationCount = preparationItems.filter((item) =>
+    item?.status === PREPARATION_STATUS.PREPARING || item?.status === PREPARATION_STATUS.PENDING_DESKTOP
+  ).length;
+  const preparationProgress = selectedFileCount
+    ? Math.round((readyPreparationCount / selectedFileCount) * 100)
+    : 0;
+  const hasUsableCentrePricing = Boolean(selectedCentre) && Number(pricePerPage || 0) > 0;
+  const priceReady = selectedFileCount > 0 && hasUsableCentrePricing && !hasPreparingFiles && !hasPendingDesktopFiles && !failedPreparation;
+  const canContinueForPayment = selectedFileCount > 0 && hasUsableCentrePricing && !hasPreparingFiles && !failedPreparation;
   const priceSummaryLabel = hasPreparingFiles
     ? "Calculating price..."
     : hasPendingDesktopFiles
       ? "Waiting for desktop preparation"
       : failedPreparation
         ? "Price unavailable"
+        : !hasUsableCentrePricing
+          ? "Select centre for price"
         : backendPrice
           ? "Total"
           : "Est. Total";
@@ -626,6 +646,8 @@ export default function UploadPage({
       ? "Office files need hub desktop conversion before exact pricing. Upload as PDF for immediate pricing."
       : failedPreparation
         ? failedPreparation.errorMessage || "Remove the failed file or upload it as PDF."
+        : !hasUsableCentrePricing
+          ? "Select a print centre with pricing before checkout. The final bill will stay pending until pricing is available."
         : "Price is ready before checkout and will be verified by the backend.";
 
   const multiEstimatedFiles = useMemo(() => {
@@ -713,53 +735,53 @@ export default function UploadPage({
   };
 
   const regularConfigurationForm = (
-    <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2">
+    <div className="grid gap-2 sm:gap-4 grid-cols-1 min-[380px]:grid-cols-2 md:grid-cols-4">
       <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-1">
         Estimated pages
-        <input type="number" min="1" value={activeConfig?.pages ?? 1} onChange={(e) => setConfigVal("pages", e.target.value === "" ? "" : Number(e.target.value))} className="rounded-2xl border px-4 py-3 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
+        <input type="number" min="1" value={activeConfig?.pages ?? 1} onChange={(e) => setConfigVal("pages", e.target.value === "" ? "" : Number(e.target.value))} className="w-full min-w-0 rounded-2xl border px-2 sm:px-3 py-2 text-sm sm:text-base font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
       </label>
-      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-1">
+      <label className="grid gap-1 sm:gap-2 text-sm font-semibold text-slate-600 col-span-1 min-w-0">
         Page range
-        <input value={activeConfig?.selectedPages || ""} onChange={(e) => setConfigVal("selectedPages", e.target.value)} placeholder="All, or 1,3-4" className="rounded-2xl border px-4 py-3 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
+        <input value={activeConfig?.selectedPages || ""} onChange={(e) => setConfigVal("selectedPages", e.target.value)} placeholder="All, or 1,3-4" className="w-full min-w-0 rounded-2xl border px-2 sm:px-3 py-2 text-sm sm:text-base font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
       </label>
-      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-1">
+      <label className="grid gap-1 sm:gap-2 text-sm font-semibold text-slate-600 col-span-1 min-w-0">
         Copies
-        <input type="number" min="1" value={activeConfig?.copies ?? 1} onChange={(e) => setConfigVal("copies", e.target.value === "" ? "" : Number(e.target.value))} className="rounded-2xl border px-4 py-3 font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
+        <input type="number" min="1" value={activeConfig?.copies ?? 1} onChange={(e) => setConfigVal("copies", e.target.value === "" ? "" : Number(e.target.value))} className="w-full min-w-0 rounded-2xl border px-2 sm:px-3 py-2 text-sm sm:text-base font-normal text-slate-900 outline-none focus:ring-2 focus:ring-slate-300" />
       </label>
-      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-1">
+      <label className="grid gap-1 sm:gap-2 text-sm font-semibold text-slate-600 col-span-1 min-w-0">
         Color mode
-        <select value={activeConfig?.colorType || "bw"} onChange={(e) => setConfigVal("colorType", e.target.value)} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
+        <select value={activeConfig?.colorType || "bw"} onChange={(e) => setConfigVal("colorType", e.target.value)} className="w-full min-w-0 rounded-2xl border px-2 sm:px-3 py-2 text-sm sm:text-base font-normal text-slate-900">
           <option value="bw">Black & White</option>
           <option value="color">Color</option>
         </select>
       </label>
-      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-1">
+      <label className="grid gap-1 sm:gap-2 text-sm font-semibold text-slate-600 col-span-1 min-w-0">
         Sides
-        <select value={activeConfig?.sideType || "single"} onChange={(e) => setConfigVal("sideType", e.target.value)} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
+        <select value={activeConfig?.sideType || "single"} onChange={(e) => setConfigVal("sideType", e.target.value)} className="w-full min-w-0 rounded-2xl border px-2 sm:px-3 py-2 text-sm sm:text-base font-normal text-slate-900">
           <option value="single">Single side</option>
           <option value="double">Double side</option>
         </select>
       </label>
-      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-1">
+      <label className="grid gap-1 sm:gap-2 text-sm font-semibold text-slate-600 col-span-1 min-w-0">
         Paper size
-        <select value={activeConfig?.paperSize || "A4"} onChange={(e) => setConfigVal("paperSize", e.target.value)} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
+        <select value={activeConfig?.paperSize || "A4"} onChange={(e) => setConfigVal("paperSize", e.target.value)} className="w-full min-w-0 rounded-2xl border px-2 sm:px-3 py-2 text-sm sm:text-base font-normal text-slate-900">
           <option value="A4">A4</option>
           <option value="A3">A3</option>
           <option value="Letter">Letter</option>
           <option value="Legal">Legal</option>
         </select>
       </label>
-      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-1">
+      <label className="grid gap-1 sm:gap-2 text-sm font-semibold text-slate-600 col-span-1 min-w-0">
         Orientation
-        <select value={activeConfig?.orientation || "auto"} onChange={(e) => setConfigVal("orientation", e.target.value)} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
+        <select value={activeConfig?.orientation || "auto"} onChange={(e) => setConfigVal("orientation", e.target.value)} className="w-full min-w-0 rounded-2xl border px-2 sm:px-3 py-2 text-sm sm:text-base font-normal text-slate-900">
           <option value="auto">Auto</option>
           <option value="portrait">Portrait</option>
           <option value="landscape">Landscape</option>
         </select>
       </label>
-      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-1">
+      <label className="grid gap-1 sm:gap-2 text-sm font-semibold text-slate-600 col-span-1 min-w-0">
         Pages per sheet
-        <select value={activeConfig?.pagesPerSheet || 1} onChange={(e) => setConfigVal("pagesPerSheet", Number(e.target.value))} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
+        <select value={activeConfig?.pagesPerSheet || 1} onChange={(e) => setConfigVal("pagesPerSheet", Number(e.target.value))} className="w-full min-w-0 rounded-2xl border px-2 sm:px-3 py-2 text-sm sm:text-base font-normal text-slate-900">
           <option value={1}>1 page per sheet</option>
           <option value={2}>2 pages per sheet</option>
           <option value={4}>4 pages per sheet</option>
@@ -768,23 +790,23 @@ export default function UploadPage({
           <option value={16}>16 pages per sheet</option>
         </select>
       </label>
-      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-1">
+      <label className="grid gap-1 sm:gap-2 text-sm font-semibold text-slate-600 col-span-1 min-w-0">
         Print quality
-        <select value={activeConfig?.printDpi || 300} onChange={(e) => setConfigVal("printDpi", Number(e.target.value))} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
+        <select value={activeConfig?.printDpi || 300} onChange={(e) => setConfigVal("printDpi", Number(e.target.value))} className="w-full min-w-0 rounded-2xl border px-2 sm:px-3 py-2 text-sm sm:text-base font-normal text-slate-900">
           <option value={203}>Draft - 203 DPI</option>
           <option value={300}>Standard - 300 DPI</option>
           <option value={600}>High - 600 DPI</option>
         </select>
       </label>
-      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-1">
+      <label className="grid gap-1 sm:gap-2 text-sm font-semibold text-slate-600 col-span-1 min-w-0">
         Scale
-        <select value={activeConfig?.scaleMode || "original"} onChange={(e) => setConfigVal("scaleMode", e.target.value)} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
+        <select value={activeConfig?.scaleMode || "original"} onChange={(e) => setConfigVal("scaleMode", e.target.value)} className="w-full min-w-0 rounded-2xl border px-2 sm:px-3 py-2 text-sm sm:text-base font-normal text-slate-900">
           <option value="original">Original size</option>
           <option value="fit_to_page">Fit to page</option>
           <option value="fit_to_page_width">Fit to page width</option>
         </select>
       </label>
-      <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-2">
+      <label className="grid gap-1 sm:gap-2 text-sm font-semibold text-slate-600 col-span-1 min-[380px]:col-span-2 md:col-span-4 min-w-0">
         Margins
         <select value={activeConfig?.marginMode || "default"} onChange={(e) => setConfigVal("marginMode", e.target.value)} className="rounded-2xl border px-4 py-3 font-normal text-slate-900">
           <option value="default">Default</option>
@@ -831,10 +853,10 @@ export default function UploadPage({
   );
 
   return (
-    <div className="grid gap-6 lg:grid-cols-3">
-      <Card className="lg:col-span-2">
-        <h2 className="text-2xl font-bold">Upload Document</h2>
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-slate-600">
+    <div className="grid gap-4 sm:gap-6 lg:grid-cols-3 pb-[calc(7rem+env(safe-area-inset-bottom))] md:pb-6">
+      <Card className="lg:col-span-2 p-3 sm:p-5">
+        <h2 className="text-xl sm:text-2xl font-bold min-w-0">Upload Document</h2>
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-slate-600 text-sm sm:text-base">
           <span>Selected Centre: <b>{selectedCentre?.name || "Not selected yet"}</b></span>
           <button
             type="button"
@@ -883,13 +905,20 @@ export default function UploadPage({
           </div>
         )}
 
-        <div className="mt-6">
-          <label className="cursor-pointer rounded-2xl border border-dashed bg-slate-50 p-6 text-center hover:bg-slate-100 flex flex-col mb-4">
+        <div className="mt-4 sm:mt-6">
+          <label className="cursor-pointer rounded-2xl border border-dashed bg-slate-50 p-4 sm:p-6 text-center hover:bg-slate-100 flex flex-col mb-4">
             <input type="file" accept={ALLOWED_UPLOAD_ACCEPT} multiple onChange={handleFileChange} className="hidden" />
-            {displayFiles.length > 0 ? <FileText className="mx-auto mb-3" size={36} /> : <Upload className="mx-auto mb-3" size={36} />}
-            <p className="font-semibold">{selectedFileLabel || "Choose one or more documents"}</p>
-            <p className="text-sm text-slate-500">{selectedFileCount ? (selectedFileSize ? `${Math.ceil(selectedFileSize / 1024)} KB selected` : "Documents selected from history") : "Select multiple supported files from your file manager"}</p>
+            {displayFiles.length > 0 ? <FileText className="mx-auto mb-3 text-slate-400" size={32} /> : <Upload className="mx-auto mb-3 text-slate-400" size={32} />}
+            <p className="font-semibold text-sm sm:text-base px-2 leading-tight break-words">{selectedFileLabel || "Choose one or more documents"}</p>
+            <p className="text-xs sm:text-sm text-slate-500 mt-1 px-2 leading-tight">{selectedFileCount ? (selectedFileSize ? `${Math.ceil(selectedFileSize / 1024)} KB selected` : "Documents selected from history") : "Select multiple supported files"}</p>
           </label>
+
+          {uploadNotice && (
+            <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              <p className="font-semibold">Office document preparation may take longer on web.</p>
+              <p className="mt-1">{uploadNotice}</p>
+            </div>
+          )}
 
           {!isMulti && (
             <div className="mb-4">
@@ -1043,6 +1072,22 @@ export default function UploadPage({
                 : "border-amber-100 bg-amber-50 text-amber-800"
           }`}>
             {priceSummaryHelp}
+            {(hasPreparingFiles || hasPendingDesktopFiles || activePreparationCount > 0) && (
+              <div className="mt-2">
+                <div className="mb-1 flex items-center justify-between text-[11px] font-bold">
+                  <span>{hasPendingDesktopFiles ? "Waiting for hub desktop preparation" : "Preparing files"}</span>
+                  <span>{readyPreparationCount}/{selectedFileCount || preparationItems.length} ready</span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-white/70">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      hasPendingDesktopFiles ? "bg-amber-500" : "bg-emerald-500"
+                    }`}
+                    style={{ width: `${Math.max(8, preparationProgress)}%` }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           <details className="group mb-2 md:hidden">
@@ -1102,7 +1147,7 @@ export default function UploadPage({
                      </div>
                    </div>
                  ))}
-                 <p className="text-xs text-slate-500">Estimate updates here from each file's settings. Continue unlocks only when page counts are known.</p>
+                 <p className="text-xs text-slate-500">Office files can continue for hub desktop preparation; payment unlocks after the converted page count confirms the bill.</p>
                </div>
             ) : (
                <>
@@ -1166,8 +1211,8 @@ export default function UploadPage({
               </button>
             )}
 
-            <button onClick={handlePaymentClick} disabled={!selectedFileCount || paymentLoading || !priceReady} className="flex-1 rounded-2xl bg-slate-900 px-2 py-3 text-sm font-semibold text-white disabled:opacity-40 md:mt-3 md:w-full md:px-4 md:text-base">
-              {paymentLoading ? "Calculating..." : !priceReady ? "Calculating price..." : (!selectedCentre ? "Select & Continue" : "Continue to Payment")}
+            <button onClick={handlePaymentClick} disabled={!canContinueForPayment || paymentLoading} className="flex-1 rounded-2xl bg-slate-900 px-2 py-3 text-sm font-semibold text-white disabled:opacity-40 md:mt-3 md:w-full md:px-4 md:text-base">
+              {paymentLoading ? "Calculating..." : hasPendingDesktopFiles ? "Send for bill preparation" : !priceReady ? "Calculating price..." : (!selectedCentre ? "Select & Continue" : "Continue to Payment")}
             </button>
           </div>
         </Card>

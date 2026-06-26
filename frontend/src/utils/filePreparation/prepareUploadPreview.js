@@ -82,16 +82,17 @@ export async function prepareUploadPreview(file, context = {}) {
 
   if (kind === 'office') {
     return {
-      status: PREPARATION_STATUS.READY,
+      status: PREPARATION_STATUS.PENDING_DESKTOP,
       fileKind: kind,
-      pageCount: 1, // Hub will recalculate real page count
+      pageCount: null,
       previewPdfUrl: '',
       previewKind: 'unsupported',
       printReadyFile: null,
-      conversionPlacement: 'manual',
+      conversionPlacement: 'desktop',
       conversionSource: 'none',
-      reasonCode: 'BROWSER_OFFICE_CONVERSION_UNAVAILABLE',
-      message: 'Office document will be prepared by the hub.',
+      reasonCode: 'DESKTOP_OFFICE_CONVERSION_REQUIRED',
+      message: 'Office document will be converted and counted by the hub desktop before payment.',
+      errorMessage: '',
     };
   }
 

@@ -1358,7 +1358,8 @@ export default function App() {
         for (let index = 0; index < filesToUpload.length; index += 1) {
           const file = filesToUpload[index];
           const preparedState = preparedFilesByIndex?.[index];
-          if (preparedState?.status && preparedState.status !== "ready") {
+          const isDesktopPreparationPending = preparedState?.status === "pending_desktop";
+          if (preparedState?.status && preparedState.status !== "ready" && !isDesktopPreparationPending) {
             throw new Error(preparedState.errorMessage || preparedState.message || "Document is not ready for payment yet.");
           }
 
@@ -1405,7 +1406,7 @@ export default function App() {
              formData.append("conversionPlacement", fileMeta.conversionPlacement || 'none');
              formData.append("conversionReasonCode", fileMeta.decision?.reasonCode || 'unknown');
              formData.append("fileKind", fileMeta.fileKind || fileMeta.decision?.kind || 'unknown');
-             formData.append("requiresDesktopPreparation", "false");
+             formData.append("requiresDesktopPreparation", isDesktopPreparationPending ? "true" : "false");
              if (printReadyFile) {
                formData.append("printReadyFileType", "application/pdf");
              }

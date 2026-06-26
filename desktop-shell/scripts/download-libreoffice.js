@@ -36,6 +36,7 @@ import path from 'node:path';
 import { execSync } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
+import { fileURLToPath } from 'node:url';
 
 // ─── Configuration ───────────────────────────────────────────
 const LO_VERSION = '25.8.4';
@@ -62,7 +63,7 @@ const LOCAL_LO_PATHS = {
   ]
 };
 
-const SCRIPT_DIR = path.dirname(new URL(import.meta.url).pathname);
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(SCRIPT_DIR, '..');
 const VENDOR_DIR = path.join(ROOT_DIR, 'vendor', 'libreoffice');
 const TEMP_DIR = path.join(ROOT_DIR, '.lo-download-temp');
@@ -177,7 +178,7 @@ async function copyFromLocal(platform) {
     if (fs.existsSync(src)) {
       const destSub = path.join(outputDir, subdir);
       log(`  Copying ${subdir}/ ...`);
-      execSync(`cp -r "${src}" "${destSub}"`, { stdio: 'inherit' });
+      await fsp.cp(src, destSub, { recursive: true });
 
       // Show size
       try {
@@ -292,7 +293,7 @@ async function extractLinux(archivePath) {
     const src = path.join(sourceDir, subdir);
     if (fs.existsSync(src)) {
       log(`  Copying ${subdir}/...`);
-      execSync(`cp -r "${src}" "${outputDir}/"`, { stdio: 'inherit' });
+      await fsp.cp(src, path.join(outputDir, subdir), { recursive: true });
     }
   }
 
@@ -367,7 +368,7 @@ async function extractWindows(archivePath) {
     const src = path.join(loRoot, subdir);
     if (fs.existsSync(src)) {
       log(`  Copying ${subdir}/...`);
-      execSync(`cp -r "${src}" "${outputDir}/"`, { stdio: 'inherit' });
+      await fsp.cp(src, path.join(outputDir, subdir), { recursive: true });
     }
   }
 

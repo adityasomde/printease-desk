@@ -106,11 +106,15 @@ jobs:
       - name: Install desktop-shell dependencies
         run: npm ci --prefix desktop-shell
 
+      - name: Install LibreOffice for Windows bundling
+        shell: pwsh
+        run: choco install libreoffice-fresh -y --no-progress
+
       - name: Build frontend and sync frontend-dist
         run: npm run build:frontend
 
       - name: Build Windows release
-        run: npm run dist:win --prefix desktop-shell
+        run: npm run dist:win:local-libreoffice --prefix desktop-shell
 
       - name: Verify Windows package
         run: npm run verify:package --prefix desktop-shell

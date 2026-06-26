@@ -8,6 +8,7 @@
 
 import { canBrowserTryImageToPdf, detectUploadFileKind } from './detectUploadFileKind.js';
 import { convertImageToPdfInBrowser } from './imageToPdfBrowser.js';
+import { convertTextToPdfInBrowser } from './textToPdfBrowser.js';
 import { convertGenericFileToPdfInBrowser } from './localUniversalConverter.js';
 
 const CONVERSION_PLACEMENT = Object.freeze({
@@ -36,42 +37,48 @@ export async function prepareBrowserPrintReadyFile(file, context = {}) {
   }
 
   if (canBrowserTryImageToPdf(file)) {
-    const printReadyFile = await convertImageToPdfInBrowser(file, context.imagePdfOptions || {});
-    return {
-      originalFile: file,
-      printReadyFile,
-      conversionPlacement: CONVERSION_PLACEMENT.BROWSER,
-      conversionSource: 'browser-image-to-pdf',
-      fileKind: kind,
-      decision,
-    };
+    try {
+      const printReadyFile = await convertImageToPdfInBrowser(file, context.imagePdfOptions || {});
+      return {
+        originalFile: file,
+        printReadyFile,
+        conversionPlacement: CONVERSION_PLACEMENT.BROWSER,
+        conversionSource: 'browser-image-to-pdf',
+        fileKind: kind,
+        decision,
+      };
+    } catch (error) {
+      console.warn("Native image conversion failed, falling back to placeholder:", error);
+    }
   }
 
-  if (kind === 'office' || kind === 'archive' || kind === 'unsupported') {
-    const printReadyFile = await convertGenericFileToPdfInBrowser(file);
+  if (kind === 'text') {
+    const printReadyFile = await convertTextToPdfInBrowser(file);
     return {
       originalFile: file,
       printReadyFile,
       conversionPlacement: CONVERSION_PLACEMENT.BROWSER,
-      conversionSource: 'browser-universal',
+      conversionSource: 'browser-text-to-pdf',
       fileKind: kind,
       decision: {
         placement: CONVERSION_PLACEMENT.BROWSER,
-        reasonCode: 'BROWSER_UNIVERSAL_CONVERSION',
+        reasonCode: 'BROWSER_PREPARATION_FORCED',
         kind,
       },
     };
   }
 
+  // Catch-all for office, archive, unsupported, OR images that couldn't be natively converted
+  const printReadyFile = await convertGenericFileToPdfInBrowser(file);
   return {
     originalFile: file,
-    printReadyFile: null,
-    conversionPlacement: CONVERSION_PLACEMENT.MANUAL,
-    conversionSource: 'none',
+    printReadyFile,
+    conversionPlacement: CONVERSION_PLACEMENT.BROWSER,
+    conversionSource: 'browser-universal',
     fileKind: kind,
     decision: {
-      placement: CONVERSION_PLACEMENT.MANUAL,
-      reasonCode: 'BROWSER_PREPARATION_UNAVAILABLE',
+      placement: CONVERSION_PLACEMENT.BROWSER,
+      reasonCode: 'BROWSER_UNIVERSAL_CONVERSION',
       kind,
     },
   };

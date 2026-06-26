@@ -22,10 +22,9 @@ function getImageType(file) {
   const name = String(file?.name || '').toLowerCase();
 
   if (type === 'image/png' || name.endsWith('.png')) return 'png';
-  if (type === 'image/webp' || name.endsWith('.webp')) return 'webp';
   if (type === 'image/jpeg' || name.endsWith('.jpg') || name.endsWith('.jpeg')) return 'jpg';
 
-  return 'unsupported';
+  return 'other';
 }
 
 async function fileToDataUrl(file) {
@@ -47,8 +46,7 @@ async function loadImageFromFile(file) {
   });
 }
 
-async function convertWebpToPngBytes(file) {
-  const image = await loadImageFromFile(file);
+async function convertImageToPngBytes(file, image) {
   const canvas = document.createElement('canvas');
   canvas.width = image.naturalWidth || image.width;
   canvas.height = image.naturalHeight || image.height;
@@ -58,7 +56,7 @@ async function convertWebpToPngBytes(file) {
   ctx.drawImage(image, 0, 0);
 
   const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
-  if (!blob) throw new Error('Browser failed to convert WebP image to PNG');
+  if (!blob) throw new Error('Browser failed to convert image to PNG');
   return new Uint8Array(await blob.arrayBuffer());
 }
 
@@ -89,9 +87,6 @@ export async function convertImageToPdfInBrowser(file, options = {}) {
   }
 
   const imageType = getImageType(file);
-  if (imageType === 'unsupported') {
-    throw new Error('Browser image conversion supports JPG, PNG, and WebP only');
-  }
 
   const decodedImage = await loadImageFromFile(file);
   const naturalWidth = decodedImage.naturalWidth || decodedImage.width;
@@ -106,10 +101,13 @@ export async function convertImageToPdfInBrowser(file, options = {}) {
   const rawBytes = new Uint8Array(await file.arrayBuffer());
 
   let embeddedImage;
-  if (imageType === 'png') embeddedImage = await pdfDoc.embedPng(rawBytes);
-  if (imageType === 'jpg') embeddedImage = await pdfDoc.embedJpg(rawBytes);
-  if (imageType === 'webp') {
-    const pngBytes = await convertWebpToPngBytes(file);
+  if (imageType === 'png') {
+    embeddedImage = await pdfDoc.embedPng(rawBytes);
+  } else if (imageType === 'jpg') {
+    embeddedImage = await pdfDoc.embedJpg(rawBytes);
+  } else {
+    // For webp, gif, bmp, heic (if supported by browser natively), draw to canvas and convert to PNG
+    const pngBytes = await convertImageToPngBytes(file, decodedImage);
     embeddedImage = await pdfDoc.embedPng(pngBytes);
   }
 

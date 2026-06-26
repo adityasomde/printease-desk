@@ -35,7 +35,8 @@ export async function convertTextToPdfInBrowser(file, options = {}) {
   const maxChars = Math.max(40, Math.floor((A4.width - margin * 2) / (fontSize * 0.62)));
   const maxLines = Math.max(20, Math.floor((A4.height - margin * 2) / lineHeight));
 
-  const sourceLines = text.split(/\r?\n/).flatMap((line) => wrapLine(line, maxChars));
+  const safeText = text.replace(/[^\x09\x0A\x0D\x20-\x7E]/g, '?');
+  const sourceLines = safeText.split(/\r?\n/).flatMap((line) => wrapLine(line, maxChars));
   let page = null;
   let lineIndex = 0;
 
@@ -50,7 +51,7 @@ export async function convertTextToPdfInBrowser(file, options = {}) {
       y: A4.height - margin - lineIndex * lineHeight,
       size: fontSize,
       font,
-      color: rgb(0.08, 0.1, 0.14),
+      color: rgb(0, 0, 0),
     });
     lineIndex += 1;
 

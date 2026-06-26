@@ -41,14 +41,5 @@ export function detectUploadFileKind(file) {
 
 export function canBrowserTryImageToPdf(file, { maxBytes = 20 * 1024 * 1024 } = {}) {
   const kind = detectUploadFileKind(file);
-  if (kind !== 'image') return false;
-
-  const type = String(file?.type || '').toLowerCase();
-  const ext = getUploadExtension(file);
-
-  // pdf-lib directly supports JPG/PNG. WebP is handled through canvas in imageToPdfBrowser.js.
-  const browserSupported = ['image/jpeg', 'image/png', 'image/webp'].includes(type) ||
-    ['.jpg', '.jpeg', '.png', '.webp'].includes(ext);
-
-  return browserSupported && Number(file?.size || 0) <= maxBytes;
+  return kind === 'image' && Number(file?.size || 0) <= maxBytes;
 }

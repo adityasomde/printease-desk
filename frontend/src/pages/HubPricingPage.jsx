@@ -65,7 +65,7 @@ export default function HubPricingPage({ currentHub, updateCentrePrice, updateCe
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
         <Card>
           <div className="flex items-start justify-between gap-4">
             <div>

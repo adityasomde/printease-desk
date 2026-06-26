@@ -341,15 +341,15 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-3xl font-bold">Print Hub Dashboard</h2>
-          <p className="text-slate-600">{currentHub.name} · Code {currentHub.code}</p>
+          <h2 className="text-2xl sm:text-3xl font-bold">Print Hub Dashboard</h2>
+          <p className="text-slate-600 text-sm sm:text-base">{currentHub.name} · Code {currentHub.code}</p>
         </div>
-        <button onClick={() => navigate("hubPricing")} className="rounded-2xl bg-slate-900 px-5 py-3 font-semibold text-white">
+        <button onClick={() => navigate("hubPricing")} className="rounded-2xl bg-slate-900 px-5 py-3 font-semibold text-white w-full sm:w-auto">
           Manage Pricing
         </button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
         <Metric title="Total Orders" value={ordersForHub.length} icon={<FileText />} />
         <Metric title="Active Orders" value={pendingOrders} icon={<Printer />} />
         <Metric title="Pages Printed" value={totalPages} icon={<BarChart3 />} />
@@ -413,7 +413,7 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
         </div>
       </Card>
 
-      <div className="grid gap-6 md:grid-cols-2 max-w-4xl">
+      <div className="grid gap-6 grid-cols-1 md:grid-cols-2 max-w-4xl">
         <HubLocationCard currentCentre={currentHub} />
         <HubAfterOrderSettingsCard currentCentre={currentHub} onSettingsUpdate={onAfterOrderSettingsUpdate} />
       </div>

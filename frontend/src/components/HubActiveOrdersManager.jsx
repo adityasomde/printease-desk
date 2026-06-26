@@ -788,50 +788,54 @@ export default function HubActiveOrdersManager({
       )}
 
       {sendModalOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
-          <div className="w-full max-w-xl rounded-3xl bg-white p-6 shadow-2xl">
-            <div className="flex items-start justify-between gap-4">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/50 p-2 sm:items-center sm:p-4">
+          <div className="relative flex max-h-[90dvh] w-full max-w-xl flex-col rounded-t-3xl sm:rounded-3xl bg-white p-6 shadow-2xl overflow-hidden">
+            <div className="flex shrink-0 items-start justify-between gap-4 border-b pb-3 mb-4">
               <div>
-                <h3 className="text-xl font-bold">Send to Printer</h3>
-                <p className="mt-1 text-sm text-slate-600">Choose the desktop device and local printer for order {sendModalOrder.id}.</p>
+                <h3 className="text-xl font-bold text-slate-900">Send to Printer</h3>
+                <p className="mt-1 text-xs text-slate-500">Choose the desktop device and local printer for order {sendModalOrder.id}.</p>
               </div>
-              <button type="button" onClick={closeSendModal} className="rounded-full border p-2" aria-label="Close send to printer modal">
+              <button type="button" onClick={closeSendModal} className="rounded-full border p-2 text-slate-400 hover:text-slate-600" aria-label="Close send to printer modal">
                 <X size={18} />
               </button>
             </div>
-            <div className="mt-5 grid gap-4">
-              <label className="grid gap-2 text-sm font-semibold text-slate-700">
-                Select Device
-                <select value={selectedAgentId} onChange={(event) => changeSelectedAgent(event.target.value)} className="rounded-xl border px-3 py-3 font-normal">
-                  <option value="">Choose desktop device</option>
-                  {routeableAgents.map((agent) => (
-                    <option key={agent.id} value={agent.id}>{agent.agentName || agent.deviceName || agent.id} · {agent.status || "unknown"}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="grid gap-2 text-sm font-semibold text-slate-700">
-                Select Printer
-                <select value={selectedPrinterName} onChange={(event) => setSelectedPrinterName(event.target.value)} className="rounded-xl border px-3 py-3 font-normal" disabled={!selectedAgentId}>
-                  <option value="">Choose printer</option>
-                  {selectedAgentPrinters.map((printer) => (
-                    <option key={printer.id || printer.printerName} value={printer.printerName}>{printer.printerName}{printer.isDefault ? " · Default" : ""}</option>
-                  ))}
-                </select>
-              </label>
-              <div className="flex flex-wrap justify-end gap-3">
-                <button type="button" onClick={closeSendModal} className="rounded-xl border px-4 py-2 font-semibold">Cancel</button>
-                <button type="button" onClick={sendToAgent} disabled={!selectedAgentId || Boolean(sendingOrderId)} className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2 font-semibold text-white disabled:bg-slate-300">
-                  <Send size={16} /> {sendingOrderId ? "Queueing" : "Queue Print Job"}
-                </button>
+            
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1 py-1" style={{ WebkitOverflowScrolling: "touch" }}>
+              <div className="grid gap-4">
+                <label className="grid gap-2 text-sm font-semibold text-slate-700">
+                  Select Device
+                  <select value={selectedAgentId} onChange={(event) => changeSelectedAgent(event.target.value)} className="rounded-xl border px-3 py-3 font-normal">
+                    <option value="">Choose desktop device</option>
+                    {routeableAgents.map((agent) => (
+                      <option key={agent.id} value={agent.id}>{agent.agentName || agent.deviceName || agent.id} · {agent.status || "unknown"}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-2 text-sm font-semibold text-slate-700">
+                  Select Printer
+                  <select value={selectedPrinterName} onChange={(event) => setSelectedPrinterName(event.target.value)} className="rounded-xl border px-3 py-3 font-normal" disabled={!selectedAgentId}>
+                    <option value="">Choose printer</option>
+                    {selectedAgentPrinters.map((printer) => (
+                      <option key={printer.id || printer.printerName} value={printer.printerName}>{printer.printerName}{printer.isDefault ? " · Default" : ""}</option>
+                    ))}
+                  </select>
+                </label>
               </div>
+            </div>
+
+            <div className="flex flex-wrap justify-end gap-3 border-t pt-3 mt-4 shrink-0">
+              <button type="button" onClick={closeSendModal} className="rounded-xl border px-4 py-2 font-semibold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button type="button" onClick={sendToAgent} disabled={!selectedAgentId || Boolean(sendingOrderId)} className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2 font-semibold text-white disabled:bg-slate-300">
+                <Send size={16} /> {sendingOrderId ? "Queueing" : "Queue Print Job"}
+              </button>
             </div>
           </div>
         </div>
       )}
 
       {documentModalOrder && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-slate-950/50 p-2 sm:items-center sm:p-4">
-          <div className="max-h-[96dvh] w-full max-w-4xl overflow-y-auto overscroll-contain rounded-3xl bg-white p-4 shadow-2xl sm:max-h-[92vh] sm:p-6" style={{ WebkitOverflowScrolling: "touch" }}>
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/50 p-2 sm:items-center sm:p-4">
+          <div className="max-h-[90dvh] w-full max-w-4xl overflow-y-auto overscroll-contain rounded-t-3xl sm:rounded-3xl bg-white p-4 shadow-2xl sm:max-h-[92vh] sm:p-6" style={{ WebkitOverflowScrolling: "touch" }}>
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h3 className="text-xl font-bold">Order Documents</h3>

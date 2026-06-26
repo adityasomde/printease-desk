@@ -196,8 +196,8 @@ export default function CentreMapModal({ centres, onClose, onSelectCentre, focus
         .printease-popup .leaflet-popup-content { margin: 10px 12px; }
       `}</style>
 
-      <div className="relative m-auto flex w-full max-w-4xl flex-col rounded-2xl bg-white shadow-2xl overflow-hidden"
-        style={{ height: "min(88vh, 680px)" }}>
+      <div className="relative m-auto flex w-[calc(100%-16px)] sm:w-full max-w-4xl flex-col rounded-2xl bg-white shadow-2xl overflow-hidden"
+        style={{ height: "min(88dvh, 680px)" }}>
 
         {/* Header */}
         <div className="flex items-center justify-between border-b px-5 py-3">

@@ -358,87 +358,91 @@ export default function HubHistoryPage({ currentHub, hubOrders }) {
 
       {/* Document Modal */}
       {documentModalOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
-          <div className="w-full max-w-3xl rounded-3xl bg-white p-6 shadow-2xl">
-            <div className="flex items-start justify-between gap-4">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/50 p-2 sm:items-center sm:p-4">
+          <div className="relative flex h-auto max-h-[90dvh] w-full max-w-3xl flex-col rounded-t-3xl sm:rounded-3xl bg-white p-6 shadow-2xl overflow-hidden sm:max-h-[90vh]">
+            <div className="flex shrink-0 items-start justify-between gap-4 border-b pb-3 mb-4">
               <div>
-                <h3 className="text-xl font-bold">Order Documents</h3>
-                <p className="mt-1 text-sm text-slate-600">{documentModalOrder.id}</p>
+                <h3 className="text-xl font-bold text-slate-900">Order Documents</h3>
+                <p className="mt-1 text-sm text-slate-500">{documentModalOrder.id}</p>
               </div>
               <button type="button" onClick={() => {
                 setDocumentModalOrder(null);
                 setDocumentPreview(null);
-              }} className="rounded-full border p-2" aria-label="Close documents modal">
+              }} className="rounded-full border p-2 text-slate-400 hover:text-slate-600" aria-label="Close documents modal">
                 <X size={18} />
               </button>
             </div>
 
-            <div className="mt-5 grid gap-3">
-              {documentsLoading && <p className="text-sm text-slate-500">Loading documents...</p>}
-              {!documentsLoading && orderDocuments.length === 0 && <p className="text-sm text-slate-500">No documents found.</p>}
-              {orderDocuments.map((document) => (
-                <div key={document.documentId} className="rounded-2xl border p-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0">
-                      <p className="truncate font-semibold">{document.fileName}</p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {document.pageCount} pages · {Math.ceil(Number(document.fileSizeBytes || 0) / 1024)} KB · uploaded {document.uploadedAt ? new Date(document.uploadedAt).toLocaleString("en-IN") : "recently"}
-                      </p>
-                      <p className="mt-2 break-all text-xs text-slate-500">SHA-256: {document.fileSha256 || "Not available"}</p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        Selected {document.selectedPageCount} · printable {document.printablePageCount} · copies {document.copies} · ₹{Number(document.amountPaise || 0) / 100}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => openSignedDocument(document, "download")}
-                        className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 transition"
-                      >
-                        <Download size={15} /> {documentActionId === `download:${document.documentId}` ? "Opening" : "Download original"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openSignedDocument(document, "view")}
-                        className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold hover:bg-slate-50 transition"
-                      >
-                        <Eye size={15} /> {documentActionId === `view:${document.documentId}` ? "Loading" : "View"}
-                      </button>
-                      <span className="inline-flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
-                        <ShieldCheck size={14} /> Hash verified
-                      </span>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1 py-1" style={{ WebkitOverflowScrolling: "touch" }}>
+              <div className="grid gap-3">
+                {documentsLoading && <p className="text-sm text-slate-500">Loading documents...</p>}
+                {!documentsLoading && orderDocuments.length === 0 && <p className="text-sm text-slate-500">No documents found.</p>}
+                {orderDocuments.map((document) => (
+                  <div key={document.documentId} className="rounded-2xl border p-4 bg-slate-50/50">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-slate-900">{document.fileName}</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {document.pageCount} pages · {Math.ceil(Number(document.fileSizeBytes || 0) / 1024)} KB · uploaded {document.uploadedAt ? new Date(document.uploadedAt).toLocaleString("en-IN") : "recently"}
+                        </p>
+                        <p className="mt-2 break-all text-xs text-slate-500">SHA-256: {document.fileSha256 || "Not available"}</p>
+                        <p className="mt-1 text-xs text-slate-500 font-medium">
+                          Selected {document.selectedPageCount} · printable {document.printablePageCount} · copies {document.copies} · ₹{Number(document.amountPaise || 0) / 100}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => openSignedDocument(document, "download")}
+                          className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 transition"
+                        >
+                          <Download size={15} /> {documentActionId === `download:${document.documentId}` ? "Opening" : "Download original"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openSignedDocument(document, "view")}
+                          className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold hover:bg-slate-50 transition"
+                        >
+                          <Eye size={15} /> {documentActionId === `view:${document.documentId}` ? "Loading" : "View"}
+                        </button>
+                        <span className="inline-flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+                          <ShieldCheck size={14} /> Hash verified
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
 
-            {agentError && <p className="mt-4 text-sm font-semibold text-rose-600">{agentError}</p>}
+            {agentError && <p className="mt-4 text-sm font-semibold text-rose-600 shrink-0">{agentError}</p>}
           </div>
         </div>
       )}
 
       {documentPreview && (
-        <div className="fixed inset-0 z-[60] flex items-end justify-center overflow-y-auto bg-slate-950/70 p-2 backdrop-blur-sm sm:items-center sm:p-4">
-          <div className="max-h-[96dvh] w-full max-w-5xl overflow-y-auto rounded-3xl bg-white p-3 shadow-2xl sm:max-h-[92vh] sm:p-4">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <h3 className="truncate pr-4 font-semibold text-slate-900">{documentPreview.name}</h3>
+        <div className="fixed inset-0 z-[60] flex items-end justify-center bg-slate-950/70 p-2 backdrop-blur-sm sm:items-center sm:p-4">
+          <div className="relative flex max-h-[90dvh] w-full max-w-5xl flex-col rounded-t-3xl sm:rounded-3xl bg-white p-4 shadow-2xl overflow-hidden sm:max-h-[92vh]">
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b pb-3 mb-4">
+              <h3 className="truncate pr-4 font-bold text-slate-900">{documentPreview.name}</h3>
               <button
                 type="button"
                 onClick={() => setDocumentPreview(null)}
-                className="rounded-full border p-2 text-slate-700 hover:bg-slate-50 transition"
+                className="rounded-full border p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
                 aria-label="Close preview"
               >
                 <X size={20} />
               </button>
             </div>
-            <InlineDocumentPreview
-              url={documentPreview.url}
-              fileName={documentPreview.name}
-              fileType={documentPreview.fileType}
-              textContent={documentPreview.textContent}
-              onDownload={() => openSignedDocument({ documentId: documentPreview.documentId, fileName: documentPreview.name }, "download")}
-            />
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1 py-1" style={{ WebkitOverflowScrolling: "touch" }}>
+              <InlineDocumentPreview
+                url={documentPreview.url}
+                fileName={documentPreview.name}
+                fileType={documentPreview.fileType}
+                textContent={documentPreview.textContent}
+                onDownload={() => openSignedDocument({ documentId: documentPreview.documentId, fileName: documentPreview.name }, "download")}
+              />
+            </div>
           </div>
         </div>
       )}

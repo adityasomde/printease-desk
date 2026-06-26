@@ -239,7 +239,7 @@ export default function HubOrderConfigModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[100] flex items-end justify-center p-2 sm:items-center sm:p-4">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity duration-300"
@@ -249,7 +249,7 @@ export default function HubOrderConfigModal({
       {/* Modal Container */}
       <form
         onSubmit={handleSubmit}
-        className="relative z-10 flex h-full max-h-[90vh] w-full max-w-3xl flex-col rounded-3xl border border-slate-200/80 bg-white shadow-2xl transition-all duration-300 dark:border-slate-800/80 dark:bg-slate-900"
+        className="relative z-10 flex h-auto max-h-[92dvh] sm:max-h-[90vh] w-full max-w-3xl flex-col rounded-t-3xl sm:rounded-3xl border border-slate-200/80 bg-white shadow-2xl transition-all duration-300 dark:border-slate-800/80 dark:bg-slate-900"
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 dark:border-slate-800">

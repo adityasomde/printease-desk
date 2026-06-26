@@ -620,14 +620,18 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
       {!loading && filteredOrders.length === 0 && <EmptyState currentUser={currentUser} />}
 
       {mobileDetailOrder && (
-        <div className="fixed inset-0 z-50 bg-slate-950/50 p-0 lg:hidden">
-          <div className="absolute inset-x-0 bottom-0 max-h-[88vh] overflow-y-auto rounded-t-3xl bg-white shadow-2xl">
+        <div className="fixed inset-0 z-50 bg-slate-950/50 p-0 lg:hidden" onClick={() => setMobileDetailOrder(null)}>
+          <div
+            className="absolute inset-x-0 bottom-0 max-h-[88vh] overflow-y-auto overscroll-contain rounded-t-3xl bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+            style={{ WebkitOverflowScrolling: "touch" }}
+          >
             <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-white p-4">
               <div>
-                <h3 className="font-bold">{mobileDetailOrder.order_code || mobileDetailOrder.id}</h3>
+                <h3 className="font-bold text-slate-900">{mobileDetailOrder.order_code || mobileDetailOrder.id}</h3>
                 <p className="text-xs text-slate-500">Order details</p>
               </div>
-              <button type="button" onClick={() => setMobileDetailOrder(null)} className="rounded-full border p-2" aria-label="Close details">
+              <button type="button" onClick={() => setMobileDetailOrder(null)} className="rounded-full border p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100" aria-label="Close details">
                 <X size={18} />
               </button>
             </div>

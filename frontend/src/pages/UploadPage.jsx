@@ -1146,7 +1146,7 @@ export default function UploadPage({
           )}
 
 
-          <div className="flex gap-2 md:block">
+          <div className="flex flex-col sm:flex-row gap-2 md:block">
             {!selectedCentre && (
               <button onClick={() => navigate("centre", { state: { autoStartScanner: true, fromUpload: true } })} className="flex-1 rounded-2xl border bg-white px-2 py-3 text-sm font-semibold hover:bg-slate-50 md:mt-6 md:w-full md:px-4 md:text-base">
                 Select Centre
@@ -1169,7 +1169,7 @@ export default function UploadPage({
                 <X size={20} />
               </button>
             </div>
-            <div className="max-h-[70vh] overflow-y-auto pr-2 pb-4">
+            <div className="max-h-[70vh] overflow-y-auto overscroll-contain pr-2 pb-4" style={{ WebkitOverflowScrolling: "touch" }}>
               {compactConfigurationForm}
             </div>
             <div className="pt-2">

@@ -13,9 +13,25 @@ export function calculatePrintPricingLocal({
   pagesPerSheet = 1,
   watermarkEnabled = false
 }) {
+  const pageCount = Number(originalPageCount);
+  if (!Number.isFinite(pageCount) || pageCount <= 0) {
+    return {
+      pending: true,
+      reason: "PAGE_COUNT_PENDING",
+      selectedPageCount: null,
+      printablePageCount: null,
+      sheetCount: null,
+      physicalSheetCount: null,
+      pricePerPage: null,
+      watermarkCharge: null,
+      totalAmount: null,
+      totalAmountPaise: null
+    };
+  }
+
   const copyCount = Math.max(1, parseInt(copies || 1, 10));
   
-  let selectedPageCount = originalPageCount;
+  let selectedPageCount = pageCount;
   if (selectedPagesMode === "custom" && selectedPagesRange) {
     try {
       const parts = selectedPagesRange.split(",").map(p => p.trim()).filter(Boolean);
@@ -25,7 +41,7 @@ export function calculatePrintPricingLocal({
       for (const part of parts) {
         if (/^\d+$/.test(part)) {
           const pNum = parseInt(part, 10);
-          if (pNum >= 1 && pNum <= originalPageCount) {
+          if (pNum >= 1 && pNum <= pageCount) {
             parsedPages.add(pNum);
           }
         } else {
@@ -33,7 +49,7 @@ export function calculatePrintPricingLocal({
           if (match) {
             const start = parseInt(match[1], 10);
             const end = parseInt(match[2], 10);
-            if (start <= end && start >= 1 && end <= originalPageCount) {
+            if (start <= end && start >= 1 && end <= pageCount) {
               for (let page = start; page <= end; page++) {
                 parsedPages.add(page);
               }
@@ -55,17 +71,33 @@ export function calculatePrintPricingLocal({
     ? Math.ceil(sheetCount / 2)
     : sheetCount;
 
-  let pricePerPage = 1;
   const isColor = colorMode === "color";
   const isDouble = sides === "two_sided" || sides === "two_sided_long_edge" || sides === "two_sided_short_edge";
 
-  if (!isColor && !isDouble) pricePerPage = pricing.bwSingle ?? 1;
-  else if (!isColor && isDouble) pricePerPage = pricing.bwDouble ?? 1.5;
-  else if (isColor && !isDouble) pricePerPage = pricing.colorSingle ?? 2;
-  else pricePerPage = pricing.colorDouble ?? 3;
+  let pricePerPage;
+  if (!isColor && !isDouble) pricePerPage = pricing.bwSingle;
+  else if (!isColor && isDouble) pricePerPage = pricing.bwDouble;
+  else if (isColor && !isDouble) pricePerPage = pricing.colorSingle;
+  else pricePerPage = pricing.colorDouble;
 
-  const base = printablePageCount * pricePerPage;
-  const watermarkCharge = watermarkEnabled ? (pricing.watermarkCharge ?? 2) : 0;
+  const rate = Number(pricePerPage);
+  if (!Number.isFinite(rate) || rate <= 0) {
+    return {
+      pending: true,
+      reason: "PRICE_RATE_PENDING",
+      selectedPageCount,
+      printablePageCount,
+      sheetCount,
+      physicalSheetCount,
+      pricePerPage: null,
+      watermarkCharge: null,
+      totalAmount: null,
+      totalAmountPaise: null
+    };
+  }
+
+  const base = printablePageCount * rate;
+  const watermarkCharge = watermarkEnabled ? Number(pricing.watermarkCharge || 0) : 0;
   const totalAmount = base + watermarkCharge;
 
   return {
@@ -73,7 +105,7 @@ export function calculatePrintPricingLocal({
     printablePageCount,
     sheetCount,
     physicalSheetCount,
-    pricePerPage,
+    pricePerPage: rate,
     watermarkCharge,
     totalAmount,
     totalAmountPaise: Math.round(totalAmount * 100)
@@ -130,7 +162,7 @@ export default function HubOrderConfigModal({
         return {
           id: file.id,
           fileName: file.fileName,
-          originalPageCount: file.originalPageCount || file.pageCount || 1,
+          originalPageCount: file.originalPageCount || file.pageCount || "",
           copies: file.copies || 1,
           colorMode: normalizeColorMode(printOptions.colorMode),
           sideType: printOptions.sideType || (printOptions.sides?.startsWith('two') ? 'double' : 'single'),
@@ -185,9 +217,12 @@ export default function HubOrderConfigModal({
     return { ...file, calc };
   });
 
-  const totalCalculatedAmount = calculatedFiles.reduce((sum, f) => sum + f.calc.totalAmount, 0);
+  const hasPendingCalculation = calculatedFiles.some((file) => file.calc?.pending);
+  const totalCalculatedAmount = hasPendingCalculation
+    ? null
+    : calculatedFiles.reduce((sum, f) => sum + f.calc.totalAmount, 0);
   const totalPreviousAmount = Number(order.totalAmountPaise || 0) / 100;
-  const isPriceDifferent = Math.abs(totalCalculatedAmount - totalPreviousAmount) > 0.01;
+  const isPriceDifferent = !hasPendingCalculation && Math.abs(totalCalculatedAmount - totalPreviousAmount) > 0.01;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -227,6 +262,12 @@ export default function HubOrderConfigModal({
         }
       }))
     };
+
+    if (hasPendingCalculation) {
+      setErrorMsg("Page count or hub pricing is still pending. Confirm the bill after preparation finishes.");
+      setSubmitting(false);
+      return;
+    }
 
     try {
       await onSave(payload);
@@ -613,11 +654,11 @@ export default function HubOrderConfigModal({
 
                   {/* File Pricing Summary */}
                   <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs font-medium text-slate-500 dark:bg-slate-950/40 dark:text-slate-400 flex flex-wrap gap-x-4 gap-y-1">
-                    <span>Selected: <strong>{file.calc.selectedPageCount}</strong> pgs</span>
-                    <span>Printable: <strong>{file.calc.printablePageCount}</strong> pgs</span>
-                    <span>Sheets: <strong>{file.calc.physicalSheetCount}</strong> sheets</span>
+                    <span>Selected: <strong>{file.calc.pending ? "Pending" : file.calc.selectedPageCount}</strong> pgs</span>
+                    <span>Printable: <strong>{file.calc.pending ? "Pending" : file.calc.printablePageCount}</strong> pgs</span>
+                    <span>Sheets: <strong>{file.calc.pending ? "Pending" : file.calc.physicalSheetCount}</strong> sheets</span>
                     <span className="ml-auto text-indigo-600 dark:text-indigo-400">
-                      File total: <strong>₹{file.calc.totalAmount.toFixed(2)}</strong>
+                      File total: <strong>{file.calc.pending ? "Pending" : `₹${file.calc.totalAmount.toFixed(2)}`}</strong>
                     </span>
                   </div>
                 </div>
@@ -646,7 +687,7 @@ export default function HubOrderConfigModal({
             <span className="text-xs text-slate-400 font-medium block">Total Price Summary</span>
             <div className="flex items-baseline gap-2">
               <span className="text-xl font-bold text-slate-800 dark:text-slate-100">
-                ₹{totalCalculatedAmount.toFixed(2)}
+                {hasPendingCalculation ? "Pending" : `₹${totalCalculatedAmount.toFixed(2)}`}
               </span>
               {isPriceDifferent && (
                 <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 flex items-center gap-1">

@@ -199,7 +199,7 @@ export default function UploadPage({
       ? documentFiles.map((file) => ({ name: file.name }))
       : (reprintSourceDocuments || []).map((document) => ({
           name: document.fileName || document.file_name || "Reprint document",
-          pageCount: document.pageCount || document.page_count || document.originalPageCount || document.original_pages || document.pages || 1,
+          pageCount: document.pageCount || document.page_count || document.originalPageCount || document.original_pages || document.pages || null,
         }));
   }, [documentFiles, reprintSourceDocuments]);
 
@@ -224,8 +224,10 @@ export default function UploadPage({
     files.forEach((f, index) => {
       indices.push(index);
       if (!newConfigs[index]) {
+        const rawPages = f.pageCount ?? f.pages ?? f.originalPageCount ?? f.original_pages ?? null;
+        const knownPages = Number(rawPages);
         newConfigs[index] = {
-          pages: Number(f.pageCount || f.pages || f.originalPageCount || f.original_pages || 1),
+          pages: Number.isFinite(knownPages) && knownPages > 0 ? knownPages : "",
           selectedPages: "",
           copies: 1,
           colorType: "bw",
@@ -567,7 +569,7 @@ export default function UploadPage({
 
   const handlePaymentClick = () => {
     const blockingPreparation = Object.values(filePreparationState).find((item) =>
-      [PREPARATION_STATUS.PREPARING, PREPARATION_STATUS.PENDING_DESKTOP, PREPARATION_STATUS.FAILED].includes(item?.status)
+      [PREPARATION_STATUS.PREPARING, PREPARATION_STATUS.FAILED].includes(item?.status)
     );
     if (blockingPreparation) {
       window.alert(blockingPreparation.errorMessage || blockingPreparation.message || "Please wait until document pricing is ready.");
@@ -587,12 +589,14 @@ export default function UploadPage({
       for (let i = 0; i < displayFiles.length; i++) {
         const conf = multiFileConfigs[i] || {};
         const fileCopies = conf.copies ?? 1;
-        const filePages = conf.pages ?? 1;
+        const prepared = filePreparationState[i];
+        const canDeferPageCount = prepared?.status === PREPARATION_STATUS.PENDING_DESKTOP;
+        const filePages = conf.pages ?? "";
         if (fileCopies === "" || Number(fileCopies) <= 0) {
           window.alert(`Please enter a valid number of copies (at least 1) for document: "${displayFiles[i].name}".`);
           return;
         }
-        if (filePages === "" || Number(filePages) <= 0) {
+        if (!canDeferPageCount && (filePages === "" || Number(filePages) <= 0)) {
           window.alert(`Please enter a valid number of pages (at least 1) for document: "${displayFiles[i].name}".`);
           return;
         }
@@ -649,41 +653,51 @@ export default function UploadPage({
         : !hasUsableCentrePricing
           ? "Select a print centre with pricing before checkout. The final bill will stay pending until pricing is available."
         : "Price is ready before checkout and will be verified by the backend.";
+  const singlePricePending = hasPreparingFiles || hasPendingDesktopFiles || failedPreparation;
+  const displayMoney = (value) => (value === null || value === undefined || Number.isNaN(Number(value)) ? "Pending" : `₹${value}`);
+  const displayCount = (value) => (value === null || value === undefined || value === "" || Number.isNaN(Number(value)) ? "Pending" : value);
 
   const multiEstimatedFiles = useMemo(() => {
     if (!isMulti) return [];
     return displayFiles.map((file, index) => {
       const config = multiFileConfigs[index] || {};
       const prepared = filePreparationState[index];
-      const filePages = Number(prepared?.pageCount || config.pages || 1);
-      const selectedCount = countSelectedPagesPreview(config.selectedPages, filePages) || filePages;
+      const rawFilePages = prepared?.pageCount ?? config.pages ?? file.pageCount ?? null;
+      const filePages = Number(rawFilePages);
+      const hasKnownPages = Number.isFinite(filePages) && filePages > 0;
+      const selectedCount = hasKnownPages
+        ? (countSelectedPagesPreview(config.selectedPages, filePages) || filePages)
+        : null;
       const fileCopies = Number(config.copies || 1);
       const fileRate = getPricePerPage(selectedCentre, config.colorType || "bw", config.sideType || "single");
+      const hasKnownRate = Number.isFinite(Number(fileRate)) && Number(fileRate) > 0;
       const breakdown = estimatePrintBreakdown({
-        pages: selectedCount,
+        pages: selectedCount || 0,
         copies: fileCopies,
         sideType: config.sideType || "single",
         pagesPerSheet: config.pagesPerSheet || 1,
       });
-      const fileTotal = estimatePricePreview({
-        pages: selectedCount,
-        copies: fileCopies,
-        pricePerPage: fileRate,
-        sideType: config.sideType || "single",
-        pagesPerSheet: config.pagesPerSheet || 1,
-        watermark: Boolean(config.watermark),
-        watermarkCharge: selectedCentre?.watermarkCharge,
-      });
+      const fileTotal = hasKnownPages && hasKnownRate
+        ? estimatePricePreview({
+            pages: selectedCount,
+            copies: fileCopies,
+            pricePerPage: fileRate,
+            sideType: config.sideType || "single",
+            pagesPerSheet: config.pagesPerSheet || 1,
+            watermark: Boolean(config.watermark),
+            watermarkCharge: selectedCentre?.watermarkCharge,
+          })
+        : null;
 
       return {
         name: file.name,
-        pages: filePages,
+        pages: hasKnownPages ? filePages : null,
         selectedPages: config.selectedPages || "All",
         selectedCount,
         copies: fileCopies,
         colorType: config.colorType || "bw",
         sideType: config.sideType || "single",
-        rate: fileRate,
+        rate: hasKnownRate ? fileRate : null,
         total: fileTotal,
         sheetSides: breakdown.sheetSides,
         physicalSheets: breakdown.physicalSheets,
@@ -705,6 +719,7 @@ export default function UploadPage({
         watermarkCharge: selectedCentre?.watermarkCharge,
       });
     }
+    if (multiEstimatedFiles.some((file) => file.total === null || file.total === undefined)) return null;
     return multiEstimatedFiles.reduce((sum, file) => sum + file.total, 0);
   }, [multiEstimatedFiles, isMulti, estimatedSelectedPageCount, copies, pricePerPage, sideType, pagesPerSheet, watermark, selectedCentre?.watermarkCharge]);
 
@@ -939,6 +954,8 @@ export default function UploadPage({
                     <span className="block truncate text-xs text-slate-500">
                       {filePreparationState[0].status === PREPARATION_STATUS.READY
                         ? `${filePreparationState[0].pageCount || pages} page${Number(filePreparationState[0].pageCount || pages) === 1 ? "" : "s"} ready`
+                        : filePreparationState[0].status === PREPARATION_STATUS.PENDING_DESKTOP
+                          ? "Page count pending after hub desktop conversion"
                         : filePreparationState[0].message || filePreparationState[0].errorMessage || "Preparing..."}
                     </span>
                   )}
@@ -993,7 +1010,7 @@ export default function UploadPage({
                                 : "bg-amber-100 text-amber-700"
                           }`}>
                             {filePreparationState[index].status === PREPARATION_STATUS.READY
-                              ? `${filePreparationState[index].pageCount || conf.pages || 1}p`
+                              ? `${filePreparationState[index].pageCount || conf.pages || "?"}p`
                               : filePreparationState[index].status === PREPARATION_STATUS.PENDING_DESKTOP
                                 ? "desktop"
                                 : filePreparationState[index].status === PREPARATION_STATUS.FAILED
@@ -1059,7 +1076,7 @@ export default function UploadPage({
             <div className="flex w-full items-center justify-between font-bold md:hidden">
               <span className="text-sm text-slate-500">{priceSummaryLabel}</span>
               <span className="flex items-center text-xl text-emerald-600">
-                {priceReady ? <><IndianRupee size={20} />{backendPrice?.totalAmount ?? localEstimatedTotal}</> : "Pending"}
+                {priceReady && localEstimatedTotal !== null ? <><IndianRupee size={20} />{backendPrice?.totalAmount ?? localEstimatedTotal}</> : "Pending"}
               </span>
             </div>
           </div>
@@ -1100,26 +1117,26 @@ export default function UploadPage({
                 multiEstimatedFiles.map((file) => (
                   <div key={file.name} className="rounded-xl border border-slate-100 bg-slate-50 p-2">
                     <p className="mb-1 truncate font-semibold text-slate-900">{file.name}</p>
-                    <Row label="Pages" value={`${file.selectedCount}/${file.pages}`} />
-                    <Row label="Physical sheets" value={file.physicalSheets} />
+                    <Row label="Pages" value={file.pages ? `${file.selectedCount}/${file.pages}` : "Pending"} />
+                    <Row label="Physical sheets" value={file.pages ? file.physicalSheets : "Pending"} />
                     <Row label="Copies" value={file.copies} />
                     <Row label="Mode" value={`${file.colorType === "bw" ? "B/W" : "Color"} · ${file.sideType}`} />
-                    <Row label="Rate" value={`₹${file.rate}`} />
-                    <Row label="Estimate" value={file.preparationStatus === PREPARATION_STATUS.READY ? `₹${file.total}` : "Calculating"} />
+                    <Row label="Rate" value={file.rate ? `₹${file.rate}` : "Pending"} />
+                    <Row label="Estimate" value={file.total !== null && file.preparationStatus === PREPARATION_STATUS.READY ? `₹${file.total}` : "Pending"} />
                   </div>
                 ))
               ) : (
                 <>
-                  <Row label="Original Pages" value={backendPrice?.originalPageCount || pages} />
-                  <Row label="Selected Pages" value={backendPrice?.selectedPageCount || selectedPages || "All"} />
+                  <Row label="Original Pages" value={singlePricePending ? "Pending" : displayCount(backendPrice?.originalPageCount || pages)} />
+                  <Row label="Selected Pages" value={singlePricePending ? "Pending" : (backendPrice?.selectedPageCount || selectedPages || "All")} />
                   <Row label="Copies" value={copies} />
-                  <Row label="Printable Pages" value={backendPrice?.printablePageCount || estimatePrintablePages(estimatedSelectedPageCount, copies)} />
-                  <Row label="Physical Sheets" value={backendPrice?.physicalSheetCount || singleBreakdown.physicalSheets} />
-                  <Row label="Sheet sides" value={backendPrice?.sheetCount || singleBreakdown.sheetSides} />
+                  <Row label="Printable Pages" value={singlePricePending ? "Pending" : (backendPrice?.printablePageCount || estimatePrintablePages(estimatedSelectedPageCount, copies))} />
+                  <Row label="Physical Sheets" value={singlePricePending ? "Pending" : (backendPrice?.physicalSheetCount || singleBreakdown.physicalSheets)} />
+                  <Row label="Sheet sides" value={singlePricePending ? "Pending" : (backendPrice?.sheetCount || singleBreakdown.sheetSides)} />
                   <Row label="Print Type" value={colorType === "bw" ? "B/W" : "Color"} />
                   <Row label="Side" value={sideType} />
                   <Row label="Pages/Sheet" value={pagesPerSheet} />
-                  <Row label={backendPrice ? "Backend Rate" : "Estimated Rate"} value={`₹${backendPrice?.pricePerPage ?? pricePerPage ?? 0}`} />
+                  <Row label={backendPrice ? "Backend Rate" : "Estimated Rate"} value={singlePricePending ? "Pending" : displayMoney(backendPrice?.pricePerPage ?? pricePerPage)} />
                   {backendPrice?.files?.map((file) => (
                     <Row key={file.documentId || file.fileName} label={file.fileName || "File"} value={`₹${file.totalAmount}`} />
                   ))}
@@ -1135,14 +1152,14 @@ export default function UploadPage({
                    <div key={file.name} className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
                      <div className="mb-2 flex items-start justify-between gap-3">
                        <p className="truncate font-semibold text-slate-900">{file.name}</p>
-                       <span className="flex shrink-0 items-center font-bold text-emerald-700"><IndianRupee size={15} />{file.total}</span>
+                       <span className="flex shrink-0 items-center font-bold text-emerald-700">{file.total === null ? "Pending" : <><IndianRupee size={15} />{file.total}</>}</span>
                      </div>
                      <div className="grid gap-x-4 gap-y-1 text-xs sm:grid-cols-2">
-                       <Row label="Pages" value={`${file.selectedCount}/${file.pages}`} />
-                       <Row label="Physical sheets" value={file.physicalSheets} />
+                       <Row label="Pages" value={file.pages ? `${file.selectedCount}/${file.pages}` : "Pending"} />
+                       <Row label="Physical sheets" value={file.pages ? file.physicalSheets : "Pending"} />
                        <Row label="Copies" value={file.copies} />
                        <Row label="Mode" value={`${file.colorType === "bw" ? "B/W" : "Color"} · ${file.sideType}`} />
-                       <Row label="Rate" value={`₹${file.rate}`} />
+                       <Row label="Rate" value={file.rate ? `₹${file.rate}` : "Pending"} />
                        <Row label="Status" value={file.preparationStatus === PREPARATION_STATUS.READY ? "Ready" : file.preparationStatus === PREPARATION_STATUS.PENDING_DESKTOP ? "Desktop prep" : file.preparationStatus === PREPARATION_STATUS.FAILED ? "Failed" : "Calculating"} />
                      </div>
                    </div>
@@ -1151,12 +1168,12 @@ export default function UploadPage({
                </div>
             ) : (
                <>
-                 <Row label="Original Pages" value={backendPrice?.originalPageCount || pages} />
-                 <Row label="Selected Pages" value={backendPrice?.selectedPageCount || selectedPages || "All"} />
+                 <Row label="Original Pages" value={singlePricePending ? "Pending" : displayCount(backendPrice?.originalPageCount || pages)} />
+                 <Row label="Selected Pages" value={singlePricePending ? "Pending" : (backendPrice?.selectedPageCount || selectedPages || "All")} />
                  <Row label="Copies" value={copies} />
-                 <Row label="Printable Pages" value={backendPrice?.printablePageCount || estimatePrintablePages(estimatedSelectedPageCount, copies)} />
-                 <Row label="Physical Sheets" value={backendPrice?.physicalSheetCount || singleBreakdown.physicalSheets} />
-                 <Row label="Sheet sides" value={backendPrice?.sheetCount || singleBreakdown.sheetSides} />
+                 <Row label="Printable Pages" value={singlePricePending ? "Pending" : (backendPrice?.printablePageCount || estimatePrintablePages(estimatedSelectedPageCount, copies))} />
+                 <Row label="Physical Sheets" value={singlePricePending ? "Pending" : (backendPrice?.physicalSheetCount || singleBreakdown.physicalSheets)} />
+                 <Row label="Sheet sides" value={singlePricePending ? "Pending" : (backendPrice?.sheetCount || singleBreakdown.sheetSides)} />
                  <Row label="Print Type" value={colorType === "bw" ? "B/W" : "Color"} />
                  <Row label="Side" value={sideType} />
                  <Row label="Orientation" value={orientation} />
@@ -1165,7 +1182,7 @@ export default function UploadPage({
                  <Row label="Scale" value={scaleMode.replaceAll("_", " ")} />
                  <Row label="Margins" value={marginMode} />
                  <Row label="Watermark" value={watermark ? "Yes" : "No"} />
-                 <Row label={backendPrice ? "Backend Rate" : "Estimated Rate"} value={`₹${backendPrice?.pricePerPage ?? pricePerPage ?? 0}`} />
+                 <Row label={backendPrice ? "Backend Rate" : "Estimated Rate"} value={singlePricePending ? "Pending" : displayMoney(backendPrice?.pricePerPage ?? pricePerPage)} />
                  {backendPrice?.files?.map((file) => (
                    <Row key={file.documentId || file.fileName} label={file.fileName || "File"} value={`₹${file.totalAmount}`} />
                  ))}
@@ -1174,7 +1191,7 @@ export default function UploadPage({
             <hr />
             <div className="flex items-center justify-between text-lg font-bold">
               <span>{backendPrice ? "Backend Total" : "Estimated Total"}</span>
-              <span className="flex items-center"><IndianRupee size={18} />{backendPrice?.totalAmount ?? localEstimatedTotal}</span>
+              <span className="flex items-center">{localEstimatedTotal === null || singlePricePending ? "Pending" : <><IndianRupee size={18} />{backendPrice?.totalAmount ?? localEstimatedTotal}</>}</span>
             </div>
           </div>
 

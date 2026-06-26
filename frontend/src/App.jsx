@@ -196,17 +196,17 @@ function normalizeCentre(centre) {
     status: formatStatus(centre.status),
     upiId: centre.upiId || "",
     upiQrImageUrl: centre.upiQrImageUrl || centre.upi_qr_image_url || "",
-    bwSingle: pricing.bwSingle ?? centre.bwSingle ?? 1,
-    bwDouble: pricing.bwDouble ?? centre.bwDouble ?? 1.5,
-    colorSingle: pricing.colorSingle ?? centre.colorSingle ?? 2,
-    colorDouble: pricing.colorDouble ?? centre.colorDouble ?? 3,
-    watermarkCharge: pricing.watermarkCharge ?? centre.watermarkCharge ?? 2,
+    bwSingle: pricing.bwSingle ?? centre.bwSingle ?? null,
+    bwDouble: pricing.bwDouble ?? centre.bwDouble ?? null,
+    colorSingle: pricing.colorSingle ?? centre.colorSingle ?? null,
+    colorDouble: pricing.colorDouble ?? centre.colorDouble ?? null,
+    watermarkCharge: pricing.watermarkCharge ?? centre.watermarkCharge ?? 0,
     pricing: {
-      bwSingle: pricing.bwSingle ?? centre.bwSingle ?? 1,
-      bwDouble: pricing.bwDouble ?? centre.bwDouble ?? 1.5,
-      colorSingle: pricing.colorSingle ?? centre.colorSingle ?? 2,
-      colorDouble: pricing.colorDouble ?? centre.colorDouble ?? 3,
-      watermarkCharge: pricing.watermarkCharge ?? centre.watermarkCharge ?? 2,
+      bwSingle: pricing.bwSingle ?? centre.bwSingle ?? null,
+      bwDouble: pricing.bwDouble ?? centre.bwDouble ?? null,
+      colorSingle: pricing.colorSingle ?? centre.colorSingle ?? null,
+      colorDouble: pricing.colorDouble ?? centre.colorDouble ?? null,
+      watermarkCharge: pricing.watermarkCharge ?? centre.watermarkCharge ?? 0,
     },
     printerOnline: centre.printerOnline ?? centre.isOnline ?? false,
     // Location fields (safe to be undefined/null when not provided)
@@ -223,12 +223,14 @@ function normalizeCentre(centre) {
 
 function normalizeReprintSourceDocument(document = {}) {
   const printOptions = document.printOptions || document.print_options || {};
+  const rawPageCount = document.pageCount ?? document.page_count ?? document.originalPageCount ?? document.original_pages ?? document.pages ?? null;
+  const pageCount = Number(rawPageCount);
   return {
     ...document,
     documentId: document.documentId || document.document_id || document.id || "",
     fileName: document.fileName || document.file_name || document.name || "document.pdf",
-    pageCount: Number(document.pageCount || document.page_count || document.originalPageCount || document.original_pages || document.pages || 1),
-    originalPageCount: Number(document.originalPageCount || document.original_pages || document.pageCount || document.page_count || document.pages || 1),
+    pageCount: Number.isFinite(pageCount) && pageCount > 0 ? pageCount : null,
+    originalPageCount: Number.isFinite(pageCount) && pageCount > 0 ? pageCount : null,
     copies: Number(document.copies || printOptions.copies || 1),
     selectedPages: document.selectedPages || document.selected_pages || printOptions.pages?.range || "",
     printOptions,

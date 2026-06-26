@@ -2,7 +2,6 @@ import { PDFDocument } from 'pdf-lib';
 import { prepareBrowserPrintReadyFile } from './prepareBrowserPrintReadyFile';
 import { detectUploadFileKind } from './detectUploadFileKind';
 import { convertTextToPdfInBrowser } from './textToPdfBrowser';
-import { convertGenericFileToPdfInBrowser } from './localUniversalConverter';
 
 export const PREPARATION_STATUS = Object.freeze({
   IDLE: 'idle',
@@ -82,19 +81,17 @@ export async function prepareUploadPreview(file, context = {}) {
   }
 
   if (kind === 'office' || kind === 'archive' || kind === 'unsupported') {
-    const printReadyFile = await convertGenericFileToPdfInBrowser(file);
-    const pageCount = await countPdfPages(printReadyFile);
     return {
-      status: PREPARATION_STATUS.READY,
+      status: PREPARATION_STATUS.PENDING_DESKTOP,
       fileKind: kind,
-      pageCount,
-      previewPdfUrl: URL.createObjectURL(printReadyFile),
-      previewKind: 'pdf',
-      printReadyFile,
-      conversionPlacement: 'browser',
-      conversionSource: 'browser',
-      reasonCode: 'LOCAL_UNIVERSAL_CONVERSION',
-      message: 'File converted locally to print-ready PDF.',
+      pageCount: null,
+      previewPdfUrl: '',
+      previewKind: 'unsupported',
+      printReadyFile: null,
+      conversionPlacement: 'manual',
+      conversionSource: 'none',
+      reasonCode: 'DESKTOP_PREPARATION_PENDING',
+      message: 'Waiting for hub to process...',
       errorMessage: '',
     };
   }

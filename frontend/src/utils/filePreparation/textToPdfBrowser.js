@@ -64,8 +64,8 @@ export async function convertTextToPdfInBrowser(file, options = {}) {
   }
 
   const bytes = await pdf.save();
-  const baseName = String(file.name || 'document').replace(/\.[^.]+$/, '');
-  return new File([bytes], `${baseName}.print-ready.pdf`, {
+  const baseName = String(file.name || 'document').replace(/\.[^/.]+$/, '');
+  return new File([bytes], `${baseName}.pdf`, {
     type: 'application/pdf',
     lastModified: Date.now(),
   });

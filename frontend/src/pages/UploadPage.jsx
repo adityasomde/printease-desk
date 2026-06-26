@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useRef } from "react";
-import { FileText, Upload, IndianRupee, CheckSquare, Square, X, Settings2, Eye } from "lucide-react";
+import { FileText, Upload, IndianRupee, CheckSquare, Square, X, Settings2, Eye, AlertCircle } from "lucide-react";
 import Card from "../components/Card";
 import DocumentPreviewModal from "../components/DocumentPreviewModal";
 import Row from "../components/Row";
@@ -64,6 +64,7 @@ export default function UploadPage({
   const filePreparationStateRef = useRef({});
 
   const [localPreview, setLocalPreview] = useState(null);
+  const [showOfficeNotice, setShowOfficeNotice] = useState(false);
   const [filePreparationState, setFilePreparationState] = useState({});
   const [uploadNotice, setUploadNotice] = useState("");
 
@@ -188,7 +189,7 @@ export default function UploadPage({
     if (hasBrowserOfficePreview) {
       const warningKey = "printease_office_accuracy_warning_seen";
       if (!sessionStorage.getItem(warningKey)) {
-        window.alert("Office document preview is browser-generated and may not be 100% accurate. For precise layout, please convert your file to PDF before uploading, or wait for hub review.");
+        setShowOfficeNotice(true);
         sessionStorage.setItem(warningKey, "true");
       }
     }

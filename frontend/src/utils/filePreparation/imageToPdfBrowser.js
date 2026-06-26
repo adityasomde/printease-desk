@@ -122,9 +122,9 @@ export async function convertImageToPdfInBrowser(file, options = {}) {
   page.drawImage(embeddedImage, box);
 
   const pdfBytes = await pdfDoc.save();
-  const baseName = String(file.name || 'image').replace(/\.[^.]+$/, '');
+  const baseName = String(file.name || 'image').replace(/\.[^/.]+$/, '');
 
-  return new File([pdfBytes], `${baseName}.print-ready.pdf`, {
+  return new File([pdfBytes], `${baseName}.pdf`, {
     type: 'application/pdf',
     lastModified: Date.now(),
   });

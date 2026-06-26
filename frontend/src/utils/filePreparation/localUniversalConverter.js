@@ -1,6 +1,7 @@
 import mammoth from 'mammoth';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { getOfficePageCount } from './officePageCounter';
+import { extractPptxText, extractXlsxText } from './pptxXlsxExtractor';
 
 const A4 = Object.freeze({ width: 595.28, height: 841.89 });
 
@@ -33,8 +34,28 @@ export async function convertGenericFileToPdfInBrowser(file) {
 
   if (extension === 'docx') {
     return await convertDocxToPdf(file, baseName, targetPages);
+  } else if (extension === 'pptx') {
+    return await convertPptxToPdf(file, baseName, targetPages);
+  } else if (extension === 'xlsx' || extension === 'xls') {
+    return await convertXlsxToPdf(file, baseName, targetPages);
   }
 
+  return await createPlaceholderPdf(file, baseName, targetPages);
+}
+
+async function convertPptxToPdf(file, baseName, targetPages) {
+  const text = await extractPptxText(file);
+  if (text) {
+    return await createPdfFromText(text, baseName, targetPages);
+  }
+  return await createPlaceholderPdf(file, baseName, targetPages);
+}
+
+async function convertXlsxToPdf(file, baseName, targetPages) {
+  const text = await extractXlsxText(file);
+  if (text) {
+    return await createPdfFromText(text, baseName, targetPages);
+  }
   return await createPlaceholderPdf(file, baseName, targetPages);
 }
 

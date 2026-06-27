@@ -6,21 +6,21 @@ import BackendStatus from "./components/BackendStatus";
 import { hubActivityStore } from "./state/hubActivityStore";
 
 const HubHistoryPage = lazy(() => import("./pages/HubHistoryPage"));
-import HomePage from "./pages/HomePage";
-import AuthPage from "./pages/AuthPage";
-import UserDashboard from "./pages/UserDashboard";
-import HubDashboard from "./pages/HubDashboard";
-import ProfilePage from "./pages/ProfilePage";
-import HubPricingPage from "./pages/HubPricingPage";
-import HubPrinterAgentPage from "./pages/HubPrinterAgentPage";
-import ApproveAgentPage from "./pages/ApproveAgentPage";
-import DesktopAgentPage from "./pages/DesktopAgentPage";
-import CentreCodePage from "./pages/CentreCodePage";
-import UploadPage from "./pages/UploadPage";
-import PaymentPage from "./pages/PaymentPage";
-import TrackPage from "./pages/TrackPage";
-import HistoryPage from "./pages/HistoryPage";
-import PlatformStatsPage from "./pages/PlatformStatsPage";
+const HomePage = lazy(() => import("./pages/HomePage"));
+const AuthPage = lazy(() => import("./pages/AuthPage"));
+const UserDashboard = lazy(() => import("./pages/UserDashboard"));
+const HubDashboard = lazy(() => import("./pages/HubDashboard"));
+const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+const HubPricingPage = lazy(() => import("./pages/HubPricingPage"));
+const HubPrinterAgentPage = lazy(() => import("./pages/HubPrinterAgentPage"));
+const ApproveAgentPage = lazy(() => import("./pages/ApproveAgentPage"));
+const DesktopAgentPage = lazy(() => import("./pages/DesktopAgentPage"));
+const CentreCodePage = lazy(() => import("./pages/CentreCodePage"));
+const UploadPage = lazy(() => import("./pages/UploadPage"));
+const PaymentPage = lazy(() => import("./pages/PaymentPage"));
+const TrackPage = lazy(() => import("./pages/TrackPage"));
+const HistoryPage = lazy(() => import("./pages/HistoryPage"));
+const PlatformStatsPage = lazy(() => import("./pages/PlatformStatsPage"));
 import { initialCentres, initialOrders } from "./data/demoData";
 import { calculateTotalAmount, countSelectedPages, getPricePerPage } from "./utils/price";
 import { countSelectedPagesPreview, estimatePricePreview } from "./utils/printEstimate";
@@ -2388,94 +2388,143 @@ export default function App() {
                 <RouteNotice title="Print Hub Login Required" message="Please login as a print hub to view this dashboard." actionLabel="Login as Print Hub" onAction={() => startLogin("hub")} />
               )
             }
-          />
-          <Route
-            path={ROUTES.hubHistory}
-            element={
-              currentUser?.role === "hub" ? (
-                <Suspense fallback={<div className="text-center py-10 font-medium text-slate-500">Loading Hub History...</div>}>
-                  <HubHistoryPage
-                    currentHub={currentHub}
-                    hubOrders={hubOrders}
-                    updateOrderStatus={updateOrderStatus}
-                    refreshOrders={() => loadOrdersForSession(currentUser, centres)}
-                    onOrderSaved={applySavedOrderUpdate}
-                    navigate={navigate}
-                  />
-                </Suspense>
-              ) : (
-                <RouteNotice title="Print Hub Login Required" message="Please login as a print hub to view history." actionLabel="Login as Print Hub" onAction={() => startLogin("hub")} />
-              )
-            }
-          />
-          <Route
-            path={ROUTES.hubPricing}
-            element={
-              currentUser?.role === "hub" ? (
-                <HubPricingPage currentHub={currentHub} updateCentrePrice={updateCentrePrice} updateCentrePayment={updateCentrePayment} onAfterOrderSettingsUpdate={updateCentreAfterOrderSettings} />
-              ) : (
-                <RouteNotice title="Print Hub Login Required" message="Please login as a print hub to manage pricing and payment details." actionLabel="Login as Print Hub" onAction={() => startLogin("hub")} />
-              )
-            }
-          />
-          <Route
-            path={ROUTES.hubPrinters}
-            element={
-              currentUser?.role === "hub" ? (
-                <HubPrinterAgentPage navigate={navigate} />
-              ) : (
-                <RouteNotice title="Print Hub Login Required" message="Please login as a print hub to manage printer agents." actionLabel="Login as Print Hub" onAction={() => startLogin("hub")} />
-              )
-            }
-          />
-          <Route
-            path={ROUTES.approveAgent}
-            element={
-              currentUser?.role === "hub" ? (
-                <ApproveAgentPage currentUser={currentUser} navigate={navigate} />
-              ) : currentUser ? (
-                <RouteNotice title="Only Hub Accounts" message="Only hub accounts can approve desktop agents." />
-              ) : (
-                <RouteNotice title="Print Hub Login Required" message="Please login as a print hub to approve desktop devices." actionLabel="Login as Print Hub" onAction={() => startLogin("hub", approvalReturnPath)} />
-              )
-            }
-          />
-          <Route path={ROUTES.desktopAgent} element={<DesktopAgentPage currentUser={currentUser} />} />
-          <Route path={ROUTES.centre} element={<CentreCodePage centreCode={centreCode} setCentreCode={setCentreCode} handleCentreCode={handleCentreCode} selectCentreByCode={selectCentreByCode} centres={prioritizedCentres} selectCentreAndUpload={selectCentreAndUpload} lookupLoading={centreLookupLoading} lookupError={centreLookupError} autoStartScanner={Boolean(location.state?.autoStartScanner)} />} />
-          <Route path={ROUTES.upload} element={<UploadPage currentUser={currentUser} startLogin={startLogin} selectedCentre={selectedCentre} documentFile={documentFile} setDocumentFile={setDocumentFile} documentFiles={documentFiles} setDocumentFiles={setDocumentFiles} reprintSourceDocuments={reprintSourceDocuments} setReprintSourceDocuments={setReprintSourceDocuments} reprintDocumentExpired={reprintDocumentExpired} setReprintDocumentExpired={setReprintDocumentExpired} multiFileConfigs={multiFileConfigs} setMultiFileConfigs={setMultiFileConfigs} documentName={documentName} setDocumentName={setDocumentName} pages={pages} setPages={setPages} selectedPages={selectedPages} setSelectedPages={setSelectedPages} copies={copies} setCopies={setCopies} colorType={colorType} setColorType={setColorType} sideType={sideType} setSideType={setSideType} paperSize={paperSize} setPaperSize={setPaperSize} pagesPerSheet={pagesPerSheet} setPagesPerSheet={setPagesPerSheet} orientation={orientation} setOrientation={setOrientation} printDpi={printDpi} setPrintDpi={setPrintDpi} scaleMode={scaleMode} setScaleMode={setScaleMode} marginMode={marginMode} setMarginMode={setMarginMode} watermark={watermark} setWatermark={setWatermark} watermarkType={watermarkType} setWatermarkType={setWatermarkType} watermarkText={watermarkText} setWatermarkText={setWatermarkText} watermarkPosition={watermarkPosition} setWatermarkPosition={setWatermarkPosition} watermarkOpacity={watermarkOpacity} setWatermarkOpacity={setWatermarkOpacity} watermarkFontSize={watermarkFontSize} setWatermarkFontSize={setWatermarkFontSize} watermarkRotation={watermarkRotation} setWatermarkRotation={setWatermarkRotation} pricePerPage={pricePerPage} estimatedSelectedPageCount={estimatedSelectedPageCount} totalAmount={totalAmount} backendPrice={backendPrice} setBackendPrice={setBackendPrice} preparePayment={preparePayment} paymentLoading={paymentLoading} paymentError={paymentError} navigate={navigate} />} />
-          <Route
-            path={ROUTES.payment}
-            element={
-              selectedCentre && order ? (
-                <PaymentPage currentUser={currentUser} startLogin={startLogin} selectedCentre={selectedCentre} documentName={documentName} pages={pages} copies={copies} backendPrice={backendPrice} order={order} paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod} handlePayment={handlePayment} paymentLoading={paymentLoading} paymentError={paymentError} />
-              ) : (
-                <RouteNotice title="Payment Not Ready" message="Please select a centre and upload a document first." actionLabel="Select Centre" onAction={() => navigate("centre")} />
-              )
-            }
-          />
-          <Route
-            path={ROUTES.track}
-            element={
-              <TrackPage
-                order={order}
-                lastUpdatedAt={lastOrdersUpdatedAt}
-                pendingPayment={pendingPayment}
-                upiQr={upiQr}
-                centreUpiId={selectedCentre?.upiId}
-                centreUpiQrImageUrl={selectedCentre?.upiQrImageUrl}
-                onPayOnline={startRazorpayForExistingOrder}
-                onCreateUpiQr={createUpiQrForExistingOrder}
-                onSimulateVerifiedPayment={demoPaymentEnabled ? handleVerifyDemoPayment : null}
-                paymentLoading={paymentLoading}
-                paymentError={paymentError}
+          <Suspense fallback={
+            <div className="flex h-full min-h-[50vh] w-full items-center justify-center">
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-slate-900"></div>
+            </div>
+          }>
+            <Routes>
+              <Route
+                path={ROUTES.home}
+                element={<HomePage currentUser={currentUser} navigate={navigate} startLogin={startLogin} handleSignOut={handleSignOut} prioritizedCentres={prioritizedCentres} selectCentreByCode={selectCentreByCode} selectCentreAndUpload={selectCentreAndUpload} locationLoading={locationLoading} locationError={locationError} />}
               />
-            }
-          />
-            <Route path={ROUTES.history} element={<HistoryPage orders={orders} currentUser={currentUser} lastUpdatedAt={lastOrdersUpdatedAt} onOpenPayment={openPaymentRequest} onReprintOrder={reprintWithSameSettings} onReprintWithSettings={reprintWithSettings} isReprinting={paymentLoading} />} />
-            <Route path={ROUTES.orderHistory} element={<Navigate to={ROUTES.history} replace />} />
-            <Route path={ROUTES.usageHistory} element={<Navigate to={ROUTES.history} replace />} />
-            <Route path="*" element={<Navigate to={ROUTES.home} replace />} />
-          </Routes>
+              <Route path={ROUTES.auth} element={<AuthPage authMode={authMode} setAuthMode={setAuthMode} onLoginSuccess={handleLoginSuccess} returnPath={authReturnPath} />} />
+              <Route
+                path={ROUTES.userDashboard}
+                element={
+                  currentUser?.role === "user" ? (
+                    <UserDashboard currentUser={currentUser} recentOrders={orders} onSignOut={handleSignOut} navigate={navigate} startLogin={startLogin} prioritizedCentres={prioritizedCentres} selectCentreByCode={selectCentreByCode} selectCentreAndUpload={selectCentreAndUpload} locationLoading={locationLoading} locationError={locationError} />
+                  ) : (
+                    <RouteNotice title="User Login Required" message="Please login as a user to view your dashboard." actionLabel="Login as User" onAction={() => startLogin("user")} />
+                  )
+                }
+              />
+              <Route
+                path={ROUTES.hubDashboard}
+                element={
+                  currentUser?.role === "hub" ? (
+                    <HubDashboard currentHub={currentHub} onSignOut={handleSignOut} updateCentreStatus={updateCentreStatus} updateCentrePrice={updateCentrePrice} />
+                  ) : (
+                    <RouteNotice title="Print Hub Login Required" message="Please login as a print hub to access the hub dashboard." actionLabel="Login as Print Hub" onAction={() => startLogin("hub")} />
+                  )
+                }
+              />
+              <Route
+                path={ROUTES.profile}
+                element={
+                  currentUser ? (
+                    <ProfilePage currentUser={currentUser} onProfileUpdate={handleProfileUpdate} onSignOut={handleSignOut} />
+                  ) : (
+                    <RouteNotice title="Login Required" message="Please login to view your profile." actionLabel="Login" onAction={() => startLogin("user")} />
+                  )
+                }
+              />
+              <Route
+                path={ROUTES.platformStats}
+                element={
+                  currentUser?.role === "admin" ? (
+                    <PlatformStatsPage currentUser={currentUser} />
+                  ) : (
+                    <RouteNotice title="Admin Access Required" message="You do not have permission to view platform metrics." actionLabel="Return Home" onAction={() => navigate("/")} />
+                  )
+                }
+              />
+              <Route
+                path={ROUTES.hubHistory}
+                element={
+                  currentUser?.role === "hub" ? (
+                    <HubHistoryPage
+                      currentHub={currentHub}
+                      orders={orders}
+                      updateOrderStatus={updateOrderStatus}
+                      refreshOrders={() => loadOrdersForSession(currentUser, centres)}
+                      onOrderSaved={applySavedOrderUpdate}
+                      navigate={navigate}
+                    />
+                  ) : (
+                    <RouteNotice title="Print Hub Login Required" message="Please login as a print hub to view history." actionLabel="Login as Print Hub" onAction={() => startLogin("hub")} />
+                  )
+                }
+              />
+              <Route
+                path={ROUTES.hubPricing}
+                element={
+                  currentUser?.role === "hub" ? (
+                    <HubPricingPage currentHub={currentHub} updateCentrePrice={updateCentrePrice} updateCentrePayment={updateCentrePayment} onAfterOrderSettingsUpdate={updateCentreAfterOrderSettings} />
+                  ) : (
+                    <RouteNotice title="Print Hub Login Required" message="Please login as a print hub to manage pricing and payment details." actionLabel="Login as Print Hub" onAction={() => startLogin("hub")} />
+                  )
+                }
+              />
+              <Route
+                path={ROUTES.hubPrinters}
+                element={
+                  currentUser?.role === "hub" ? (
+                    <HubPrinterAgentPage navigate={navigate} />
+                  ) : (
+                    <RouteNotice title="Print Hub Login Required" message="Please login as a print hub to manage printer agents." actionLabel="Login as Print Hub" onAction={() => startLogin("hub")} />
+                  )
+                }
+              />
+              <Route
+                path={ROUTES.approveAgent}
+                element={
+                  currentUser?.role === "hub" ? (
+                    <ApproveAgentPage currentUser={currentUser} navigate={navigate} />
+                  ) : currentUser ? (
+                    <RouteNotice title="Only Hub Accounts" message="Only hub accounts can approve desktop agents." />
+                  ) : (
+                    <RouteNotice title="Print Hub Login Required" message="Please login as a print hub to approve desktop devices." actionLabel="Login as Print Hub" onAction={() => startLogin("hub", approvalReturnPath)} />
+                  )
+                }
+              />
+              <Route path={ROUTES.desktopAgent} element={<DesktopAgentPage currentUser={currentUser} />} />
+              <Route path={ROUTES.centre} element={<CentreCodePage centreCode={centreCode} setCentreCode={setCentreCode} handleCentreCode={handleCentreCode} selectCentreByCode={selectCentreByCode} centres={prioritizedCentres} selectCentreAndUpload={selectCentreAndUpload} lookupLoading={centreLookupLoading} lookupError={centreLookupError} autoStartScanner={Boolean(location.state?.autoStartScanner)} />} />
+              <Route path={ROUTES.upload} element={<UploadPage currentUser={currentUser} startLogin={startLogin} selectedCentre={selectedCentre} documentFile={documentFile} setDocumentFile={setDocumentFile} documentFiles={documentFiles} setDocumentFiles={setDocumentFiles} reprintSourceDocuments={reprintSourceDocuments} setReprintSourceDocuments={setReprintSourceDocuments} reprintDocumentExpired={reprintDocumentExpired} setReprintDocumentExpired={setReprintDocumentExpired} multiFileConfigs={multiFileConfigs} setMultiFileConfigs={setMultiFileConfigs} documentName={documentName} setDocumentName={setDocumentName} pages={pages} setPages={setPages} selectedPages={selectedPages} setSelectedPages={setSelectedPages} copies={copies} setCopies={setCopies} colorType={colorType} setColorType={setColorType} sideType={sideType} setSideType={setSideType} paperSize={paperSize} setPaperSize={setPaperSize} pagesPerSheet={pagesPerSheet} setPagesPerSheet={setPagesPerSheet} orientation={orientation} setOrientation={setOrientation} printDpi={printDpi} setPrintDpi={setPrintDpi} scaleMode={scaleMode} setScaleMode={setScaleMode} marginMode={marginMode} setMarginMode={setMarginMode} watermark={watermark} setWatermark={setWatermark} watermarkType={watermarkType} setWatermarkType={setWatermarkType} watermarkText={watermarkText} setWatermarkText={setWatermarkText} watermarkPosition={watermarkPosition} setWatermarkPosition={setWatermarkPosition} watermarkOpacity={watermarkOpacity} setWatermarkOpacity={setWatermarkOpacity} watermarkFontSize={watermarkFontSize} setWatermarkFontSize={setWatermarkFontSize} watermarkRotation={watermarkRotation} setWatermarkRotation={setWatermarkRotation} pricePerPage={pricePerPage} estimatedSelectedPageCount={estimatedSelectedPageCount} totalAmount={totalAmount} backendPrice={backendPrice} setBackendPrice={setBackendPrice} preparePayment={preparePayment} paymentLoading={paymentLoading} paymentError={paymentError} navigate={navigate} />} />
+              <Route
+                path={ROUTES.payment}
+                element={
+                  selectedCentre && order ? (
+                    <PaymentPage currentUser={currentUser} startLogin={startLogin} selectedCentre={selectedCentre} documentName={documentName} pages={pages} copies={copies} backendPrice={backendPrice} order={order} paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod} handlePayment={handlePayment} paymentLoading={paymentLoading} paymentError={paymentError} />
+                  ) : (
+                    <RouteNotice title="Payment Not Ready" message="Please select a centre and upload a document first." actionLabel="Select Centre" onAction={() => navigate("centre")} />
+                  )
+                }
+              />
+              <Route
+                path={ROUTES.track}
+                element={
+                  <TrackPage
+                    order={order}
+                    lastUpdatedAt={lastOrdersUpdatedAt}
+                    pendingPayment={pendingPayment}
+                    upiQr={upiQr}
+                    centreUpiId={selectedCentre?.upiId}
+                    centreUpiQrImageUrl={selectedCentre?.upiQrImageUrl}
+                    onPayOnline={startRazorpayForExistingOrder}
+                    onCreateUpiQr={createUpiQrForExistingOrder}
+                    onSimulateVerifiedPayment={demoPaymentEnabled ? handleVerifyDemoPayment : null}
+                    paymentLoading={paymentLoading}
+                    paymentError={paymentError}
+                  />
+                }
+              />
+              <Route path={ROUTES.history} element={<HistoryPage orders={orders} currentUser={currentUser} lastUpdatedAt={lastOrdersUpdatedAt} onOpenPayment={openPaymentRequest} onReprintOrder={reprintWithSameSettings} onReprintWithSettings={reprintWithSettings} isReprinting={paymentLoading} />} />
+              <Route path={ROUTES.orderHistory} element={<Navigate to={ROUTES.history} replace />} />
+              <Route path={ROUTES.usageHistory} element={<Navigate to={ROUTES.history} replace />} />
+              <Route path="*" element={<Navigate to={ROUTES.home} replace />} />
+            </Routes>
+          </Suspense>
         </RouteErrorBoundary>
       </main>
     </div>

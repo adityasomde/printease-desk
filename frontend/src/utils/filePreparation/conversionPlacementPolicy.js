@@ -277,22 +277,11 @@ export function decideConversionPlacement({ fileInfo = {}, hubLoad = {}, userPre
     };
   }
 
-  // Browser best-effort for small Office files (e.g. < 5MB).
-  // Larger Office files require manual hub review (MANUAL) instead of auto desktop conversion.
+  // All Office files require LibreOffice desktop conversion pipeline
   if (kind === FILE_KIND.OFFICE) {
-    if (fileSizeBytes <= 5 * MB) {
-      return {
-        placement: CONVERSION_PLACEMENT.BROWSER,
-        reasonCode: 'SMALL_OFFICE_BROWSER_ATTEMPT',
-        kind,
-        browserSeconds,
-        desktopSeconds,
-      };
-    }
-
     return {
-      placement: CONVERSION_PLACEMENT.MANUAL,
-      reasonCode: 'COMPLEX_OFFICE_REQUIRES_HUB_REVIEW',
+      placement: CONVERSION_PLACEMENT.DESKTOP,
+      reasonCode: 'OFFICE_REQUIRES_DESKTOP_PIPELINE',
       kind,
       browserSeconds,
       desktopSeconds,

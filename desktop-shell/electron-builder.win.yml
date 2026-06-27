@@ -6,12 +6,7 @@ files:
   - main.js
   - preload.cjs
   - package.json
-  - agent/**/*
-  - config/**/*
-  - security/**/*
-  - ipc/**/*
-  - printer/**/*
-  - local/**/*
+  - src/**/*
   - updater.js
   - scripts/**/*
   - assets/**/*

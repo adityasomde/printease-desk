@@ -54,6 +54,7 @@ try {
     sendHeartbeat: () => ipcRenderer.invoke("agent:heartbeat"),
     syncPrinters: () => ipcRenderer.invoke("agent:sync-printers"),
     predownloadNow: () => ipcRenderer.invoke("agent:predownload-now"),
+    conversionNow: () => ipcRenderer.invoke("agent:conversion-now"),
     pollPrintJobs: (payload) => ipcRenderer.invoke("agent:poll-once", payload),
     startJobPolling: (payload) => ipcRenderer.invoke("agent:start-polling"),
     stopJobPolling: () => ipcRenderer.invoke("agent:stop-polling"),

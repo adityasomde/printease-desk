@@ -1,6 +1,6 @@
 import { secureHandle } from "../../security/ipcSecurity.js";
 import { app } from "electron";
-import { pollJobsNow, startJobPollLoop, stopAgentPolling, runPredownloadNow, sendAgentHeartbeat, syncAgentPrinters } from "../agent/agentRuntime.js";
+import { pollJobsNow, startJobPollLoop, stopAgentPolling, runPredownloadNow, runConversionNow, sendAgentHeartbeat, syncAgentPrinters } from "../agent/agentRuntime.js";
 import { appState } from "../state/appState.js";
 
 export function registerJobIpc() {
@@ -19,6 +19,7 @@ export function registerJobIpc() {
   }, app.isPackaged);
 
   secureHandle("agent:predownload-now", () => runPredownloadNow("manual-conversion-check"), app.isPackaged);
+  secureHandle("agent:conversion-now", () => runConversionNow("manual-conversion-check"), app.isPackaged);
   secureHandle("agent:poll-once", (_event, payload = {}) => pollJobsNow("manual-poll", payload), app.isPackaged);
   secureHandle("agent:start-polling", (_event, payload = {}) => startJobPollLoop("manual-start", payload), app.isPackaged);
   secureHandle("agent:stop-polling", stopAgentPolling, app.isPackaged);

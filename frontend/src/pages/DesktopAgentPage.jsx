@@ -26,6 +26,7 @@ import {
   onAgentUpdated,
   onPrintersUpdated,
   predownloadNow,
+  conversionNow,
   pollPrintJobs,
   sendHeartbeat,
   startApprovalPairing as requestApprovalPairing,
@@ -445,7 +446,7 @@ export default function DesktopAgentPage({ currentUser = null }) {
     setError("");
     setMessage("");
 
-    const result = await predownloadNow();
+    const result = await conversionNow();
     if (result?.session) setAgentSession(result.session);
 
     if (result?.success === false) {

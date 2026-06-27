@@ -8,11 +8,7 @@
   "files": [
     "main.js",
     "preload.cjs",
-    "agent/",
-    "config/",
-    "security/",
-    "printer/",
-    "local/",
+    "src/",
     "assets/",
     "package.json"
   ],
@@ -55,12 +51,7 @@
       "main.js",
       "preload.cjs",
       "package.json",
-      "agent/**/*",
-      "config/**/*",
-      "security/**/*",
-      "ipc/**/*",
-      "printer/**/*",
-      "local/**/*",
+      "src/**/*",
       "updater.js",
       "scripts/**/*",
       "assets/**/*"

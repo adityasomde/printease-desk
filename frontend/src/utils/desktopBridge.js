@@ -235,7 +235,11 @@ export function syncPrinters() {
 }
 
 export function predownloadNow() {
-  return callDesktop("predownloadNow", "Could not check pending conversions.");
+  return callDesktop("predownloadNow", "Could not run predownload cache warmup.");
+}
+
+export function conversionNow() {
+  return callDesktop("conversionNow", "Could not check pending conversions.");
 }
 
 export function pollPrintJobs(payload = {}) {

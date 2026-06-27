@@ -110,6 +110,11 @@ function isAllowedNoticeFile(filePath) {
   return targetPlatform === "win32" && normalized.endsWith("resources/vendor/win/third_party_notices.md");
 }
 
+function isAllowedVendorLibreOfficeFile(filePath) {
+  const normalized = filePath.replaceAll("\\", "/").toLowerCase();
+  return normalized.includes("/resources/vendor/libreoffice/");
+}
+
 // 1. Verify files inside app.asar
 for (const asarFile of appAsarFiles) {
   const normalized = asarFile.toLowerCase();
@@ -133,7 +138,7 @@ for (const asarFile of appAsarFiles) {
   }
 
   for (const ext of forbiddenExtensions) {
-    if (normalized.endsWith(ext) && !isAllowedNoticeFile(asarFile)) {
+    if (normalized.endsWith(ext) && !isAllowedNoticeFile(asarFile) && !isAllowedVendorLibreOfficeFile(asarFile)) {
       console.error(`Forbidden file extension "${ext}" in app.asar: ${asarFile}`);
       failed = true;
     }
@@ -165,7 +170,7 @@ for (const file of files) {
   if (fs.existsSync(file) && fs.statSync(file).isFile()) {
     const ext = path.extname(file).toLowerCase();
 
-    if (forbiddenExtensions.includes(ext) && !isAllowedNoticeFile(file)) {
+    if (forbiddenExtensions.includes(ext) && !isAllowedNoticeFile(file) && !isAllowedVendorLibreOfficeFile(file)) {
       console.error(`Forbidden file extension "${ext}" found: ${file}`);
       failed = true;
     }

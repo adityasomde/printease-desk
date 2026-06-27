@@ -680,10 +680,29 @@ export default function App() {
           return;
         }
 
-        console.error("Session restore failed:", error?.message || error);
+        // Only clear auth on definitive auth failures (401/403 = token is invalid).
+        // For transient errors (5xx, network down, cold-start), keep the stored
+        // token and fall back to the locally-cached user so the app stays usable.
+        const isAuthFailure = error.status === 401 || error.status === 403;
 
-        clearAuthSession();
-        setCurrentUser(null);
+        if (isAuthFailure) {
+          console.warn("Session restore: token rejected by server, clearing auth.", error?.message || error);
+          clearAuthSession();
+          setCurrentUser(null);
+        } else {
+          console.warn("Session restore: transient error, keeping stored auth.", error?.message || error);
+
+          // Fall back to locally-cached user so the UI is not blank
+          const cachedUserJson = localStorage.getItem("printease_user");
+          if (cachedUserJson) {
+            try {
+              const cachedUser = JSON.parse(cachedUserJson);
+              setCurrentUser(cachedUser);
+            } catch {
+              // corrupt cache — still don't clear auth, let user retry
+            }
+          }
+        }
       }
     }
 

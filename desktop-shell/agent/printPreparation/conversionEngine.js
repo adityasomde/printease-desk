@@ -18,6 +18,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 
+export const LIBREOFFICE_MANUAL_DOWNLOAD_URL = 'https://download.documentfoundation.org/libreoffice/stable/';
+
 function exists(filePath) {
   return fs.access(filePath).then(() => true).catch(() => false);
 }
@@ -64,6 +66,7 @@ function getBundledSofficePath(platform) {
 
 export async function findLibreOfficeExecutable({ platform = process.platform, extraPaths = [] } = {}) {
   const candidates = [];
+  const checkedPaths = [];
 
   // 1. Bundled copy inside the packaged app (highest priority)
   const bundledPath = getBundledSofficePath(platform);
@@ -98,6 +101,7 @@ export async function findLibreOfficeExecutable({ platform = process.platform, e
   candidates.push('soffice', 'libreoffice');
 
   for (const candidate of candidates) {
+    checkedPaths.push(candidate);
     if (candidate.includes(path.sep) || candidate.endsWith('.exe')) {
       if (!(await exists(candidate))) continue;
     }
@@ -108,6 +112,9 @@ export async function findLibreOfficeExecutable({ platform = process.platform, e
         found: true,
         executable: candidate,
         bundled: candidate === bundledPath,
+        source: candidate === bundledPath ? 'bundled' : candidate === devVendorPath ? 'dev-vendor' : 'system',
+        manualDownloadUrl: LIBREOFFICE_MANUAL_DOWNLOAD_URL,
+        checkedPaths,
         versionText: `${result.stdout || ''}${result.stderr || ''}`.trim(),
       };
     }
@@ -118,9 +125,11 @@ export async function findLibreOfficeExecutable({ platform = process.platform, e
     executable: null,
     bundled: false,
     reasonCode: 'CONVERSION_ENGINE_MISSING',
-    message: 'LibreOffice/soffice was not found. Install LibreOffice or ensure the bundled copy is present.',
+    source: 'missing',
+    manualDownloadUrl: LIBREOFFICE_MANUAL_DOWNLOAD_URL,
+    checkedPaths,
+    message: 'LibreOffice was not found. PrintEase uses the bundled copy in release builds and also detects local LibreOffice installs. Install LibreOffice from the official download page, then retry conversion.',
   };
 }
 
 export { runCommand };
-

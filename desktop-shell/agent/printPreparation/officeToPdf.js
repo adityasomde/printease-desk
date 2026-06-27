@@ -61,6 +61,9 @@ export async function convertOfficeToPdf({ inputPath, outputDir, timeoutMs = 5 *
       success: false,
       reasonCode: 'CONVERSION_ENGINE_MISSING',
       message: engine.message || 'LibreOffice/soffice was not found.',
+      manualDownloadUrl: engine.manualDownloadUrl,
+      checkedPaths: engine.checkedPaths,
+      details: engine,
     };
   }
 

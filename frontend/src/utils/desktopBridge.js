@@ -95,6 +95,28 @@ export async function diagnoseWindowsPrintHelper() {
   }
 }
 
+export async function diagnoseLibreOffice() {
+  const bridge = getBridge();
+  const diagnoseHelper = bridge?.conversion?.diagnoseLibreOffice || bridge?.diagnoseLibreOffice;
+  if (!diagnoseHelper) {
+    return {
+      success: false,
+      found: false,
+      message: "Desktop LibreOffice diagnostic bridge is not available.",
+    };
+  }
+
+  try {
+    return await diagnoseHelper();
+  } catch (error) {
+    return {
+      success: false,
+      found: false,
+      error: error.message || "Could not inspect LibreOffice.",
+    };
+  }
+}
+
 export async function testPrint(payload = {}) {
   const bridge = getBridge();
   if (!bridge?.testPrint) return desktopFallback();

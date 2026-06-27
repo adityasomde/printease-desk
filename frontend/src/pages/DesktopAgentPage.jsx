@@ -9,6 +9,7 @@ import {
   confirmPairing,
   clearStoredAgent,
   diagnosePrinters,
+  diagnoseLibreOffice,
   diagnoseWindowsPrintHelper,
   getAgentStatus,
   getDeviceIdentity,
@@ -149,6 +150,7 @@ export default function DesktopAgentPage({ currentUser = null }) {
   const [updateBusy, setUpdateBusy] = useState(false);
   const [printerDiagnostics, setPrinterDiagnostics] = useState(null);
   const [windowsHelperDiagnostics, setWindowsHelperDiagnostics] = useState(null);
+  const [libreOfficeDiagnostics, setLibreOfficeDiagnostics] = useState(null);
   const [autoPollingStarted, setAutoPollingStarted] = useState(false);
   const [approvalPolling, setApprovalPolling] = useState(false);
   const [approvalMessage, setApprovalMessage] = useState("");
@@ -394,6 +396,24 @@ export default function DesktopAgentPage({ currentUser = null }) {
     }
 
     setMessage(result?.message || "Windows print helper found.");
+  }
+
+  async function checkLibreOffice() {
+    setAdvancedDiagnosticsVisible(true);
+    setError("");
+    setErrorDetail("");
+    setHelpCommands([]);
+    setMessage("");
+
+    const result = await diagnoseLibreOffice();
+    setLibreOfficeDiagnostics(result);
+
+    if (result?.success === false || result?.found === false) {
+      setError(result.error || result.message || "LibreOffice was not found for Office document conversion.");
+      return;
+    }
+
+    setMessage(result?.message || "LibreOffice conversion engine found.");
   }
 
   async function sendTestPrint() {
@@ -746,6 +766,13 @@ export default function DesktopAgentPage({ currentUser = null }) {
             >
               <Printer size={16} /> Check Windows Print Helper
             </button>
+            <button
+              type="button"
+              onClick={checkLibreOffice}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-3 font-semibold"
+            >
+              <Download size={16} /> Check LibreOffice
+            </button>
           </div>
         </div>
       </Card>
@@ -1076,6 +1103,42 @@ export default function DesktopAgentPage({ currentUser = null }) {
                 <p>isHubAccount: {String(isHubAccount)}</p>
                 <p>Reason button hidden: {isHubAccount ? "Button is available for this account." : hiddenReason}</p>
               </div>
+              {libreOfficeDiagnostics && (
+                <div className="rounded-xl bg-white p-3 text-xs text-slate-700">
+                  <p className="font-semibold text-slate-900">LibreOffice conversion engine</p>
+                  <p className={libreOfficeDiagnostics.found ? "font-semibold text-emerald-700" : "font-semibold text-amber-700"}>
+                    {libreOfficeDiagnostics.found ? "Found" : "Missing"}{libreOfficeDiagnostics.source ? ` (${libreOfficeDiagnostics.source})` : ""}
+                  </p>
+                  {libreOfficeDiagnostics.executable && (
+                    <p className="break-all">Path: {libreOfficeDiagnostics.executable}</p>
+                  )}
+                  {libreOfficeDiagnostics.versionText && (
+                    <p className="break-all">Version: {libreOfficeDiagnostics.versionText}</p>
+                  )}
+                  {(libreOfficeDiagnostics.message || libreOfficeDiagnostics.error) && (
+                    <p>{libreOfficeDiagnostics.message || libreOfficeDiagnostics.error}</p>
+                  )}
+                  {Array.isArray(libreOfficeDiagnostics.checkedPaths) && libreOfficeDiagnostics.checkedPaths.length > 0 && (
+                    <details className="mt-2">
+                      <summary className="cursor-pointer font-semibold">Checked paths</summary>
+                      <div className="mt-2 grid gap-1">
+                        {libreOfficeDiagnostics.checkedPaths.slice(0, 12).map((item) => (
+                          <p key={item} className="break-all">{item}</p>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                  {libreOfficeDiagnostics.manualDownloadUrl && (
+                    <button
+                      type="button"
+                      onClick={() => openExternalUrl(libreOfficeDiagnostics.manualDownloadUrl)}
+                      className="mt-3 rounded-xl border px-3 py-2 text-xs font-semibold text-slate-700"
+                    >
+                      Open LibreOffice download
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

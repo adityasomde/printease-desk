@@ -12,6 +12,8 @@
  *   --platform linux|win32   Target platform (default: current OS)
  *   --copy-local             Copy from system-installed LibreOffice
  *                            instead of downloading from the internet
+ *   --prefer-local           Copy from a system install when available,
+ *                            otherwise download from documentfoundation.org
  *   --force                  Re-download even if binaries already exist
  *
  * Examples:
@@ -83,6 +85,7 @@ function parseArgs() {
   let platform = process.platform;
   let force = false;
   let copyLocal = false;
+  let preferLocal = false;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--platform' && args[i + 1]) {
@@ -91,6 +94,8 @@ function parseArgs() {
       force = true;
     } else if (args[i] === '--copy-local') {
       copyLocal = true;
+    } else if (args[i] === '--prefer-local') {
+      preferLocal = true;
     }
   }
 
@@ -99,7 +104,7 @@ function parseArgs() {
     process.exit(1);
   }
 
-  return { platform, force, copyLocal };
+  return { platform, force, copyLocal, preferLocal };
 }
 
 function getPlatformDir(platform) {
@@ -378,10 +383,10 @@ async function extractWindows(archivePath) {
 // ─── Main ────────────────────────────────────────────────────
 
 async function main() {
-  const { platform, force, copyLocal } = parseArgs();
+  const { platform, force, copyLocal, preferLocal } = parseArgs();
 
   log(`Target platform: ${platform}`);
-  log(`Mode: ${copyLocal ? 'copy-local' : 'download'}`);
+  log(`Mode: ${copyLocal ? 'copy-local' : preferLocal ? 'prefer-local' : 'download'}`);
 
   // Skip if already present
   if (!force && checkBinaryExists(platform)) {
@@ -393,6 +398,22 @@ async function main() {
     // ── Fast path: copy from system install ──
     await copyFromLocal(platform);
   } else {
+    if (preferLocal) {
+      try {
+        await copyFromLocal(platform);
+        log('');
+        log('════════════════════════════════════════════════════════');
+        log('✅ LibreOffice headless is ready for bundling.');
+        log(`   Location: ${path.join(VENDOR_DIR, getPlatformDir(platform))}`);
+        log('   It will be included in the installer via extraResources.');
+        log('════════════════════════════════════════════════════════');
+        return;
+      } catch (error) {
+        log(`Local LibreOffice copy was not available: ${error.message}`);
+        log('Falling back to the official LibreOffice download.');
+      }
+    }
+
     // ── Full download from documentfoundation.org ──
     const url = DOWNLOAD_URLS[platform];
     if (!url) {

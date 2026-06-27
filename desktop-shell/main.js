@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import electron from "electron";
 import { diagnosePrinters, listPrinters, stopPrinting, testPrint } from "./printer/printExecutor.js";
+import { findLibreOfficeExecutable, LIBREOFFICE_MANUAL_DOWNLOAD_URL } from "./agent/printPreparation/conversionEngine.js";
 
 async function diagnoseWindowsPrintHelperSafe() {
   if (process.platform !== "win32") {
@@ -17,6 +18,28 @@ async function diagnoseWindowsPrintHelperSafe() {
 
   const module = await import("./printer/windows/windowsPrinter.js");
   return module.diagnoseWindowsPrintHelper();
+}
+
+async function diagnoseLibreOfficeSafe() {
+  try {
+    const result = await findLibreOfficeExecutable();
+    return {
+      success: result.found,
+      ...result,
+      manualDownloadUrl: result.manualDownloadUrl || LIBREOFFICE_MANUAL_DOWNLOAD_URL,
+      message: result.found
+        ? `LibreOffice detected from ${result.source || "system"}.`
+        : result.message,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      found: false,
+      reasonCode: "CONVERSION_ENGINE_DIAGNOSTIC_FAILED",
+      message: error?.message || "Could not inspect LibreOffice.",
+      manualDownloadUrl: LIBREOFFICE_MANUAL_DOWNLOAD_URL,
+    };
+  }
 }
 import { confirmPairing, sendHeartbeat, startPairing } from "./agent/heartbeat.js";
 import {
@@ -51,7 +74,7 @@ protocol.registerSchemesAsPrivileged([
 
 const DEV_FRONTEND_URL = process.env.PRINTEASE_FRONTEND_URL || "http://127.0.0.1:5175";
 const USE_DEV_FRONTEND = process.env.PRINTEASE_USE_DEV_FRONTEND === "1";
-const VERSION = "0.1.76";
+const VERSION = "0.1.77";
 const HEARTBEAT_INTERVAL_MS = 25000;
 const PRINTER_SYNC_INTERVAL_MS = 30000;
 const JOB_POLL_INTERVAL_MS = 5000;
@@ -1610,6 +1633,7 @@ function registerIpcHandlers() {
 
   secureHandle("printing:stop", () => stopPrinting(), app.isPackaged);
   secureHandle("printer:diagnoseWindowsHelper", () => diagnoseWindowsPrintHelperSafe(), app.isPackaged);
+  secureHandle("conversion:diagnoseLibreOffice", () => diagnoseLibreOfficeSafe(), app.isPackaged);
   secureHandle("agent:status", () => sanitizeAgentSession(), app.isPackaged);
   secureHandle("agent:start-pairing", startAgentPairing, app.isPackaged);
   secureHandle("agent:open-approval-url", async (_event, url) => {

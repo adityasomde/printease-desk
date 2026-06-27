@@ -14,11 +14,16 @@ try {
     diagnoseWindowsHelper: () => ipcRenderer.invoke("printer:diagnoseWindowsHelper"),
   };
 
+  const conversionBridge = {
+    diagnoseLibreOffice: () => ipcRenderer.invoke("conversion:diagnoseLibreOffice"),
+  };
+
   const bridge = {
     isDesktop: true,
-    bridgeVersion: "0.1.45-cjs",
+    bridgeVersion: "0.1.46-cjs",
     agent: agentBridge,
     printer: printerBridge,
+    conversion: conversionBridge,
     getDesktopStatus: () => ipcRenderer.invoke("desktop:status"),
     checkBackendHealth: () => ipcRenderer.invoke("backend:health"),
     openExternalUrl: (url) => ipcRenderer.invoke("desktop:open-external-url", url),
@@ -34,6 +39,7 @@ try {
     },
     diagnosePrinters: () => ipcRenderer.invoke("printers:diagnose"),
     diagnoseWindowsPrintHelper: () => ipcRenderer.invoke("printer:diagnoseWindowsHelper"),
+    diagnoseLibreOffice: () => ipcRenderer.invoke("conversion:diagnoseLibreOffice"),
     testPrint: (payload) => ipcRenderer.invoke("printers:test-print", payload),
     stopPrinting: () => ipcRenderer.invoke("printing:stop"),
     getAgentStatus: () => ipcRenderer.invoke("agent:status"),

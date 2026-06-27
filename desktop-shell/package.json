@@ -1,6 +1,6 @@
 {
   "name": "printease-desktop-shell",
-  "version": "0.1.77",
+  "version": "0.1.78",
   "private": true,
   "type": "module",
   "packageManager": "traversal@0.0.0",

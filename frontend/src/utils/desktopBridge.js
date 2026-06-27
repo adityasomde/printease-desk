@@ -234,6 +234,10 @@ export function syncPrinters() {
   return callDesktop("syncPrinters", "Could not sync printers.");
 }
 
+export function predownloadNow() {
+  return callDesktop("predownloadNow", "Could not check pending conversions.");
+}
+
 export function pollPrintJobs(payload = {}) {
   return callDesktop("pollPrintJobs", "Could not poll print jobs.", payload);
 }

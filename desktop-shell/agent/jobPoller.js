@@ -335,6 +335,11 @@ export async function predownloadPendingDocuments({ agentToken, limit = 15 } = {
           });
         } catch (e) {
           console.warn("Predownload preparation failed:", e);
+          failures.push({
+            documentId,
+            orderId: file.orderId || null,
+            message: e.message || "Desktop conversion/preparation failed.",
+          });
         }
 
         cachedFiles.push({

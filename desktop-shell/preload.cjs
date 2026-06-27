@@ -53,6 +53,7 @@ try {
     confirmPairing: () => ipcRenderer.invoke("agent:confirm-pairing"),
     sendHeartbeat: () => ipcRenderer.invoke("agent:heartbeat"),
     syncPrinters: () => ipcRenderer.invoke("agent:sync-printers"),
+    predownloadNow: () => ipcRenderer.invoke("agent:predownload-now"),
     pollPrintJobs: (payload) => ipcRenderer.invoke("agent:poll-once", payload),
     startJobPolling: (payload) => ipcRenderer.invoke("agent:start-polling"),
     stopJobPolling: () => ipcRenderer.invoke("agent:stop-polling"),

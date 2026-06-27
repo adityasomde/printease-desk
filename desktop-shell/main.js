@@ -74,7 +74,7 @@ protocol.registerSchemesAsPrivileged([
 
 const DEV_FRONTEND_URL = process.env.PRINTEASE_FRONTEND_URL || "http://127.0.0.1:5175";
 const USE_DEV_FRONTEND = process.env.PRINTEASE_USE_DEV_FRONTEND === "1";
-const VERSION = "0.1.77";
+const VERSION = "0.1.78";
 const HEARTBEAT_INTERVAL_MS = 25000;
 const PRINTER_SYNC_INTERVAL_MS = 30000;
 const JOB_POLL_INTERVAL_MS = 5000;
@@ -115,6 +115,14 @@ let agentSession = {
   lastJobPollAt: "",
   lastJobPollError: "",
   lastJobPollMessage: "",
+  predownloadRunning: false,
+  predownloadLoopRunning: false,
+  lastPredownloadAt: "",
+  lastPredownloadError: "",
+  lastPredownloadMessage: "",
+  lastPredownloadChecked: 0,
+  lastPredownloadCached: 0,
+  lastPredownloadFailures: 0,
 };
 
 function serializeStartupError(error) {
@@ -871,6 +879,14 @@ function sanitizeAgentSession() {
     lastJobPollAt: agentSession.lastJobPollAt,
     lastJobPollError: agentSession.lastJobPollError,
     lastJobPollMessage: agentSession.lastJobPollMessage,
+    predownloadRunning: Boolean(isPredownloading || agentSession.predownloadRunning),
+    predownloadLoopRunning: Boolean(predownloadTimer || agentSession.predownloadLoopRunning),
+    lastPredownloadAt: agentSession.lastPredownloadAt,
+    lastPredownloadError: agentSession.lastPredownloadError,
+    lastPredownloadMessage: agentSession.lastPredownloadMessage,
+    lastPredownloadChecked: agentSession.lastPredownloadChecked,
+    lastPredownloadCached: agentSession.lastPredownloadCached,
+    lastPredownloadFailures: agentSession.lastPredownloadFailures,
     heartbeatRunning: Boolean(heartbeatTimer),
     printerSyncRunning: Boolean(printerSyncTimer),
     polling: Boolean(jobPollTimer),
@@ -1191,6 +1207,8 @@ function stopAgentRuntime(reason = "stopped") {
 
   isPollingJobs = false;
   isPredownloading = false;
+  agentSession.predownloadRunning = false;
+  agentSession.predownloadLoopRunning = false;
   console.log("[DESKTOP AGENT BACKGROUND] stopped", reason);
   emitAgentSession();
   return {
@@ -1215,11 +1233,24 @@ async function runPredownloadNow(reason = "manual") {
   }
 
   isPredownloading = true;
+  agentSession.predownloadRunning = true;
+  agentSession.lastPredownloadMessage = "Checking pending documents for conversion.";
+  agentSession.lastPredownloadError = "";
+  emitAgentSession();
 
   try {
     const result = await predownloadPendingDocuments({
       agentToken: agentSession.accessToken,
     });
+
+    agentSession.lastPredownloadAt = new Date().toISOString();
+    agentSession.lastPredownloadChecked = Number(result?.checked || 0);
+    agentSession.lastPredownloadCached = Number(result?.cached || 0);
+    agentSession.lastPredownloadFailures = Array.isArray(result?.failures) ? result.failures.length : 0;
+    agentSession.lastPredownloadError = result?.success === false ? (result.message || "Predownload failed.") : "";
+    agentSession.lastPredownloadMessage = result?.success === false
+      ? agentSession.lastPredownloadError
+      : `Checked ${agentSession.lastPredownloadChecked}, cached/prepared ${agentSession.lastPredownloadCached}, failures ${agentSession.lastPredownloadFailures}.`;
 
     if (result?.cached) {
       console.log("[DESKTOP AGENT BACKGROUND] predownload cached pending documents", {
@@ -1235,13 +1266,18 @@ async function runPredownloadNow(reason = "manual") {
       session: sanitizeAgentSession(),
     };
   } catch (error) {
+    agentSession.lastPredownloadAt = new Date().toISOString();
+    agentSession.lastPredownloadError = error.message || "Could not predownload pending documents.";
+    agentSession.lastPredownloadMessage = agentSession.lastPredownloadError;
     return {
       success: false,
-      message: error.message || "Could not predownload pending documents.",
+      message: agentSession.lastPredownloadError,
       session: sanitizeAgentSession(),
     };
   } finally {
     isPredownloading = false;
+    agentSession.predownloadRunning = false;
+    emitAgentSession();
   }
 }
 
@@ -1369,6 +1405,7 @@ function startPredownloadLoop(reason = "manual-start", payload = {}) {
     });
   }, intervalMs);
   predownloadTimer.unref?.();
+  agentSession.predownloadLoopRunning = true;
 
   runPredownloadNow(reason).catch((error) => {
     console.warn("[DESKTOP AGENT BACKGROUND] initial predownload fail", error.message || error);
@@ -1486,6 +1523,13 @@ function stopAgentPolling() {
     clearInterval(jobPollTimer);
     jobPollTimer = null;
     console.log("[DESKTOP AGENT BACKGROUND] job polling stopped manual-stop");
+  }
+
+  if (predownloadTimer) {
+    clearInterval(predownloadTimer);
+    predownloadTimer = null;
+    agentSession.predownloadLoopRunning = false;
+    console.log("[DESKTOP AGENT BACKGROUND] predownload stopped manual-stop");
   }
 
   emitAgentSession();
@@ -1666,6 +1710,7 @@ function registerIpcHandlers() {
     return result;
   }, app.isPackaged);
   secureHandle("agent:sync-printers", syncAgentPrinters, app.isPackaged);
+  secureHandle("agent:predownload-now", () => runPredownloadNow("manual-conversion-check"), app.isPackaged);
   secureHandle("agent:poll-once", pollAgentOnce, app.isPackaged);
   secureHandle("agent:start-polling", startAgentPolling, app.isPackaged);
   secureHandle("agent:stop-polling", stopAgentPolling, app.isPackaged);

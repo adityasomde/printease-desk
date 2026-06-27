@@ -25,6 +25,7 @@ import {
   saveStoredAgent,
   onAgentUpdated,
   onPrintersUpdated,
+  predownloadNow,
   pollPrintJobs,
   sendHeartbeat,
   startApprovalPairing as requestApprovalPairing,
@@ -129,6 +130,8 @@ function getStoredUser() {
     return null;
   }
 }
+
+const LIBRE_OFFICE_DOWNLOAD_URL = "https://download.documentfoundation.org/libreoffice/stable/";
 
 export default function DesktopAgentPage({ currentUser = null }) {
   const [desktopAvailable, setDesktopAvailable] = useState(() => isDesktop());
@@ -315,6 +318,28 @@ export default function DesktopAgentPage({ currentUser = null }) {
   }, [desktopAvailable]);
 
   useEffect(() => {
+    if (!desktopAvailable) return;
+    let active = true;
+
+    diagnoseLibreOffice().then((result) => {
+      if (active) setLibreOfficeDiagnostics(result);
+    }).catch((diagnosticError) => {
+      if (active) {
+        setLibreOfficeDiagnostics({
+          success: false,
+          found: false,
+          message: diagnosticError.message || "Could not inspect LibreOffice.",
+          manualDownloadUrl: LIBRE_OFFICE_DOWNLOAD_URL,
+        });
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [desktopAvailable]);
+
+  useEffect(() => {
     if (defaultPrinter && !selectedPrinterName) {
       setSelectedPrinterName(defaultPrinter.printerName);
     }
@@ -414,6 +439,26 @@ export default function DesktopAgentPage({ currentUser = null }) {
     }
 
     setMessage(result?.message || "LibreOffice conversion engine found.");
+  }
+
+  async function runConversionCheckNow() {
+    setError("");
+    setMessage("");
+
+    const result = await predownloadNow();
+    if (result?.session) setAgentSession(result.session);
+
+    if (result?.success === false) {
+      setError(result.error || result.message || "Could not check pending conversions.");
+      return;
+    }
+
+    setMessage(result?.message || result?.session?.lastPredownloadMessage || "Pending conversion check completed.");
+  }
+
+  function openLibreOfficeDownload() {
+    const url = libreOfficeDiagnostics?.manualDownloadUrl || LIBRE_OFFICE_DOWNLOAD_URL;
+    return openExternalUrl(url);
   }
 
   async function sendTestPrint() {
@@ -707,6 +752,16 @@ export default function DesktopAgentPage({ currentUser = null }) {
     );
   }
 
+  const libreOfficeFound = libreOfficeDiagnostics?.found === true || libreOfficeDiagnostics?.success === true;
+  const conversionLoopRunning = Boolean(agentSession?.predownloadLoopRunning);
+  const conversionRunning = Boolean(agentSession?.predownloadRunning);
+  const conversionHasError = Boolean(agentSession?.lastPredownloadError || (libreOfficeDiagnostics && !libreOfficeFound));
+  const conversionStatusText = conversionRunning
+    ? "Conversion check is running now"
+    : conversionLoopRunning
+      ? "Watching pending documents"
+      : "Conversion watcher is stopped";
+
   return (
     <div className="space-y-6">
       <Card>
@@ -772,6 +827,88 @@ export default function DesktopAgentPage({ currentUser = null }) {
               className="inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-3 font-semibold"
             >
               <Download size={16} /> Check LibreOffice
+            </button>
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <Download size={20} />
+              <h3 className="text-xl font-bold">Document Conversion</h3>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className={`rounded-2xl border p-4 ${libreOfficeFound ? "border-emerald-100 bg-emerald-50" : "border-amber-100 bg-amber-50"}`}>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">LibreOffice</p>
+                <p className={`mt-1 text-lg font-bold ${libreOfficeFound ? "text-emerald-800" : "text-amber-800"}`}>
+                  {libreOfficeFound ? "Active" : "Not active"}
+                </p>
+                <p className="mt-1 text-xs text-slate-600">
+                  {libreOfficeFound
+                    ? `Using ${libreOfficeDiagnostics?.source || "detected"} converter`
+                    : "Office files need LibreOffice for silent PDF conversion."}
+                </p>
+              </div>
+              <div className={`rounded-2xl border p-4 ${conversionHasError ? "border-amber-100 bg-amber-50" : "border-slate-100 bg-slate-50"}`}>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Conversion flow</p>
+                <p className={`mt-1 text-lg font-bold ${conversionHasError ? "text-amber-800" : conversionRunning ? "text-blue-800" : "text-slate-800"}`}>
+                  {conversionStatusText}
+                </p>
+                <p className="mt-1 text-xs text-slate-600">
+                  Starts after pending documents are created. It downloads/converts only, never prints before payment/collection.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Last conversion check</p>
+                <p className="mt-1 text-lg font-bold text-slate-800">
+                  {agentSession?.lastPredownloadAt ? new Date(agentSession.lastPredownloadAt).toLocaleTimeString() : "Not yet"}
+                </p>
+                <p className="mt-1 text-xs text-slate-600">
+                  Checked {agentSession?.lastPredownloadChecked || 0}, cached/prepared {agentSession?.lastPredownloadCached || 0}
+                </p>
+              </div>
+              <div className={`rounded-2xl border p-4 ${(agentSession?.lastPredownloadFailures || 0) > 0 ? "border-rose-100 bg-rose-50" : "border-slate-100 bg-slate-50"}`}>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Failures</p>
+                <p className={`mt-1 text-lg font-bold ${(agentSession?.lastPredownloadFailures || 0) > 0 ? "text-rose-800" : "text-slate-800"}`}>
+                  {agentSession?.lastPredownloadFailures || 0}
+                </p>
+                <p className="mt-1 text-xs text-slate-600">
+                  {agentSession?.lastPredownloadError || agentSession?.lastPredownloadMessage || "No conversion errors reported."}
+                </p>
+              </div>
+            </div>
+            {libreOfficeDiagnostics?.executable && (
+              <p className="mt-3 break-all text-xs text-slate-500">Converter path: {libreOfficeDiagnostics.executable}</p>
+            )}
+          </div>
+
+          <div className="grid gap-2 sm:min-w-[240px]">
+            <button
+              type="button"
+              onClick={checkLibreOffice}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 font-semibold text-white"
+            >
+              <RefreshCw size={16} />
+              Check LibreOffice
+            </button>
+            <button
+              type="button"
+              onClick={openLibreOfficeDownload}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-3 font-semibold"
+            >
+              <Download size={16} />
+              Download LibreOffice
+            </button>
+            <button
+              type="button"
+              disabled={!agentSession?.paired || conversionRunning}
+              onClick={runConversionCheckNow}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-3 font-semibold disabled:opacity-50"
+            >
+              {conversionRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw size={16} />}
+              Check Pending Conversions
             </button>
           </div>
         </div>

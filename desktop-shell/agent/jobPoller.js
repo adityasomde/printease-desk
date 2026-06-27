@@ -35,7 +35,7 @@ export async function getNextJob({ agentToken } = {}) {
   }
 }
 
-export async function getPredownloadCandidates({ agentToken, limit = 15 } = {}) {
+export async function getPredownloadCandidates({ agentToken, limit = 1 } = {}) {
   if (!agentToken) {
     return {
       success: false,
@@ -266,7 +266,7 @@ async function reportDesktopPreparationResult({ agentToken, file, cachedFilePath
   });
 }
 
-export async function predownloadPendingDocuments({ agentToken, limit = 15 } = {}) {
+export async function predownloadPendingDocuments({ agentToken, limit = 1 } = {}) {
   const candidates = await getPredownloadCandidates({ agentToken, limit });
   if (!candidates.success) return candidates;
 

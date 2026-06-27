@@ -10,7 +10,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { findLibreOfficeExecutable } from './conversionEngine.js';
 
-function waitForProcess(command, args, { timeoutMs = 5 * 60 * 1000, cwd } = {}) {
+function waitForProcess(command, args, { timeoutMs = 2 * 60 * 1000, cwd } = {}) {
   return new Promise((resolve) => {
     const child = spawn(command, args, { cwd, windowsHide: true });
     let stdout = '';
@@ -46,7 +46,7 @@ async function findConvertedPdf(outputDir, inputPath) {
   return null;
 }
 
-export async function convertOfficeToPdf({ inputPath, outputDir, timeoutMs = 5 * 60 * 1000, libreOfficePath } = {}) {
+export async function convertOfficeToPdf({ inputPath, outputDir, timeoutMs = 2 * 60 * 1000, libreOfficePath } = {}) {
   if (!inputPath) throw new Error('convertOfficeToPdf requires inputPath');
   if (!outputDir) throw new Error('convertOfficeToPdf requires outputDir');
 

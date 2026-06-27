@@ -2250,7 +2250,7 @@ export default function App() {
             <Routes>
               <Route
                 path={ROUTES.home}
-                element={<HomePage currentUser={currentUser} navigate={navigate} startLogin={startLogin} handleSignOut={logout} prioritizedCentres={prioritizedCentres} selectCentreByCode={selectCentreByCode} selectCentreAndUpload={selectCentreAndUpload} currentHub={currentHub} hubOrders={orders} updateOrderStatus={updateOrderStatus} refreshOrders={fetchOrders} onOrderSaved={fetchOrders} />}
+                element={<HomePage currentUser={currentUser} navigate={navigate} startLogin={startLogin} handleSignOut={logout} prioritizedCentres={prioritizedCentres} selectCentreByCode={selectCentreByCode} selectCentreAndUpload={selectCentreAndUpload} currentHub={currentHub} hubOrders={orders} updateOrderStatus={updateOrderStatus} refreshOrders={() => loadOrdersForSession()} onOrderSaved={() => loadOrdersForSession()} />}
               />
               <Route path={ROUTES.auth} element={<AuthPage 
                 authRole={authRole}

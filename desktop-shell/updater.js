@@ -133,7 +133,8 @@ function registerUpdaterEvents() {
 
   const updater = getAutoUpdater();
 
-  updater.autoDownload = false;
+  // Enable background automatic downloads for seamless updates
+  updater.autoDownload = true;
   updater.autoInstallOnAppQuit = false;
   updater.logger = {
     info: (message) => writeUpdaterLog("info", { message }),

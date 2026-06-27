@@ -1,9 +1,12 @@
 import { createRequire } from "node:module";
+import fs from "node:fs";
+import path from "node:path";
 
 const require = createRequire(import.meta.url);
 const { app, BrowserWindow, dialog } = require("electron");
 
 const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const UPDATE_LOG_FILE = "updater.log";
 
 let mainWindow = null;
 let autoUpdater = null;
@@ -24,16 +27,74 @@ function getAutoUpdater() {
   return autoUpdater;
 }
 
+function getUpdaterLogPath() {
+  try {
+    const userData = app.getPath("userData");
+    fs.mkdirSync(userData, { recursive: true });
+    return path.join(userData, UPDATE_LOG_FILE);
+  } catch {
+    return path.join(process.cwd(), UPDATE_LOG_FILE);
+  }
+}
+
+function readPackageType() {
+  try {
+    const packageTypePath = path.join(process.resourcesPath || "", "package-type");
+    if (!fs.existsSync(packageTypePath)) return "";
+    return fs.readFileSync(packageTypePath, "utf8").trim();
+  } catch {
+    return "";
+  }
+}
+
+function getUpdaterDiagnostics() {
+  const updater = getAutoUpdater();
+  return {
+    currentVersion: app.getVersion(),
+    packaged: app.isPackaged,
+    platform: process.platform,
+    arch: process.arch,
+    updaterClass: updater?.constructor?.name || "unknown",
+    packageType: readPackageType() || (process.env.APPIMAGE ? "AppImage" : ""),
+    hasAppImageEnv: Boolean(process.env.APPIMAGE),
+    appImagePath: process.env.APPIMAGE || "",
+    resourcesPath: process.resourcesPath || "",
+    updaterLogPath: getUpdaterLogPath(),
+  };
+}
+
+function writeUpdaterLog(event, detail = {}) {
+  const entry = {
+    at: new Date().toISOString(),
+    event,
+    ...getUpdaterDiagnostics(),
+    ...detail,
+  };
+
+  try {
+    fs.appendFileSync(getUpdaterLogPath(), `${JSON.stringify(entry)}\n`, "utf8");
+  } catch {
+    // Update diagnostics should never block app startup or printing.
+  }
+}
+
 function serializeError(error) {
   return error?.message || "Update check failed.";
 }
 
 export function sendUpdateStatus(status) {
   updateStatus = {
+    ...getUpdaterDiagnostics(),
     ...updateStatus,
     ...status,
     updatedAt: new Date().toISOString(),
   };
+
+  writeUpdaterLog(updateStatus.status || "status", {
+    message: updateStatus.message,
+    version: updateStatus.version,
+    error: updateStatus.error,
+  });
 
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) {
@@ -74,6 +135,12 @@ function registerUpdaterEvents() {
 
   updater.autoDownload = false;
   updater.autoInstallOnAppQuit = false;
+  updater.logger = {
+    info: (message) => writeUpdaterLog("info", { message }),
+    warn: (message) => writeUpdaterLog("warn", { message }),
+    error: (message) => writeUpdaterLog("error", { message }),
+    debug: (message) => writeUpdaterLog("debug", { message }),
+  };
 
   updater.on("checking-for-update", () => {
     sendUpdateStatus({ status: "checking", message: "Checking for updates." });
@@ -138,6 +205,7 @@ export function initializeUpdater({ mainWindow: window, isPrintingActive: printi
   }
 
   registerUpdaterEvents();
+  writeUpdaterLog("initialize");
 
   // Delay the initial update check to prevent startup bandwidth spam.
   setTimeout(() => {
@@ -168,7 +236,11 @@ export async function checkForUpdates() {
 
   registerUpdaterEvents();
   sendUpdateStatus({ status: "checking", message: "Checking for updates." });
-  await getAutoUpdater().checkForUpdates();
+  writeUpdaterLog("manual-check-start");
+  const result = await getAutoUpdater().checkForUpdates();
+  writeUpdaterLog("manual-check-finished", {
+    updateInfo: result?.updateInfo || null,
+  });
   return getUpdateStatus();
 }
 

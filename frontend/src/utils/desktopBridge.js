@@ -220,6 +220,25 @@ export function startJobPolling(payload = {}) {
   return callDesktop("startJobPolling", "Could not start print job polling.", payload);
 }
 
+export function checkForUpdates() {
+  return callDesktop("checkForUpdates", "Could not check for desktop updates.");
+}
+
+export function getUpdateStatus() {
+  return callDesktop("getUpdateStatus", "Could not read desktop update status.");
+}
+
+export function installUpdateNow() {
+  return callDesktop("installUpdateNow", "Could not install downloaded update.");
+}
+
+export function onUpdateStatus(callback) {
+  const bridge = getBridge();
+  if (!bridge?.onUpdateStatus) return () => {};
+
+  return bridge.onUpdateStatus(callback);
+}
+
 export function stopJobPolling() {
   return callDesktop("stopJobPolling", "Could not stop print job polling.");
 }

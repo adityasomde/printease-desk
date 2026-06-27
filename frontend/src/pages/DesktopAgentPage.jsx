@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link2, Printer, RefreshCw, Send, Wifi, X, ShieldCheck, Loader2 } from "lucide-react";
+import { Download, Link2, Printer, RefreshCw, Send, Wifi, X, ShieldCheck, Loader2 } from "lucide-react";
 import Card from "../components/Card";
 import HubLocationCard from "../components/HubLocationCard";
 import { registerDesktopAgent } from "../services/api";
@@ -14,8 +14,11 @@ import {
   getDeviceIdentity,
   getDesktopStatus,
   getStoredAgent,
+  getUpdateStatus,
+  installUpdateNow,
   isDesktop,
   listPrinters,
+  onUpdateStatus,
   openApprovalUrl,
   selectPrinter as selectDesktopPrinter,
   saveStoredAgent,
@@ -30,6 +33,7 @@ import {
   stopPrinting,
   syncPrinters as syncDesktopPrinters,
   testPrint,
+  checkForUpdates,
 } from "../utils/desktopBridge";
 
 function normalizePrinterResult(result) {
@@ -141,6 +145,8 @@ export default function DesktopAgentPage({ currentUser = null }) {
   const [agentBusy, setAgentBusy] = useState(false);
   const [agentMessage, setAgentMessage] = useState("");
   const [backendHealth, setBackendHealth] = useState(null);
+  const [updateStatus, setUpdateStatus] = useState(null);
+  const [updateBusy, setUpdateBusy] = useState(false);
   const [printerDiagnostics, setPrinterDiagnostics] = useState(null);
   const [windowsHelperDiagnostics, setWindowsHelperDiagnostics] = useState(null);
   const [autoPollingStarted, setAutoPollingStarted] = useState(false);
@@ -190,10 +196,15 @@ export default function DesktopAgentPage({ currentUser = null }) {
         if (result.selectedPrinterName) setSelectedPrinterName(result.selectedPrinterName);
       }
     });
+    const unsubscribeUpdater = onUpdateStatus((result) => {
+      setDesktopAvailable(true);
+      setUpdateStatus(result);
+    });
 
     return () => {
       unsubscribePrinters();
       unsubscribeAgent();
+      unsubscribeUpdater();
     };
   }, []);
 
@@ -227,6 +238,12 @@ export default function DesktopAgentPage({ currentUser = null }) {
       setStatus(nextStatus);
       if (nextStatus.printerResult) applyPrinterResult(nextStatus.printerResult);
     });
+
+    getUpdateStatus().then((nextStatus) => {
+      if (!active) return;
+      if (nextStatus?.success === false) return;
+      setUpdateStatus(nextStatus);
+    }).catch(() => {});
 
     async function loadAgentStatus() {
       const stored = await getStoredAgent();
@@ -615,6 +632,46 @@ export default function DesktopAgentPage({ currentUser = null }) {
     setMessage("Backend health check passed.");
   }
 
+  async function checkDesktopUpdateNow() {
+    setUpdateBusy(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const result = await checkForUpdates();
+      setUpdateStatus(result);
+      if (result?.status === "error" || result?.success === false) {
+        setError(result.error || result.message || "Desktop update check failed.");
+      } else {
+        setMessage(result?.message || "Desktop update check completed.");
+      }
+    } catch (updateError) {
+      setError(updateError.message || "Desktop update check failed.");
+    } finally {
+      setUpdateBusy(false);
+    }
+  }
+
+  async function installDesktopUpdateNow() {
+    setUpdateBusy(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const result = await installUpdateNow();
+      setUpdateStatus(result);
+      if (result?.status === "error" || result?.success === false) {
+        setError(result.error || result.message || "Could not install desktop update.");
+      } else {
+        setMessage(result?.message || "Desktop update install started.");
+      }
+    } catch (updateError) {
+      setError(updateError.message || "Could not install desktop update.");
+    } finally {
+      setUpdateBusy(false);
+    }
+  }
+
   if (!desktopAvailable) {
     return (
       <Card>
@@ -688,6 +745,59 @@ export default function DesktopAgentPage({ currentUser = null }) {
               className="inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-3 font-semibold"
             >
               <Printer size={16} /> Check Windows Print Helper
+            </button>
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <Download size={20} />
+              <h3 className="text-xl font-bold">Desktop Updates</h3>
+            </div>
+            <div className="mt-3 grid gap-1 text-sm text-slate-600">
+              <p className={`font-semibold ${
+                updateStatus?.status === "error"
+                  ? "text-rose-700"
+                  : updateStatus?.status === "update-available" || updateStatus?.status === "downloaded"
+                    ? "text-emerald-700"
+                    : "text-slate-700"
+              }`}>
+                {updateStatus?.message || "Update status is loading."}
+              </p>
+              <p>Current version: {updateStatus?.currentVersion || status?.version || "unknown"}</p>
+              {updateStatus?.version && <p>Latest version: {updateStatus.version}</p>}
+              <p>Updater: {updateStatus?.updaterClass || "unknown"}{updateStatus?.packageType ? ` (${updateStatus.packageType})` : ""}</p>
+              {updateStatus?.updatedAt && <p>Last checked: {new Date(updateStatus.updatedAt).toLocaleString()}</p>}
+              {updateStatus?.updaterLogPath && <p className="break-all text-xs">Log: {updateStatus.updaterLogPath}</p>}
+              {status?.platform === "linux" && !updateStatus?.packageType && (
+                <p className="font-semibold text-amber-700">
+                  Linux update type was not detected. Use the AppImage or deb installer from the latest release.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="grid gap-2 sm:min-w-[240px]">
+            <button
+              type="button"
+              disabled={updateBusy}
+              onClick={checkDesktopUpdateNow}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 font-semibold text-white disabled:bg-slate-300"
+            >
+              {updateBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw size={16} />}
+              Check Updates
+            </button>
+            <button
+              type="button"
+              disabled={updateBusy || updateStatus?.status !== "downloaded"}
+              onClick={installDesktopUpdateNow}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-3 font-semibold disabled:opacity-50"
+            >
+              <Download size={16} />
+              Install Downloaded Update
             </button>
           </div>
         </div>

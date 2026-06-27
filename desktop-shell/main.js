@@ -50,7 +50,7 @@ import {
   getDocumentCacheMaxSizeBytes,
   setDocumentCacheDirectory,
 } from "./agent/documentCache.js";
-import { predownloadPendingDocuments, processNextJob } from "./agent/jobPoller.js";
+import { predownloadPendingDocuments, processNextJob, processNextConversionJob } from "./agent/jobPoller.js";
 import { syncPrinters } from "./agent/statusReporter.js";
 import { getApiBaseUrl, getBackendUrl } from "./config/backend.js";
 import { loadConfig, saveConfig, setConfigDirectory } from "./local/config.js";
@@ -95,8 +95,10 @@ let heartbeatTimer = null;
 let printerSyncTimer = null;
 let jobPollTimer = null;
 let predownloadTimer = null;
+let conversionTimer = null;
 let isPollingJobs = false;
 let isPredownloading = false;
+let isConverting = false;
 let agentSession = {
   deviceId: "",
   deviceName: "",
@@ -123,6 +125,10 @@ let agentSession = {
   lastPredownloadChecked: 0,
   lastPredownloadCached: 0,
   lastPredownloadFailures: 0,
+  lastConversionMessage: "",
+  lastConversionError: "",
+  lastConversionAt: "",
+  converterPath: "",
 };
 
 function serializeStartupError(error) {
@@ -881,6 +887,12 @@ function sanitizeAgentSession() {
     lastJobPollMessage: agentSession.lastJobPollMessage,
     predownloadRunning: Boolean(isPredownloading || agentSession.predownloadRunning),
     predownloadLoopRunning: Boolean(predownloadTimer || agentSession.predownloadLoopRunning),
+    isConverting: Boolean(isConverting),
+    conversionLoopRunning: Boolean(conversionTimer),
+    lastConversionAt: agentSession.lastConversionAt,
+    lastConversionError: agentSession.lastConversionError,
+    lastConversionMessage: agentSession.lastConversionMessage,
+    converterPath: agentSession.converterPath,
     lastPredownloadAt: agentSession.lastPredownloadAt,
     lastPredownloadError: agentSession.lastPredownloadError,
     lastPredownloadMessage: agentSession.lastPredownloadMessage,
@@ -1205,8 +1217,14 @@ function stopAgentRuntime(reason = "stopped") {
     predownloadTimer = null;
   }
 
+  if (conversionTimer) {
+    clearInterval(conversionTimer);
+    conversionTimer = null;
+  }
+
   isPollingJobs = false;
   isPredownloading = false;
+  isConverting = false;
   agentSession.predownloadRunning = false;
   agentSession.predownloadLoopRunning = false;
   console.log("[DESKTOP AGENT BACKGROUND] stopped", reason);
@@ -1420,6 +1438,64 @@ function startPredownloadLoop(reason = "manual-start", payload = {}) {
   };
 }
 
+async function runConversionNow(reason = "loop") {
+  const pairingError = requirePairedAgent();
+  if (pairingError) return pairingError;
+
+  if (isConverting) return { success: true, skipped: true };
+
+  isConverting = true;
+  agentSession.lastConversionMessage = "Running conversion loop...";
+  emitAgentSession();
+
+  try {
+    const result = await processNextConversionJob({
+      agentToken: agentSession.accessToken,
+    });
+    
+    agentSession.lastConversionAt = new Date().toISOString();
+    
+    if (result.success && result.processed) {
+      agentSession.lastConversionError = "";
+      agentSession.lastConversionMessage = `Converted ${result.documentId}.`;
+      if (result.details && result.details.enginePath) {
+        agentSession.converterPath = result.details.enginePath;
+      }
+    } else if (result.success) {
+      agentSession.lastConversionError = "";
+      agentSession.lastConversionMessage = "No pending conversions.";
+    } else {
+      agentSession.lastConversionError = result.message || "Conversion failed.";
+      agentSession.lastConversionMessage = agentSession.lastConversionError;
+      if (result.details && result.details.enginePath) {
+        agentSession.converterPath = result.details.enginePath;
+      }
+    }
+  } catch (error) {
+    agentSession.lastConversionError = error.message || "Conversion error.";
+    agentSession.lastConversionMessage = agentSession.lastConversionError;
+  } finally {
+    isConverting = false;
+    emitAgentSession();
+  }
+}
+
+function startConversionLoop(reason = "manual-start") {
+  const pairingError = requirePairedAgent();
+  if (pairingError) return pairingError;
+
+  if (conversionTimer) return { success: true, message: "Conversion loop is already running." };
+
+  conversionTimer = setInterval(() => {
+    runConversionNow("conversion-loop").catch(() => {});
+  }, 4000);
+  conversionTimer.unref?.();
+
+  runConversionNow(reason).catch(() => {});
+
+  return { success: true, message: "Conversion loop started." };
+}
+
 function startJobPollLoop(reason = "manual-start", payload = {}) {
   const pairingError = requirePairedAgent();
   if (pairingError) return pairingError;
@@ -1473,15 +1549,17 @@ async function startAgentRuntime(reason) {
   const printerLoop = startPrinterSyncLoop();
   const jobLoop = startJobPollLoop(reason + ":job-poll");
   const predownloadLoop = startPredownloadLoop(reason + ":predownload");
+  const conversionLoop = startConversionLoop(reason + ":conversion");
 
   return {
-    success: Boolean(heartbeat.success && loop.success && printerLoop.success && jobLoop.success && predownloadLoop.success),
+    success: Boolean(heartbeat.success && loop.success && printerLoop.success && jobLoop.success && predownloadLoop.success && conversionLoop.success),
     heartbeat,
     printerResult,
     loop,
     printerLoop,
     jobLoop,
     predownloadLoop,
+    conversionLoop,
     session: sanitizeAgentSession(),
   };
 }
@@ -1530,6 +1608,13 @@ function stopAgentPolling() {
     predownloadTimer = null;
     agentSession.predownloadLoopRunning = false;
     console.log("[DESKTOP AGENT BACKGROUND] predownload stopped manual-stop");
+  }
+
+  if (conversionTimer) {
+    clearInterval(conversionTimer);
+    conversionTimer = null;
+    isConverting = false;
+    console.log("[DESKTOP AGENT BACKGROUND] conversion stopped manual-stop");
   }
 
   emitAgentSession();

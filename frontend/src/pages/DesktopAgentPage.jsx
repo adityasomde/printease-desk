@@ -866,16 +866,19 @@ export default function DesktopAgentPage({ currentUser = null }) {
                   {agentSession?.lastPredownloadAt ? new Date(agentSession.lastPredownloadAt).toLocaleTimeString() : "Not yet"}
                 </p>
                 <p className="mt-1 text-xs text-slate-600">
-                  Checked {agentSession?.lastPredownloadChecked || 0}, cached/prepared {agentSession?.lastPredownloadCached || 0}
+                  Pending found: {agentSession?.lastPredownloadChecked || 0}, already prepared: {agentSession?.lastPredownloadCached || 0}
+                </p>
+                <p className="mt-2 text-xs font-semibold text-blue-700">
+                  {agentSession?.isConverting ? "⚙️ LibreOffice is converting a document right now..." : agentSession?.lastConversionMessage || "LibreOffice is idle."}
                 </p>
               </div>
-              <div className={`rounded-2xl border p-4 ${(agentSession?.lastPredownloadFailures || 0) > 0 ? "border-rose-100 bg-rose-50" : "border-slate-100 bg-slate-50"}`}>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Failures</p>
-                <p className={`mt-1 text-lg font-bold ${(agentSession?.lastPredownloadFailures || 0) > 0 ? "text-rose-800" : "text-slate-800"}`}>
-                  {agentSession?.lastPredownloadFailures || 0}
+              <div className={`rounded-2xl border p-4 ${(agentSession?.lastPredownloadFailures || 0) > 0 || agentSession?.lastConversionError ? "border-rose-100 bg-rose-50" : "border-slate-100 bg-slate-50"}`}>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Failures / Warnings</p>
+                <p className={`mt-1 text-lg font-bold ${(agentSession?.lastPredownloadFailures || 0) > 0 || agentSession?.lastConversionError ? "text-rose-800" : "text-slate-800"}`}>
+                  {agentSession?.lastPredownloadFailures || (agentSession?.lastConversionError ? 1 : 0)}
                 </p>
                 <p className="mt-1 text-xs text-slate-600">
-                  {agentSession?.lastPredownloadError || agentSession?.lastPredownloadMessage || "No conversion errors reported."}
+                  {agentSession?.lastConversionError || agentSession?.lastPredownloadError || "No conversion errors reported."}
                 </p>
               </div>
             </div>

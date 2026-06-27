@@ -1,9 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
-import { app, safeStorage } from "electron";
+import { fileURLToPath } from "node:url";
+import { app, safeStorage, BrowserWindow } from "electron";
 import { appState, emitAgentSession, sanitizeAgentSession } from "../state/appState.js";
+import { getProductionIndexPath } from "../frontendLoader.js";
 import { saveConfig } from "../../local/config.js";
 import { startAgentRuntime, stopAgentRuntime } from "./agentRuntime.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const shellDir = path.join(__dirname, "..", "..");
 
 const DESKTOP_AUTH_FILE = "desktop-auth.json";
 const DESKTOP_AGENT_FILE = "desktop-agent.json";
@@ -266,4 +272,42 @@ export async function confirmAgentPairing() {
     result.runtime = await startAgentRuntime("agent:paired");
   }
   return { ...result, accessToken: undefined, agentToken: undefined, refreshToken: undefined, session: sanitizeAgentSession() };
+}
+
+export async function migrateFileLocalStorageAuth() {
+  if (!app.isPackaged) return;
+  const existing = await getStoredDesktopAuth();
+  if (existing?.auth?.token && existing.auth.user) return;
+  const localIndex = getProductionIndexPath(shellDir);
+  if (!fs.existsSync(localIndex)) return;
+  const migrationWindow = new BrowserWindow({
+    show: false,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false
+    }
+  });
+  try {
+    await migrationWindow.loadFile(localIndex);
+    const stored = await migrationWindow.webContents.executeJavaScript(`(() => {
+      const token = localStorage.getItem("printease_token");
+      const userText = localStorage.getItem("printease_user");
+      return { token, userText };
+    })()`);
+    if (stored?.token && stored?.userText) {
+      const user = JSON.parse(stored.userText);
+      await setStoredDesktopAuth(null, {
+        token: stored.token,
+        user
+      });
+      console.log("[DESKTOP AUTH] migrated file localStorage auth");
+    }
+  } catch (error) {
+    console.warn("[DESKTOP AUTH MIGRATION FAILED]", error?.message || error);
+  } finally {
+    if (!migrationWindow.isDestroyed()) {
+      migrationWindow.destroy();
+    }
+  }
 }

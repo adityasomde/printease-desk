@@ -1,0 +1,1 @@
+import{n as e}from"./vendor-motion-C9iDXck-.js";var t=e();function n({children:e,className:n=``}){return(0,t.jsx)(`div`,{className:`rounded-3xl border bg-white p-4 sm:p-6 shadow-sm text-base sm:text-lg min-w-0 ${n}`,children:e})}export{n as t};

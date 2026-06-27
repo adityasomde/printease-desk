@@ -363,7 +363,7 @@ function createMainWindow() {
     if (latestPrinterResult) emitPrinterResult(latestPrinterResult);
   });
 
-  loadFrontend(mainWindow).catch(async (error) => {
+  loadFrontend(mainWindow, __dirname, writeStartupLog).catch(async (error) => {
     writeStartupLog("load-frontend:failed", { error: serializeStartupError(error) });
     console.error("[DESKTOP LOAD FRONTEND FAILED]", error);
     try {

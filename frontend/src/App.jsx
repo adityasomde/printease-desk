@@ -2250,14 +2250,14 @@ export default function App() {
             <Routes>
               <Route
                 path={ROUTES.home}
-                element={<HomePage currentUser={currentUser} navigate={navigate} startLogin={startLogin} handleSignOut={handleSignOut} prioritizedCentres={prioritizedCentres} selectCentreByCode={selectCentreByCode} selectCentreAndUpload={selectCentreAndUpload} locationLoading={locationLoading} locationError={locationError} />}
+                element={<HomePage currentUser={currentUser} navigate={navigate} startLogin={startLogin} handleSignOut={logout} prioritizedCentres={prioritizedCentres} selectCentreByCode={selectCentreByCode} selectCentreAndUpload={selectCentreAndUpload} locationLoading={locationLoading} locationError={locationError} />}
               />
               <Route path={ROUTES.auth} element={<AuthPage authMode={authMode} setAuthMode={setAuthMode} onLoginSuccess={handleLoginSuccess} returnPath={authReturnPath} />} />
               <Route
                 path={ROUTES.userDashboard}
                 element={
                   currentUser?.role === "user" ? (
-                    <UserDashboard currentUser={currentUser} recentOrders={orders} onSignOut={handleSignOut} navigate={navigate} startLogin={startLogin} prioritizedCentres={prioritizedCentres} selectCentreByCode={selectCentreByCode} selectCentreAndUpload={selectCentreAndUpload} locationLoading={locationLoading} locationError={locationError} />
+                    <UserDashboard currentUser={currentUser} recentOrders={orders} onSignOut={logout} navigate={navigate} startLogin={startLogin} prioritizedCentres={prioritizedCentres} selectCentreByCode={selectCentreByCode} selectCentreAndUpload={selectCentreAndUpload} locationLoading={locationLoading} locationError={locationError} />
                   ) : (
                     <RouteNotice title="User Login Required" message="Please login as a user to view your dashboard." actionLabel="Login as User" onAction={() => startLogin("user")} />
                   )
@@ -2267,7 +2267,7 @@ export default function App() {
                 path={ROUTES.hubDashboard}
                 element={
                   currentUser?.role === "hub" ? (
-                    <HubDashboard currentHub={currentHub} onSignOut={handleSignOut} updateCentreStatus={updateCentreStatus} updateCentrePrice={updateCentrePrice} />
+                    <HubDashboard currentHub={currentHub} onSignOut={logout} updateCentreStatus={updateCentreStatus} updateCentrePrice={updateCentrePrice} />
                   ) : (
                     <RouteNotice title="Print Hub Login Required" message="Please login as a print hub to access the hub dashboard." actionLabel="Login as Print Hub" onAction={() => startLogin("hub")} />
                   )
@@ -2277,7 +2277,7 @@ export default function App() {
                 path={ROUTES.profile}
                 element={
                   currentUser ? (
-                    <ProfilePage currentUser={currentUser} onProfileUpdate={handleProfileUpdate} onSignOut={handleSignOut} />
+                    <ProfilePage currentUser={currentUser} onProfileUpdate={handleProfileUpdate} onSignOut={logout} />
                   ) : (
                     <RouteNotice title="Login Required" message="Please login to view your profile." actionLabel="Login" onAction={() => startLogin("user")} />
                   )

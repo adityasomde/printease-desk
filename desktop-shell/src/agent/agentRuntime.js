@@ -145,6 +145,27 @@ export async function pollJobsNow(reason = "manual", payload = {}) {
   }
 }
 
+export async function syncAgentPrinters() {
+  const pairingError = requirePairedAgent();
+  if (pairingError) return pairingError;
+  const printerResult = await refreshLocalPrinterResult("agent:manual-printer-sync");
+  if (!printerResult.success) return {
+    ...printerResult,
+    session: sanitizeAgentSession()
+  };
+  const heartbeat = await sendAgentHeartbeat();
+  const printerSync = printerResult.cloudSync || (await syncPrintersToCloud(printerResult, "agent:manual-printer-sync"));
+  const runtime = startJobPollLoop("manual-printer-sync");
+  return {
+    success: Boolean(heartbeat.success && printerSync.success && runtime.success),
+    heartbeat,
+    printerSync,
+    runtime,
+    localPrinters: printerResult.printers,
+    session: sanitizeAgentSession()
+  };
+}
+
 export function startJobPollLoop(reason = "manual-start", payload = {}) {
   const pairingError = requirePairedAgent();
   if (pairingError) return pairingError;

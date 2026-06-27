@@ -204,11 +204,11 @@ export async function clearStoredDesktopAgent() {
 
 export async function ensureDeviceIdentity(deviceName) {
   if (appState.agentSession.deviceId && appState.agentSession.deviceName) return;
-  const savedConfig = await import("../local/config.js").then(m => m.loadConfig());
+  const savedConfig = await import("../../local/config.js").then(m => m.loadConfig());
   appState.agentSession.deviceId = savedConfig.deviceId || (await import("node:crypto")).randomUUID();
   appState.agentSession.deviceName = deviceName || savedConfig.deviceName || (await import("node:os")).hostname() || "PrintEase Desktop";
   appState.agentSession.selectedPrinterName = savedConfig.selectedPrinterName || appState.agentSession.selectedPrinterName || "";
-  await import("../local/config.js").then(m => m.saveConfig({
+  await import("../../local/config.js").then(m => m.saveConfig({
     deviceId: appState.agentSession.deviceId,
     deviceName: appState.agentSession.deviceName,
     agentId: appState.agentSession.agentId,
@@ -247,7 +247,7 @@ export async function confirmAgentPairing() {
     appState.agentSession.hubId = result.hubId || result.shopId || "";
     appState.agentSession.pairedAt = new Date().toISOString();
     appState.agentSession.pairingCode = "";
-    await import("../local/config.js").then(m => m.saveConfig({
+    await import("../../local/config.js").then(m => m.saveConfig({
       deviceId: appState.agentSession.deviceId,
       deviceName: appState.agentSession.deviceName,
       agentId: appState.agentSession.agentId,

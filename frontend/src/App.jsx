@@ -3,6 +3,8 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-
 import { emitOrderChanged } from "./utils/appEvents";
 import Navbar from "./components/Navbar";
 import BackendStatus from "./components/BackendStatus";
+import { RouteNotice } from "./components/RouteNotice";
+import { RouteErrorBoundary } from "./components/RouteErrorBoundary";
 import { hubActivityStore } from "./state/hubActivityStore";
 
 const HubHistoryPage = lazy(() => import("./pages/HubHistoryPage"));
@@ -63,57 +65,6 @@ function getPageFromPath(pathname) {
   return foundRoute?.[0] || "home";
 }
 
-function RouteNotice({ title, message, actionLabel, onAction }) {
-  return (
-    <section className="mx-auto max-w-xl rounded-2xl border bg-white p-6 text-center shadow-sm">
-      <h2 className="text-2xl font-bold">{title}</h2>
-      <p className="mt-2 text-slate-600">{message}</p>
-      {actionLabel && (
-        <button onClick={onAction} className="mt-5 rounded-2xl bg-slate-900 px-5 py-3 font-semibold text-white">
-          {actionLabel}
-        </button>
-      )}
-    </section>
-  );
-}
-
-class RouteErrorBoundary extends Component {
-  constructor(props) {
-    super(props);
-    this.state = { error: null };
-  }
-
-  static getDerivedStateFromError(error) {
-    return { error };
-  }
-
-  componentDidCatch(error, errorInfo) {
-    console.error("[PrintEase route render failed]", error, errorInfo);
-  }
-
-  render() {
-    if (!this.state.error) return this.props.children;
-
-    const showDetail =
-      typeof window !== "undefined" &&
-      (window.location.protocol === "file:" ||
-        window.location.protocol === "app:" ||
-        window.printeaseDesktop?.isDesktop ||
-        import.meta.env.DEV);
-
-    return (
-      <section className="mx-auto max-w-xl rounded-2xl border border-rose-200 bg-white p-6 shadow-sm">
-        <h2 className="text-2xl font-bold text-rose-700">Page failed to load</h2>
-        <p className="mt-2 text-slate-600">PrintEase hit a renderer error while opening this page.</p>
-        {showDetail && (
-          <pre className="mt-4 overflow-x-auto rounded-xl bg-rose-50 p-4 text-xs text-rose-800">
-            {this.state.error?.message || String(this.state.error)}
-          </pre>
-        )}
-      </section>
-    );
-  }
-}
 
 function formatStatus(status) {
   if (!status) return "Available";

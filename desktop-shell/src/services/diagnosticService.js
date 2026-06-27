@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { exec } from "node:child_process";
 import electron from "electron"; const { app, net } = electron;
-import { agentState, agentSession } from "../state/agentState.js";
+import { appState } from "../state/appState.js";
 import { findLibreOfficeExecutable, LIBREOFFICE_MANUAL_DOWNLOAD_URL } from "../../agent/printPreparation/conversionEngine.js";
 import { getBackendUrl } from "../../config/backend.js";
 import { diagnosePrinters, testPrint } from "../../printer/printExecutor.js";
@@ -83,11 +83,11 @@ export async function reportPrinterDiagnostic(event, result) {
       },
       body: JSON.stringify({
         event,
-        deviceId: agentSession.deviceId || null,
-        deviceName: agentSession.deviceName || null,
+        deviceId: appState.agentSession.deviceId || null,
+        deviceName: appState.agentSession.deviceName || null,
         platform: process.platform,
         version: VERSION,
-        paired: Boolean(agentSession.accessToken),
+        paired: Boolean(appState.agentSession.accessToken),
         result
       })
     });
@@ -103,7 +103,7 @@ export async function syncPrintersToCloud(printerResult, event = "printers:sync"
       message: "Pair desktop before syncing printers to cloud.",
       skipped: true
     };
-    agentSession.lastPrinterSyncError = result.message;
+    appState.agentSession.lastPrinterSyncError = result.message;
     emitAgentSession();
     return result;
   }
@@ -112,29 +112,29 @@ export async function syncPrintersToCloud(printerResult, event = "printers:sync"
       success: false,
       message: printerResult?.error || printerResult?.message || "Local printer discovery failed; cloud sync skipped."
     };
-    agentSession.lastPrinterSyncError = result.message;
+    appState.agentSession.lastPrinterSyncError = result.message;
     emitAgentSession();
     return result;
   }
   const syncResult = await syncPrinters({
-    agentToken: agentSession.accessToken,
+    agentToken: appState.agentSession.accessToken,
     printers: (printerResult.printers || []).map(printer => ({
       ...printer,
-      isDefault: agentSession.selectedPrinterName ? printer.printerName === agentSession.selectedPrinterName : Boolean(printer.isDefault)
+      isDefault: appState.agentSession.selectedPrinterName ? printer.printerName === appState.agentSession.selectedPrinterName : Boolean(printer.isDefault)
     }))
   });
   if (syncResult.success) {
-    agentSession.lastPrinterSyncAt = new Date().toISOString();
-    agentSession.lastPrinterSyncError = "";
+    appState.agentSession.lastPrinterSyncAt = new Date().toISOString();
+    appState.agentSession.lastPrinterSyncError = "";
     console.log("[DESKTOP AGENT BACKGROUND] printer sync success", {
       event,
       printerCount: printerResult.printers?.length || 0
     });
   } else {
-    agentSession.lastPrinterSyncError = syncResult.message || "Cloud printer sync failed.";
+    appState.agentSession.lastPrinterSyncError = syncResult.message || "Cloud printer sync failed.";
     console.warn("[DESKTOP AGENT BACKGROUND] printer sync fail", {
       event,
-      message: agentSession.lastPrinterSyncError
+      message: appState.agentSession.lastPrinterSyncError
     });
   }
   console.log("[DESKTOP PRINTER CLOUD SYNC]", JSON.stringify({
@@ -148,18 +148,18 @@ export async function syncPrintersToCloud(printerResult, event = "printers:sync"
 }
 
 export async function applyPrinterDiscoveryResult(result, event) {
-  agentState.latestPrinterResult = result;
+  appState.latestPrinterResult = result;
   emitPrinterResult(result);
   if (isAgentPaired()) {
     const cloudSync = await syncPrintersToCloud(result, event);
-    agentState.latestPrinterResult = {
+    appState.latestPrinterResult = {
       ...result,
       cloudSync
     };
-    emitPrinterResult(agentState.latestPrinterResult);
-    return agentState.latestPrinterResult;
+    emitPrinterResult(appState.latestPrinterResult);
+    return appState.latestPrinterResult;
   }
-  agentSession.lastPrinterSyncError = result?.success ? "Printer detected locally but not synced to hub. Pair desktop first." : result?.message || result?.error || "Local printer discovery failed.";
+  appState.agentSession.lastPrinterSyncError = result?.success ? "Printer detected locally but not synced to hub. Pair desktop first." : result?.message || result?.error || "Local printer discovery failed.";
   emitAgentSession();
   return result;
 }
@@ -192,7 +192,7 @@ export async function selectDesktopPrinter(_event, payload = {}) {
       session: sanitizeAgentSession()
     };
   }
-  const printerResult = agentState.latestPrinterResult || (await refreshLocalPrinterResult("printers:select-load"));
+  const printerResult = appState.latestPrinterResult || (await refreshLocalPrinterResult("printers:select-load"));
   const printer = findPrinterByName(printerResult, printerName);
   if (!printer) {
     return {
@@ -201,38 +201,38 @@ export async function selectDesktopPrinter(_event, payload = {}) {
       session: sanitizeAgentSession()
     };
   }
-  agentSession.selectedPrinterName = printer.printerName;
+  appState.agentSession.selectedPrinterName = printer.printerName;
   await saveConfig({
-    deviceId: agentSession.deviceId,
-    deviceName: agentSession.deviceName,
-    agentId: agentSession.agentId,
-    hubId: agentSession.hubId,
-    selectedPrinterName: agentSession.selectedPrinterName
+    deviceId: appState.agentSession.deviceId,
+    deviceName: appState.agentSession.deviceName,
+    agentId: appState.agentSession.agentId,
+    hubId: appState.agentSession.hubId,
+    selectedPrinterName: appState.agentSession.selectedPrinterName
   });
-  agentState.latestPrinterResult = {
+  appState.latestPrinterResult = {
     ...printerResult,
     printers: (printerResult.printers || []).map(item => ({
       ...item,
-      isDefault: item.printerName === agentSession.selectedPrinterName
+      isDefault: item.printerName === appState.agentSession.selectedPrinterName
     }))
   };
-  emitPrinterResult(agentState.latestPrinterResult);
+  emitPrinterResult(appState.latestPrinterResult);
   let heartbeat = null;
   let printerSync = null;
   if (isAgentPaired()) {
     heartbeat = await sendAgentHeartbeat();
-    printerSync = await syncPrintersToCloud(agentState.latestPrinterResult, "printers:selected");
+    printerSync = await syncPrintersToCloud(appState.latestPrinterResult, "printers:selected");
     startJobPollLoop("printer-selected", {
-      printerName: agentSession.selectedPrinterName
+      printerName: appState.agentSession.selectedPrinterName
     });
   } else {
-    agentSession.lastPrinterSyncError = "Printer selected locally but not synced to hub. Pair desktop first.";
+    appState.agentSession.lastPrinterSyncError = "Printer selected locally but not synced to hub. Pair desktop first.";
   }
   emitAgentSession();
   return {
     success: true,
-    message: "Selected printer " + agentSession.selectedPrinterName + ".",
-    printer: findPrinterByName(agentState.latestPrinterResult, agentSession.selectedPrinterName),
+    message: "Selected printer " + appState.agentSession.selectedPrinterName + ".",
+    printer: findPrinterByName(appState.latestPrinterResult, appState.agentSession.selectedPrinterName),
     heartbeat,
     printerSync,
     session: sanitizeAgentSession()

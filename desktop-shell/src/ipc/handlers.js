@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import electron from "electron"; const { app, shell, net } = electron;
-import { agentState, agentSession } from "../state/agentState.js";
+import { appState } from "../state/appState.js";
 import { getBackendUrl, getApiBaseUrl } from "../../config/backend.js";
 import { getDocumentCacheDirectory, getDocumentCacheMaxAgeDays, getDocumentCacheMaxSizeBytes } from "../../agent/documentCache.js";
 const VERSION = "0.1.85";
@@ -13,10 +13,10 @@ import { getStoredDesktopAuth, setStoredDesktopAuth, clearStoredDesktopAuth, get
 import { diagnoseWindowsPrintHelperSafe, diagnoseLibreOfficeSafe, checkBackendHealth, reportPrinterDiagnostic, syncPrintersToCloud, applyPrinterDiscoveryResult, refreshLocalPrinterResult, syncLatestPrinterStatus, selectDesktopPrinter } from "../services/diagnosticService.js";
 
 export function registerIpcHandlers() {
-  if (agentState.ipcHandlersRegistered) return;
-  agentState.ipcHandlersRegistered = true;
+  if (appState.ipcHandlersRegistered) return;
+  appState.ipcHandlersRegistered = true;
   secureHandle("desktop:status", async () => {
-    const printerResult = agentState.latestPrinterResult || (await refreshLocalPrinterResult("desktop:status"));
+    const printerResult = appState.latestPrinterResult || (await refreshLocalPrinterResult("desktop:status"));
     return {
       success: true,
       isDesktop: true,
@@ -79,13 +79,13 @@ export function registerIpcHandlers() {
           message: "Only HTTPS files can be downloaded."
         };
       }
-      if (!agentState.mainWindow || agentState.mainWindow.isDestroyed()) {
+      if (!appState.mainWindow || appState.mainWindow.isDestroyed()) {
         return {
           success: false,
           message: "Desktop window is not ready for download."
         };
       }
-      agentState.mainWindow.webContents.downloadURL(parsedUrl.toString());
+      appState.mainWindow.webContents.downloadURL(parsedUrl.toString());
       return {
         success: true
       };
@@ -130,7 +130,7 @@ export function registerIpcHandlers() {
       height: 1100,
       show: false,
       title,
-      parent: agentState.mainWindow || undefined,
+      parent: appState.mainWindow || undefined,
       webPreferences: {
         contextIsolation: true,
         nodeIntegration: false,
@@ -170,7 +170,7 @@ export function registerIpcHandlers() {
     return result;
   }, app.isPackaged);
   secureHandle("printers:test-print", (_event, payload = {}) => {
-    const printerName = (typeof payload === "string" ? payload : payload?.printerName) || agentSession.selectedPrinterName;
+    const printerName = (typeof payload === "string" ? payload : payload?.printerName) || appState.agentSession.selectedPrinterName;
     return testPrint(printerName);
   }, app.isPackaged);
   secureHandle("printing:stop", () => stopPrinting(), app.isPackaged);
@@ -240,8 +240,8 @@ export function registerIpcHandlers() {
     await ensureDeviceIdentity();
     return {
       success: true,
-      deviceId: agentSession.deviceId,
-      deviceName: agentSession.deviceName
+      deviceId: appState.agentSession.deviceId,
+      deviceName: appState.agentSession.deviceName
     };
   }, app.isPackaged);
 }

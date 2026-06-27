@@ -5,7 +5,7 @@ import fs from "node:fs";
 import { loadConfig, saveConfig } from "../../local/config.js";
 import path from "node:path";
 import electron from "electron"; const { app, net, safeStorage } = electron;
-import { agentState, agentSession } from "../state/agentState.js";
+import { appState } from "../state/appState.js";
 import { getApiBaseUrl } from "../../config/backend.js";
 import { startPairing, confirmPairing, sendHeartbeat } from "../../agent/heartbeat.js";
 
@@ -122,8 +122,8 @@ export function normalizeDesktopAgentPayload(payload = {}) {
   const token = typeof payload.agentToken === "string" ? payload.agentToken : payload.accessToken;
   const agentId = typeof payload.agentId === "string" ? payload.agentId : "";
   const hubId = typeof payload.hubId === "string" ? payload.hubId : payload.shopId;
-  const deviceId = typeof payload.deviceId === "string" ? payload.deviceId : agentSession.deviceId;
-  const deviceName = typeof payload.deviceName === "string" ? payload.deviceName : agentSession.deviceName;
+  const deviceId = typeof payload.deviceId === "string" ? payload.deviceId : appState.agentSession.deviceId;
+  const deviceName = typeof payload.deviceName === "string" ? payload.deviceName : appState.agentSession.deviceName;
   if (!token || !agentId || !hubId || !deviceId || !deviceName) {
     return null;
   }
@@ -136,23 +136,23 @@ export function normalizeDesktopAgentPayload(payload = {}) {
     deviceId,
     deviceName,
     pairedAt: typeof payload.pairedAt === "string" ? payload.pairedAt : new Date().toISOString(),
-    selectedPrinterName: typeof payload.selectedPrinterName === "string" ? payload.selectedPrinterName : agentSession.selectedPrinterName,
+    selectedPrinterName: typeof payload.selectedPrinterName === "string" ? payload.selectedPrinterName : appState.agentSession.selectedPrinterName,
     savedAt: new Date().toISOString()
   };
 }
 
 export function applyStoredAgentToSession(agent) {
   if (!agent) return false;
-  agentSession.deviceId = agent.deviceId || agentSession.deviceId;
-  agentSession.deviceName = agent.deviceName || agentSession.deviceName;
-  agentSession.agentId = agent.agentId || "";
-  agentSession.hubId = agent.hubId || "";
-  agentSession.accessToken = agent.agentToken || "";
-  agentSession.pairedAt = agent.pairedAt || "";
-  agentSession.selectedPrinterName = agent.selectedPrinterName || agentSession.selectedPrinterName || "";
-  agentSession.pairingCode = "";
-  agentSession.pairingSessionId = "";
-  agentSession.expiresAt = "";
+  appState.agentSession.deviceId = agent.deviceId || appState.agentSession.deviceId;
+  appState.agentSession.deviceName = agent.deviceName || appState.agentSession.deviceName;
+  appState.agentSession.agentId = agent.agentId || "";
+  appState.agentSession.hubId = agent.hubId || "";
+  appState.agentSession.accessToken = agent.agentToken || "";
+  appState.agentSession.pairedAt = agent.pairedAt || "";
+  appState.agentSession.selectedPrinterName = agent.selectedPrinterName || appState.agentSession.selectedPrinterName || "";
+  appState.agentSession.pairingCode = "";
+  appState.agentSession.pairingSessionId = "";
+  appState.agentSession.expiresAt = "";
   return isAgentPaired();
 }
 
@@ -209,11 +209,11 @@ export async function setStoredDesktopAgent(_event, payload = {}) {
     await fs.promises.writeFile(getDesktopAgentPath(), JSON.stringify(encodeDesktopAuth(agent), null, 2), "utf8");
     applyStoredAgentToSession(agent);
     await saveConfig({
-      deviceId: agentSession.deviceId,
-      deviceName: agentSession.deviceName,
-      agentId: agentSession.agentId,
-      hubId: agentSession.hubId,
-      selectedPrinterName: agentSession.selectedPrinterName
+      deviceId: appState.agentSession.deviceId,
+      deviceName: appState.agentSession.deviceName,
+      agentId: appState.agentSession.agentId,
+      hubId: appState.agentSession.hubId,
+      selectedPrinterName: appState.agentSession.selectedPrinterName
     });
     const runtime = await startAgentRuntime("agent-stored");
     emitAgentSession();
@@ -243,16 +243,16 @@ export async function restoreStoredDesktopAgent() {
     const restored = applyStoredAgentToSession(agent);
     if (restored) {
       await saveConfig({
-        deviceId: agentSession.deviceId,
-        deviceName: agentSession.deviceName,
-        agentId: agentSession.agentId,
-        hubId: agentSession.hubId,
-        selectedPrinterName: agentSession.selectedPrinterName
+        deviceId: appState.agentSession.deviceId,
+        deviceName: appState.agentSession.deviceName,
+        agentId: appState.agentSession.agentId,
+        hubId: appState.agentSession.hubId,
+        selectedPrinterName: appState.agentSession.selectedPrinterName
       });
       console.log("[DESKTOP AGENT] restored stored agent credential", {
-        agentId: agentSession.agentId,
-        hubId: agentSession.hubId,
-        deviceId: agentSession.deviceId
+        agentId: appState.agentSession.agentId,
+        hubId: appState.agentSession.hubId,
+        deviceId: appState.agentSession.deviceId
       });
     }
     return {
@@ -275,15 +275,19 @@ export async function clearStoredDesktopAgent() {
       force: true
     });
     stopAgentRuntime("agent-cleared");
-    agentSession.agentId = "";
-    agentSession.hubId = "";
-    agentSession.accessToken = "";
-    agentSession.pairedAt = "";
-    agentSession.pairingCode = "";
-    agentSession.pairingSessionId = "";
-    agentSession.expiresAt = "";
-    agentSession.lastJobPollError = "";
-    agentSession.lastJobPollMessage = "";
+    appState.agentSession.agentId = "";
+    appState.agentSession.hubId = "";
+    appState.agentSession.accessToken = "";
+    appState.agentSession.pairedAt = "";
+    appState.agentSession.pairingCode = "";
+    appState.agentSession.pairingSessionId = "";
+    appState.agentSession.expiresAt = "";
+    appState.agentSession.lastJobPollError = "";
+    appState.agentSession.lastJobPollMessage = "";
+    appState.agentSession.lastPrinterSyncError = "";
+    appState.agentSession.lastHeartbeatError = "";
+    appState.agentSession.lastPredownloadError = "";
+    appState.agentSession.lastConversionError = "";
     emitAgentSession();
     return {
       success: true,
@@ -337,69 +341,69 @@ export async function migrateFileLocalStorageAuth() {
 export function sanitizeAgentSession() {
   return {
     success: true,
-    deviceId: agentSession.deviceId,
-    deviceName: agentSession.deviceName,
-    pairingCode: agentSession.pairingCode,
-    pairingSessionId: agentSession.pairingSessionId,
-    expiresAt: agentSession.expiresAt,
-    agentId: agentSession.agentId,
-    hubId: agentSession.hubId,
-    paired: Boolean(agentSession.accessToken),
-    pairedAt: agentSession.pairedAt,
-    lastHeartbeatAt: agentSession.lastHeartbeatAt,
-    lastHeartbeatError: agentSession.lastHeartbeatError,
-    selectedPrinterName: agentSession.selectedPrinterName,
-    lastPrinterSyncAt: agentSession.lastPrinterSyncAt,
-    lastPrinterSyncError: agentSession.lastPrinterSyncError,
-    lastJobPollAt: agentSession.lastJobPollAt,
-    lastJobPollError: agentSession.lastJobPollError,
-    lastJobPollMessage: agentSession.lastJobPollMessage,
-    predownloadRunning: Boolean(agentState.isPredownloading || agentSession.predownloadRunning),
-    predownloadLoopRunning: Boolean(agentState.predownloadTimer || agentSession.predownloadLoopRunning),
-    isConverting: Boolean(agentState.isConverting),
-    conversionLoopRunning: Boolean(agentState.conversionTimer),
-    lastConversionAt: agentSession.lastConversionAt,
-    lastConversionError: agentSession.lastConversionError,
-    lastConversionMessage: agentSession.lastConversionMessage,
-    converterPath: agentSession.converterPath,
-    lastPredownloadAt: agentSession.lastPredownloadAt,
-    lastPredownloadError: agentSession.lastPredownloadError,
-    lastPredownloadMessage: agentSession.lastPredownloadMessage,
-    lastPredownloadChecked: agentSession.lastPredownloadChecked,
-    lastPredownloadCached: agentSession.lastPredownloadCached,
-    lastPredownloadFailures: agentSession.lastPredownloadFailures,
-    heartbeatRunning: Boolean(agentState.heartbeatTimer),
-    printerSyncRunning: Boolean(agentState.printerSyncTimer),
-    polling: Boolean(agentState.jobPollTimer),
-    autoPrintRunning: Boolean(agentState.heartbeatTimer && agentState.printerSyncTimer && agentState.jobPollTimer)
+    deviceId: appState.agentSession.deviceId,
+    deviceName: appState.agentSession.deviceName,
+    pairingCode: appState.agentSession.pairingCode,
+    pairingSessionId: appState.agentSession.pairingSessionId,
+    expiresAt: appState.agentSession.expiresAt,
+    agentId: appState.agentSession.agentId,
+    hubId: appState.agentSession.hubId,
+    paired: Boolean(appState.agentSession.accessToken),
+    pairedAt: appState.agentSession.pairedAt,
+    lastHeartbeatAt: appState.agentSession.lastHeartbeatAt,
+    lastHeartbeatError: appState.agentSession.lastHeartbeatError,
+    selectedPrinterName: appState.agentSession.selectedPrinterName,
+    lastPrinterSyncAt: appState.agentSession.lastPrinterSyncAt,
+    lastPrinterSyncError: appState.agentSession.lastPrinterSyncError,
+    lastJobPollAt: appState.agentSession.lastJobPollAt,
+    lastJobPollError: appState.agentSession.lastJobPollError,
+    lastJobPollMessage: appState.agentSession.lastJobPollMessage,
+    predownloadRunning: Boolean(appState.isPredownloading || appState.agentSession.predownloadRunning),
+    predownloadLoopRunning: Boolean(appState.predownloadTimer || appState.agentSession.predownloadLoopRunning),
+    isConverting: Boolean(appState.isConverting),
+    conversionLoopRunning: Boolean(appState.conversionTimer),
+    lastConversionAt: appState.agentSession.lastConversionAt,
+    lastConversionError: appState.agentSession.lastConversionError,
+    lastConversionMessage: appState.agentSession.lastConversionMessage,
+    converterPath: appState.agentSession.converterPath,
+    lastPredownloadAt: appState.agentSession.lastPredownloadAt,
+    lastPredownloadError: appState.agentSession.lastPredownloadError,
+    lastPredownloadMessage: appState.agentSession.lastPredownloadMessage,
+    lastPredownloadChecked: appState.agentSession.lastPredownloadChecked,
+    lastPredownloadCached: appState.agentSession.lastPredownloadCached,
+    lastPredownloadFailures: appState.agentSession.lastPredownloadFailures,
+    heartbeatRunning: Boolean(appState.heartbeatTimer),
+    printerSyncRunning: Boolean(appState.printerSyncTimer),
+    polling: Boolean(appState.jobPollTimer),
+    autoPrintRunning: Boolean(appState.heartbeatTimer && appState.printerSyncTimer && appState.jobPollTimer)
   };
 }
 
 export async function ensureDeviceIdentity(deviceName) {
-  if (agentSession.deviceId && agentSession.deviceName) return;
+  if (appState.agentSession.deviceId && appState.agentSession.deviceName) return;
   const savedConfig = await loadConfig();
-  agentSession.deviceId = savedConfig.deviceId || randomUUID();
-  agentSession.deviceName = deviceName || savedConfig.deviceName || os.hostname() || "PrintEase Desktop";
-  agentSession.selectedPrinterName = savedConfig.selectedPrinterName || agentSession.selectedPrinterName || "";
+  appState.agentSession.deviceId = savedConfig.deviceId || randomUUID();
+  appState.agentSession.deviceName = deviceName || savedConfig.deviceName || os.hostname() || "PrintEase Desktop";
+  appState.agentSession.selectedPrinterName = savedConfig.selectedPrinterName || appState.agentSession.selectedPrinterName || "";
   await saveConfig({
-    deviceId: agentSession.deviceId,
-    deviceName: agentSession.deviceName,
-    agentId: agentSession.agentId,
-    hubId: agentSession.hubId,
-    selectedPrinterName: agentSession.selectedPrinterName
+    deviceId: appState.agentSession.deviceId,
+    deviceName: appState.agentSession.deviceName,
+    agentId: appState.agentSession.agentId,
+    hubId: appState.agentSession.hubId,
+    selectedPrinterName: appState.agentSession.selectedPrinterName
   });
 }
 
 export async function startAgentPairing(_event, payload = {}) {
   await ensureDeviceIdentity(payload.deviceName);
   const result = await startPairing({
-    deviceId: agentSession.deviceId,
-    agentName: agentSession.deviceName
+    deviceId: appState.agentSession.deviceId,
+    agentName: appState.agentSession.deviceName
   });
   if (result.success) {
-    agentSession.pairingCode = result.pairingCode || "";
-    agentSession.pairingSessionId = result.pairingSessionId || "";
-    agentSession.expiresAt = result.expiresAt || "";
+    appState.agentSession.pairingCode = result.pairingCode || "";
+    appState.agentSession.pairingSessionId = result.pairingSessionId || "";
+    appState.agentSession.expiresAt = result.expiresAt || "";
   }
   return {
     ...result,
@@ -409,7 +413,7 @@ export async function startAgentPairing(_event, payload = {}) {
 
 export async function confirmAgentPairing() {
   await ensureDeviceIdentity();
-  if (!agentSession.pairingSessionId) {
+  if (!appState.agentSession.pairingSessionId) {
     return {
       success: false,
       paired: false,
@@ -418,31 +422,36 @@ export async function confirmAgentPairing() {
     };
   }
   const result = await confirmPairing({
-    pairingSessionId: agentSession.pairingSessionId,
-    deviceId: agentSession.deviceId
+    pairingSessionId: appState.agentSession.pairingSessionId,
+    deviceId: appState.agentSession.deviceId
   });
   const returnedAgentToken = result.accessToken || result.agentToken;
   if (result.success && result.paired && returnedAgentToken) {
-    agentSession.accessToken = returnedAgentToken;
-    agentSession.agentId = result.agentId || "";
-    agentSession.hubId = result.hubId || result.shopId || "";
-    agentSession.pairedAt = new Date().toISOString();
-    agentSession.pairingCode = "";
+    appState.agentSession.accessToken = returnedAgentToken;
+    appState.agentSession.agentId = result.agentId || "";
+    appState.agentSession.hubId = result.hubId || result.shopId || "";
+    appState.agentSession.pairedAt = new Date().toISOString();
+    appState.agentSession.pairingCode = "";
+    appState.agentSession.lastJobPollError = "";
+    appState.agentSession.lastPrinterSyncError = "";
+    appState.agentSession.lastHeartbeatError = "";
+    appState.agentSession.lastPredownloadError = "";
+    appState.agentSession.lastConversionError = "";
     await saveConfig({
-      deviceId: agentSession.deviceId,
-      deviceName: agentSession.deviceName,
-      agentId: agentSession.agentId,
-      hubId: agentSession.hubId,
-      selectedPrinterName: agentSession.selectedPrinterName
+      deviceId: appState.agentSession.deviceId,
+      deviceName: appState.agentSession.deviceName,
+      agentId: appState.agentSession.agentId,
+      hubId: appState.agentSession.hubId,
+      selectedPrinterName: appState.agentSession.selectedPrinterName
     });
     await setStoredDesktopAgent(null, {
-      agentToken: agentSession.accessToken,
-      agentId: agentSession.agentId,
-      hubId: agentSession.hubId,
-      deviceId: agentSession.deviceId,
-      deviceName: agentSession.deviceName,
-      pairedAt: agentSession.pairedAt,
-      selectedPrinterName: agentSession.selectedPrinterName
+      agentToken: appState.agentSession.accessToken,
+      agentId: appState.agentSession.agentId,
+      hubId: appState.agentSession.hubId,
+      deviceId: appState.agentSession.deviceId,
+      deviceName: appState.agentSession.deviceName,
+      pairedAt: appState.agentSession.pairedAt,
+      selectedPrinterName: appState.agentSession.selectedPrinterName
     });
     result.runtime = await startAgentRuntime("agent:paired");
   }
@@ -459,25 +468,25 @@ export async function sendAgentHeartbeat() {
   const pairingError = requirePairedAgent();
   if (pairingError) return pairingError;
   const result = await sendHeartbeat({
-    agentToken: agentSession.accessToken,
-    selectedPrinter: agentSession.selectedPrinterName
+    agentToken: appState.agentSession.accessToken,
+    selectedPrinter: appState.agentSession.selectedPrinterName
   });
   if (result.success) {
-    agentSession.lastHeartbeatAt = new Date().toISOString();
-    agentSession.lastHeartbeatError = "";
+    appState.agentSession.lastHeartbeatAt = new Date().toISOString();
+    appState.agentSession.lastHeartbeatError = "";
     console.log("[DESKTOP AGENT BACKGROUND] heartbeat success", {
-      agentId: agentSession.agentId || null,
-      selectedPrinterName: agentSession.selectedPrinterName || null
+      agentId: appState.agentSession.agentId || null,
+      selectedPrinterName: appState.agentSession.selectedPrinterName || null
     });
   } else {
-    agentSession.lastHeartbeatError = result.message || "Heartbeat failed.";
+    appState.agentSession.lastHeartbeatError = result.message || "Heartbeat failed.";
     console.warn("[DESKTOP AGENT BACKGROUND] heartbeat fail", {
       status: result.status || null,
-      message: agentSession.lastHeartbeatError
+      message: appState.agentSession.lastHeartbeatError
     });
     if (result.status === 401 || result.status === 403) {
       await clearStoredDesktopAgent();
-      agentSession.lastHeartbeatError = "Stored desktop agent credential was rejected. Register or pair this desktop again.";
+      appState.agentSession.lastHeartbeatError = "Stored desktop agent credential was rejected. Register or pair this desktop again.";
     }
   }
   emitAgentSession();

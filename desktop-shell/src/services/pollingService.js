@@ -221,7 +221,6 @@ export async function runConversionNow(reason = "loop") {
         appState.agentSession.converterPath = result.details.enginePath;
       }
     } else if (result.success) {
-      appState.agentSession.lastConversionError = "";
       appState.agentSession.lastConversionMessage = "No pending conversions.";
     } else {
       appState.agentSession.lastConversionError = result.message || "Conversion failed.";

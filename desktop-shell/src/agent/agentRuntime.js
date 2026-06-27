@@ -169,15 +169,39 @@ export async function syncAgentPrinters() {
 export function startJobPollLoop(reason = "manual-start", payload = {}) {
   const pairingError = requirePairedAgent();
   if (pairingError) return pairingError;
-  if (appState.jobPollTimer) return { success: true, message: "Job polling is already running.", session: sanitizeAgentSession() };
+
+  let startedAny = false;
   const intervalMs = Math.max(3000, Number(payload.intervalMs) || 5000);
-  appState.jobPollTimer = setInterval(() => {
-    pollJobsNow("job-poll-loop").catch(() => {});
-  }, intervalMs);
-  appState.jobPollTimer.unref?.();
-  pollJobsNow(reason, payload).catch(() => {});
-  emitAgentSession();
-  return { success: true, message: "Job polling started.", intervalMs, session: sanitizeAgentSession() };
+
+  if (!appState.jobPollTimer) {
+    appState.jobPollTimer = setInterval(() => {
+      pollJobsNow("job-poll-loop").catch(() => {});
+    }, intervalMs);
+    appState.jobPollTimer.unref?.();
+    pollJobsNow(reason, payload).catch(() => {});
+    startedAny = true;
+  }
+
+  if (!appState.predownloadTimer) {
+    startPredownloadLoop(reason);
+    startedAny = true;
+  }
+
+  if (!appState.conversionTimer) {
+    startConversionLoop(reason);
+    startedAny = true;
+  }
+
+  if (startedAny) {
+    emitAgentSession();
+  }
+
+  return {
+    success: true,
+    message: startedAny ? "Job polling and background loops started." : "Job polling is already running.",
+    intervalMs,
+    session: sanitizeAgentSession()
+  };
 }
 
 export async function runPredownloadNow(reason = "loop") {
@@ -240,7 +264,6 @@ export async function runConversionNow(reason = "loop") {
       appState.agentSession.lastConversionMessage = `Converted ${result.documentId}.`;
       if (result.details?.enginePath) appState.agentSession.converterPath = result.details.enginePath;
     } else if (result.success) {
-      appState.agentSession.lastConversionError = "";
       appState.agentSession.lastConversionMessage = "No pending conversions.";
     } else {
       appState.agentSession.lastConversionError = result.message || "Conversion failed.";

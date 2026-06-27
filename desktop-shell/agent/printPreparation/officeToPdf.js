@@ -6,6 +6,7 @@
  */
 
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { findLibreOfficeExecutable } from './conversionEngine.js';
@@ -74,59 +75,65 @@ export async function convertOfficeToPdf({ inputPath, outputDir, timeoutMs = 2 *
       console.warn("Could not stat inputPath for dynamic timeout", e);
     }
 
-  const engine = libreOfficePath
-    ? { found: true, executable: libreOfficePath }
-    : await findLibreOfficeExecutable();
+    const engine = libreOfficePath
+      ? { found: true, executable: libreOfficePath }
+      : await findLibreOfficeExecutable();
 
-  if (!engine.found) {
-    return {
-      success: false,
-      reasonCode: 'CONVERSION_ENGINE_MISSING',
-      message: engine.message || 'LibreOffice/soffice was not found.',
-      manualDownloadUrl: engine.manualDownloadUrl,
-      checkedPaths: engine.checkedPaths,
-      details: engine,
-    };
-  }
+    if (!engine.found) {
+      return {
+        success: false,
+        reasonCode: 'CONVERSION_ENGINE_MISSING',
+        message: engine.message || 'LibreOffice/soffice was not found.',
+        manualDownloadUrl: engine.manualDownloadUrl,
+        checkedPaths: engine.checkedPaths,
+        details: engine,
+      };
+    }
 
-  const args = [
-    '--headless',
-    '--nologo',
-    '--nofirststartwizard',
-    '--nodefault',
-    '--nolockcheck',
-    '--convert-to', 'pdf',
-    '--outdir', outputDir,
-    inputPath,
-  ];
+    const profileDir = path.join(os.tmpdir(), `printease-libreoffice-profile-${process.pid}`);
+    try {
+      const args = [
+        `-env:UserInstallation=file://${profileDir.replace(/\\/g, '/')}`,
+        '--headless',
+        '--nologo',
+        '--nofirststartwizard',
+        '--nodefault',
+        '--nolockcheck',
+        '--convert-to', 'pdf',
+        '--outdir', outputDir,
+        inputPath,
+      ];
 
-  const result = await waitForProcess(engine.executable, args, { timeoutMs: dynamicTimeoutMs });
-  if (!result.success) {
-    return {
-      success: false,
-      reasonCode: result.stderr?.includes('Timed out') ? 'CONVERSION_TIMEOUT' : 'CONVERSION_FAILED',
-      message: result.stderr || result.stdout || 'LibreOffice conversion failed.',
-      details: result,
-    };
-  }
+      const result = await waitForProcess(engine.executable, args, { timeoutMs: dynamicTimeoutMs });
+      if (!result.success) {
+        return {
+          success: false,
+          reasonCode: result.stderr?.includes('Timed out') ? 'CONVERSION_TIMEOUT' : 'CONVERSION_FAILED',
+          message: result.stderr || result.stdout || 'LibreOffice conversion failed.',
+          details: result,
+        };
+      }
 
-  const outputPath = await findConvertedPdf(outputDir, inputPath);
-  if (!outputPath) {
-    return {
-      success: false,
-      reasonCode: 'CONVERSION_OUTPUT_MISSING',
-      message: 'LibreOffice finished but no PDF output was found.',
-      details: result,
-    };
-  }
+      const outputPath = await findConvertedPdf(outputDir, inputPath);
+      if (!outputPath) {
+        return {
+          success: false,
+          reasonCode: 'CONVERSION_OUTPUT_MISSING',
+          message: 'LibreOffice finished but no PDF output was found.',
+          details: result,
+        };
+      }
 
-    return {
-      success: true,
-      outputPath,
-      outputFileType: 'application/pdf',
-      conversionSource: 'desktop-libreoffice-headless',
-      enginePath: engine.executable,
-    };
+      return {
+        success: true,
+        outputPath,
+        outputFileType: 'application/pdf',
+        conversionSource: 'desktop-libreoffice-headless',
+        enginePath: engine.executable,
+      };
+    } finally {
+      await fs.rm(profileDir, { recursive: true, force: true }).catch(() => {});
+    }
   } finally {
     releaseLock();
   }

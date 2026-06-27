@@ -9,29 +9,29 @@ import { getApiBaseUrl, getBackendUrl } from "../../config/backend.js";
 import { stopPrinting, listPrinters } from "../../printer/printExecutor.js";
 
 export function stopAgentRuntime(reason = "stopped") {
-  if (heartbeatTimer) {
-    clearInterval(heartbeatTimer);
-    heartbeatTimer = null;
+  if (agentState.heartbeatTimer) {
+    clearInterval(agentState.heartbeatTimer);
+    agentState.heartbeatTimer = null;
   }
-  if (printerSyncTimer) {
-    clearInterval(printerSyncTimer);
-    printerSyncTimer = null;
+  if (agentState.printerSyncTimer) {
+    clearInterval(agentState.printerSyncTimer);
+    agentState.printerSyncTimer = null;
   }
-  if (jobPollTimer) {
-    clearInterval(jobPollTimer);
-    jobPollTimer = null;
+  if (agentState.jobPollTimer) {
+    clearInterval(agentState.jobPollTimer);
+    agentState.jobPollTimer = null;
   }
-  if (predownloadTimer) {
-    clearInterval(predownloadTimer);
-    predownloadTimer = null;
+  if (agentState.predownloadTimer) {
+    clearInterval(agentState.predownloadTimer);
+    agentState.predownloadTimer = null;
   }
-  if (conversionTimer) {
-    clearInterval(conversionTimer);
-    conversionTimer = null;
+  if (agentState.conversionTimer) {
+    clearInterval(agentState.conversionTimer);
+    agentState.conversionTimer = null;
   }
-  isPollingJobs = false;
-  isPredownloading = false;
-  isConverting = false;
+  agentState.isPollingJobs = false;
+  agentState.isPredownloading = false;
+  agentState.isConverting = false;
   agentSession.predownloadRunning = false;
   agentSession.predownloadLoopRunning = false;
   console.log("[DESKTOP AGENT BACKGROUND] stopped", reason);
@@ -47,7 +47,7 @@ export function stopAgentRuntime(reason = "stopped") {
 export async function runPredownloadNow(reason = "manual") {
   const pairingError = requirePairedAgent();
   if (pairingError) return pairingError;
-  if (isPredownloading) {
+  if (agentState.isPredownloading) {
     return {
       success: true,
       skipped: true,
@@ -55,7 +55,7 @@ export async function runPredownloadNow(reason = "manual") {
       session: sanitizeAgentSession()
     };
   }
-  isPredownloading = true;
+  agentState.isPredownloading = true;
   agentSession.predownloadRunning = true;
   agentSession.lastPredownloadMessage = "Checking pending documents for conversion.";
   agentSession.lastPredownloadError = "";
@@ -92,7 +92,7 @@ export async function runPredownloadNow(reason = "manual") {
       session: sanitizeAgentSession()
     };
   } finally {
-    isPredownloading = false;
+    agentState.isPredownloading = false;
     agentSession.predownloadRunning = false;
     emitAgentSession();
   }
@@ -101,7 +101,7 @@ export async function runPredownloadNow(reason = "manual") {
 export async function pollJobsNow(reason = "manual", payload = {}) {
   const pairingError = requirePairedAgent();
   if (pairingError) return pairingError;
-  if (isPollingJobs) {
+  if (agentState.isPollingJobs) {
     console.log("[DESKTOP AGENT BACKGROUND] poll skipped because previous poll still running", {
       reason
     });
@@ -112,13 +112,13 @@ export async function pollJobsNow(reason = "manual", payload = {}) {
       session: sanitizeAgentSession()
     };
   }
-  isPollingJobs = true;
+  agentState.isPollingJobs = true;
   try {
     if (!payload.printerName && !resolveLocalPrinterName()) {
       await syncLatestPrinterStatus(`${reason}:resolve-printer`).catch(() => null);
     }
     const printerName = payload.printerName || resolveLocalPrinterName();
-    const knownPrinters = Array.isArray(latestPrinterResult?.printers) ? latestPrinterResult.printers : [];
+    const knownPrinters = Array.isArray(agentState.latestPrinterResult?.printers) ? agentState.latestPrinterResult.printers : [];
     if (!printerName && knownPrinters.length === 0) {
       agentSession.lastJobPollAt = new Date().toISOString();
       agentSession.lastJobPollError = "No local printer selected/available.";
@@ -195,18 +195,18 @@ export async function pollJobsNow(reason = "manual", payload = {}) {
       session: sanitizeAgentSession()
     };
   } finally {
-    isPollingJobs = false;
+    agentState.isPollingJobs = false;
   }
 }
 
 export async function runConversionNow(reason = "loop") {
   const pairingError = requirePairedAgent();
   if (pairingError) return pairingError;
-  if (isConverting) return {
+  if (agentState.isConverting) return {
     success: true,
     skipped: true
   };
-  isConverting = true;
+  agentState.isConverting = true;
   agentSession.lastConversionMessage = "Running conversion loop...";
   emitAgentSession();
   try {
@@ -234,7 +234,7 @@ export async function runConversionNow(reason = "loop") {
     agentSession.lastConversionError = error.message || "Conversion error.";
     agentSession.lastConversionMessage = agentSession.lastConversionError;
   } finally {
-    isConverting = false;
+    agentState.isConverting = false;
     emitAgentSession();
   }
 }
@@ -294,21 +294,21 @@ export function startAgentPolling(_event, payload = {}) {
 }
 
 export function stopAgentPolling() {
-  if (jobPollTimer) {
-    clearInterval(jobPollTimer);
-    jobPollTimer = null;
+  if (agentState.jobPollTimer) {
+    clearInterval(agentState.jobPollTimer);
+    agentState.jobPollTimer = null;
     console.log("[DESKTOP AGENT BACKGROUND] job polling stopped manual-stop");
   }
-  if (predownloadTimer) {
-    clearInterval(predownloadTimer);
-    predownloadTimer = null;
+  if (agentState.predownloadTimer) {
+    clearInterval(agentState.predownloadTimer);
+    agentState.predownloadTimer = null;
     agentSession.predownloadLoopRunning = false;
     console.log("[DESKTOP AGENT BACKGROUND] predownload stopped manual-stop");
   }
-  if (conversionTimer) {
-    clearInterval(conversionTimer);
-    conversionTimer = null;
-    isConverting = false;
+  if (agentState.conversionTimer) {
+    clearInterval(agentState.conversionTimer);
+    agentState.conversionTimer = null;
+    agentState.isConverting = false;
     console.log("[DESKTOP AGENT BACKGROUND] conversion stopped manual-stop");
   }
   emitAgentSession();

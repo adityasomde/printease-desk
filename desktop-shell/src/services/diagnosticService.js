@@ -148,16 +148,16 @@ export async function syncPrintersToCloud(printerResult, event = "printers:sync"
 }
 
 export async function applyPrinterDiscoveryResult(result, event) {
-  latestPrinterResult = result;
+  agentState.latestPrinterResult = result;
   emitPrinterResult(result);
   if (isAgentPaired()) {
     const cloudSync = await syncPrintersToCloud(result, event);
-    latestPrinterResult = {
+    agentState.latestPrinterResult = {
       ...result,
       cloudSync
     };
-    emitPrinterResult(latestPrinterResult);
-    return latestPrinterResult;
+    emitPrinterResult(agentState.latestPrinterResult);
+    return agentState.latestPrinterResult;
   }
   agentSession.lastPrinterSyncError = result?.success ? "Printer detected locally but not synced to hub. Pair desktop first." : result?.message || result?.error || "Local printer discovery failed.";
   emitAgentSession();
@@ -192,7 +192,7 @@ export async function selectDesktopPrinter(_event, payload = {}) {
       session: sanitizeAgentSession()
     };
   }
-  const printerResult = latestPrinterResult || (await refreshLocalPrinterResult("printers:select-load"));
+  const printerResult = agentState.latestPrinterResult || (await refreshLocalPrinterResult("printers:select-load"));
   const printer = findPrinterByName(printerResult, printerName);
   if (!printer) {
     return {
@@ -209,19 +209,19 @@ export async function selectDesktopPrinter(_event, payload = {}) {
     hubId: agentSession.hubId,
     selectedPrinterName: agentSession.selectedPrinterName
   });
-  latestPrinterResult = {
+  agentState.latestPrinterResult = {
     ...printerResult,
     printers: (printerResult.printers || []).map(item => ({
       ...item,
       isDefault: item.printerName === agentSession.selectedPrinterName
     }))
   };
-  emitPrinterResult(latestPrinterResult);
+  emitPrinterResult(agentState.latestPrinterResult);
   let heartbeat = null;
   let printerSync = null;
   if (isAgentPaired()) {
     heartbeat = await sendAgentHeartbeat();
-    printerSync = await syncPrintersToCloud(latestPrinterResult, "printers:selected");
+    printerSync = await syncPrintersToCloud(agentState.latestPrinterResult, "printers:selected");
     startJobPollLoop("printer-selected", {
       printerName: agentSession.selectedPrinterName
     });
@@ -232,7 +232,7 @@ export async function selectDesktopPrinter(_event, payload = {}) {
   return {
     success: true,
     message: "Selected printer " + agentSession.selectedPrinterName + ".",
-    printer: findPrinterByName(latestPrinterResult, agentSession.selectedPrinterName),
+    printer: findPrinterByName(agentState.latestPrinterResult, agentSession.selectedPrinterName),
     heartbeat,
     printerSync,
     session: sanitizeAgentSession()

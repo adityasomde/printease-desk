@@ -13,10 +13,10 @@ import { getStoredDesktopAuth, setStoredDesktopAuth, clearStoredDesktopAuth, get
 import { diagnoseWindowsPrintHelperSafe, diagnoseLibreOfficeSafe, checkBackendHealth, reportPrinterDiagnostic, syncPrintersToCloud, applyPrinterDiscoveryResult, refreshLocalPrinterResult, syncLatestPrinterStatus, selectDesktopPrinter } from "../services/diagnosticService.js";
 
 export function registerIpcHandlers() {
-  if (ipcHandlersRegistered) return;
-  ipcHandlersRegistered = true;
+  if (agentState.ipcHandlersRegistered) return;
+  agentState.ipcHandlersRegistered = true;
   secureHandle("desktop:status", async () => {
-    const printerResult = latestPrinterResult || (await refreshLocalPrinterResult("desktop:status"));
+    const printerResult = agentState.latestPrinterResult || (await refreshLocalPrinterResult("desktop:status"));
     return {
       success: true,
       isDesktop: true,
@@ -79,13 +79,13 @@ export function registerIpcHandlers() {
           message: "Only HTTPS files can be downloaded."
         };
       }
-      if (!mainWindow || mainWindow.isDestroyed()) {
+      if (!agentState.mainWindow || agentState.mainWindow.isDestroyed()) {
         return {
           success: false,
           message: "Desktop window is not ready for download."
         };
       }
-      mainWindow.webContents.downloadURL(parsedUrl.toString());
+      agentState.mainWindow.webContents.downloadURL(parsedUrl.toString());
       return {
         success: true
       };
@@ -130,7 +130,7 @@ export function registerIpcHandlers() {
       height: 1100,
       show: false,
       title,
-      parent: mainWindow || undefined,
+      parent: agentState.mainWindow || undefined,
       webPreferences: {
         contextIsolation: true,
         nodeIntegration: false,

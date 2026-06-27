@@ -169,3 +169,4 @@ local-*.sh
 *.key
 *.crt
 desktop-shell/release-checks/
+desktop-shell/vendor/libreoffice_broken/

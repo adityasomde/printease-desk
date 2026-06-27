@@ -1,4 +1,4 @@
-import { User, QrCode, History, Home, Building2, Printer, LogOut, Menu, X, Settings, Plus, Store, Upload } from "lucide-react";
+import { User, QrCode, History, Home, Building2, Printer, LogOut, Menu, X, Settings, Plus, Store, Upload, FileText } from "lucide-react";
 import logo from '../assets/logo.png';
 
 function NavButton({ children, icon, active, onClick }) {
@@ -76,7 +76,10 @@ export default function Navbar({
               </>
             )}
             {desktopAvailable && (
-              <NavButton active={page === "desktopAgent"} icon={<Printer size={16} />} onClick={() => navigate("desktopAgent")}>Desktop Agent</NavButton>
+              <>
+                <NavButton active={page === "desktopAgent"} icon={<Printer size={16} />} onClick={() => navigate("desktopAgent")}>Desktop Agent</NavButton>
+                <NavButton active={page === "conversionAgent"} icon={<FileText size={16} />} onClick={() => navigate("conversionAgent")}>Conversion Agent</NavButton>
+              </>
             )}
           </nav>
 
@@ -114,7 +117,12 @@ export default function Navbar({
                       </>
                     )}
                     <MenuItem icon={<User size={16} />} onClick={openProfile}>Profile</MenuItem>
-                    {desktopAvailable && <MenuItem icon={<Printer size={16} />} onClick={() => navigate("desktopAgent")}>Desktop Agent</MenuItem>}
+                    {desktopAvailable && (
+                      <>
+                        <MenuItem icon={<Printer size={16} />} onClick={() => navigate("desktopAgent")}>Desktop Agent</MenuItem>
+                        <MenuItem icon={<FileText size={16} />} onClick={() => navigate("conversionAgent")}>Conversion Agent</MenuItem>
+                      </>
+                    )}
                     {currentUser.role === "user" && <MenuItem icon={<History size={16} />} onClick={() => navigate("history")}>Print History</MenuItem>}
                     <MenuItem icon={<LogOut size={16} />} onClick={logout}>Logout</MenuItem>
                   </>

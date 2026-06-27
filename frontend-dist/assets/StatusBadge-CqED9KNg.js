@@ -1,0 +1,1 @@
+import{n as e}from"./vendor-motion-C9iDXck-.js";var t=e();function n({children:e,color:n=`slate`}){return(0,t.jsx)(`span`,{className:`rounded-full px-3 py-1 text-xs font-semibold ${n===`green`?`bg-green-100 text-green-700`:`bg-slate-100 text-slate-700`}`,children:e})}export{n as t};

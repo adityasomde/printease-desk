@@ -41,8 +41,8 @@ import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 
 // ─── Configuration ───────────────────────────────────────────
-const LO_VERSION = '25.8.4';
-const LO_VERSION_FULL = '25.8.4.2';
+const LO_VERSION = '26.2.4';
+const LO_VERSION_FULL = '26.2.4';
 
 const DOWNLOAD_URLS = {
   linux: `https://download.documentfoundation.org/libreoffice/stable/${LO_VERSION}/deb/x86_64/LibreOffice_${LO_VERSION_FULL}_Linux_x86-64_deb.tar.gz`,

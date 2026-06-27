@@ -29,6 +29,7 @@ import {
   conversionNow,
   pollPrintJobs,
   sendHeartbeat,
+  startAgentRuntime,
   startApprovalPairing as requestApprovalPairing,
   startJobPolling,
   startPairing,
@@ -132,6 +133,13 @@ function getStoredUser() {
   }
 }
 
+function getDesktopAgentSession(payload) {
+  if (!payload || payload.success === false) return null;
+  if (payload.session) return payload.session;
+  if (payload.agentId || payload.deviceId || payload.paired || payload.pairingSessionId) return payload;
+  return null;
+}
+
 const LIBRE_OFFICE_DOWNLOAD_URL = "https://download.documentfoundation.org/libreoffice/stable/";
 
 export default function DesktopAgentPage({ currentUser = null }) {
@@ -197,9 +205,10 @@ export default function DesktopAgentPage({ currentUser = null }) {
     });
     const unsubscribeAgent = onAgentUpdated((result) => {
       setDesktopAvailable(true);
-      if (result?.success) {
-        setAgentSession(result);
-        if (result.selectedPrinterName) setSelectedPrinterName(result.selectedPrinterName);
+      const nextSession = getDesktopAgentSession(result);
+      if (nextSession) {
+        setAgentSession(nextSession);
+        if (nextSession.selectedPrinterName) setSelectedPrinterName(nextSession.selectedPrinterName);
       }
     });
     const unsubscribeUpdater = onUpdateStatus((result) => {
@@ -254,16 +263,18 @@ export default function DesktopAgentPage({ currentUser = null }) {
     async function loadAgentStatus() {
       const stored = await getStoredAgent();
       if (!active) return;
-      if (stored?.session?.success) {
-        setAgentSession(stored.session);
-        if (stored.session.selectedPrinterName) setSelectedPrinterName(stored.session.selectedPrinterName);
+      const storedSession = getDesktopAgentSession(stored);
+      if (storedSession) {
+        setAgentSession(storedSession);
+        if (storedSession.selectedPrinterName) setSelectedPrinterName(storedSession.selectedPrinterName);
       }
 
       const nextSession = await getAgentStatus();
       if (!active) return;
-      if (nextSession?.success) {
-        setAgentSession(nextSession);
-        if (nextSession.selectedPrinterName) setSelectedPrinterName(nextSession.selectedPrinterName);
+      const normalizedSession = getDesktopAgentSession(nextSession);
+      if (normalizedSession) {
+        setAgentSession(normalizedSession);
+        if (normalizedSession.selectedPrinterName) setSelectedPrinterName(normalizedSession.selectedPrinterName);
       }
       setAgentStatusLoaded(true);
     }
@@ -500,11 +511,7 @@ export default function DesktopAgentPage({ currentUser = null }) {
       }
 
       const nextSession = await getAgentStatus();
-      if (nextSession?.success) {
-        setAgentSession(nextSession);
-      } else {
-        setAgentSession(null);
-      }
+      setAgentSession(getDesktopAgentSession(nextSession));
       setAutoPollingStarted(false);
       setAgentMessage("Local desktop agent credentials cleared. Register this desktop again to reconnect.");
     } catch (clearError) {
@@ -642,6 +649,18 @@ export default function DesktopAgentPage({ currentUser = null }) {
       }
 
       if (stored?.session) setAgentSession(stored.session);
+      if (stored?.runtime?.success === false) {
+        const runtimeWarning = stored.runtime?.heartbeat?.message ||
+          stored.runtime?.printerResult?.cloudSync?.message ||
+          stored.runtime?.printerResult?.message ||
+          stored.runtime?.jobLoop?.message ||
+          stored.runtime?.conversionLoop?.message ||
+          "Runtime did not start completely.";
+        setAgentMessage("Desktop registered. Use Restart Auto Print after fixing the warning.");
+        setError(runtimeWarning);
+        return;
+      }
+
       setAgentMessage("Desktop registered and auto-print is running.");
     } catch (registrationError) {
       setError(registrationError.message || "Could not register desktop agent for this hub.");
@@ -940,7 +959,7 @@ export default function DesktopAgentPage({ currentUser = null }) {
             <button
               type="button"
               disabled={agentBusy || !agentSession?.paired}
-              onClick={() => runAgentAction(() => startJobPolling({ printerName: selectedPrinterName || undefined }))}
+              onClick={() => runAgentAction(startAgentRuntime)}
               className="rounded-xl bg-emerald-700 px-4 py-2 font-semibold text-white disabled:bg-slate-300"
             >
               Restart Auto Print

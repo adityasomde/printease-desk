@@ -273,6 +273,10 @@ export function stopJobPolling() {
   return callDesktop("stopJobPolling", "Could not stop print job polling.");
 }
 
+export function startAgentRuntime() {
+  return callDesktop("startAgentRuntime", "Could not restart desktop agent runtime.");
+}
+
 export function getStoredAuth() {
   return callDesktop("getStoredAuth", "Could not load desktop auth storage.");
 }

@@ -28,7 +28,12 @@ async function reportPrinterDiagnostic(event, result) {
 export function registerPrinterIpc() {
   secureHandle("printers:list", () => refreshLocalPrinterResult("printers:list"), app.isPackaged);
   
-  secureHandle("printers:select", async (_event, printerName) => {
+  secureHandle("printers:select", async (_event, payload = {}) => {
+    const printerName = typeof payload === "string" ? payload : payload?.printerName;
+    if (!printerName || typeof printerName !== "string") {
+      return { success: false, message: "Printer name is required.", session: null };
+    }
+
     appState.agentSession.selectedPrinterName = printerName;
     const { saveConfig } = await import("../../local/config.js");
     await saveConfig({

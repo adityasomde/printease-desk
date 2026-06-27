@@ -309,6 +309,11 @@ export function stopAgentRuntime(reason) {
   appState.isConverting = false;
 }
 
+export async function restartAgentRuntime(reason = "manual-restart") {
+  stopAgentRuntime(`${reason}:stop`);
+  return startAgentRuntime(`${reason}:start`);
+}
+
 export function stopAgentPolling() {
   if (appState.jobPollTimer) {
     clearInterval(appState.jobPollTimer);

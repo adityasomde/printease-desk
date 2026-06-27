@@ -1,6 +1,6 @@
 {
   "name": "printease-desktop-shell",
-  "version": "0.1.84",
+  "version": "0.1.85",
   "private": true,
   "type": "module",
   "packageManager": "traversal@0.0.0",
@@ -9,6 +9,12 @@
     "main.js",
     "preload.cjs",
     "src/",
+    "agent/",
+    "config/",
+    "security/",
+    "printer/",
+    "local/",
+    "updater.js",
     "assets/",
     "package.json"
   ],
@@ -52,6 +58,11 @@
       "preload.cjs",
       "package.json",
       "src/**/*",
+      "agent/**/*",
+      "config/**/*",
+      "security/**/*",
+      "printer/**/*",
+      "local/**/*",
       "updater.js",
       "scripts/**/*",
       "assets/**/*"

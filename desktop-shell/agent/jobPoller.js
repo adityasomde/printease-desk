@@ -258,12 +258,17 @@ async function reportDesktopPreparationResult({ agentToken, file, cachedFilePath
     );
   }
 
-  return backendRequest({
+  const backendResponse = await backendRequest({
     endpoint: "/agent/preparation-result",
     method: "POST",
     agentToken,
     body: formData
   });
+
+  return {
+    ...backendResponse,
+    prepResult
+  };
 }
 
 export async function processNextConversionJob({ agentToken } = {}) {
@@ -314,12 +319,18 @@ export async function processNextConversionJob({ agentToken } = {}) {
         throw new Error(reportResult.message || "Backend rejected preparation result");
       }
       
+      if (reportResult?.prepResult && !reportResult.prepResult.success) {
+        const errorMsg = reportResult.prepResult.message || "Conversion failed";
+        console.warn(`[Conversion] Job ${job.documentId} conversion failed:`, errorMsg);
+        return { success: false, message: errorMsg, documentId: job.documentId, details: reportResult.prepResult.details };
+      }
+      
       console.log(`[Conversion] Job ${job.documentId} converted and reported successfully.`);
     } else {
       throw new Error(cached.message || "Failed to cache document for conversion");
     }
 
-    return { success: true, message: "Conversion completed", documentId: job.documentId };
+    return { success: true, processed: true, message: "Conversion completed", documentId: job.documentId };
   } catch (error) {
     console.error("[Conversion] Conversion failed:", error);
     // Send failure status back

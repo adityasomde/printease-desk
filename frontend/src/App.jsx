@@ -2250,14 +2250,14 @@ export default function App() {
             <Routes>
               <Route
                 path={ROUTES.home}
-                element={<HomePage currentUser={currentUser} navigate={navigate} startLogin={startLogin} handleSignOut={logout} prioritizedCentres={prioritizedCentres} selectCentreByCode={selectCentreByCode} selectCentreAndUpload={selectCentreAndUpload} locationLoading={locationLoading} locationError={locationError} />}
+                element={<HomePage currentUser={currentUser} navigate={navigate} startLogin={startLogin} handleSignOut={logout} prioritizedCentres={prioritizedCentres} selectCentreByCode={selectCentreByCode} selectCentreAndUpload={selectCentreAndUpload} />}
               />
               <Route path={ROUTES.auth} element={<AuthPage authMode={authMode} setAuthMode={setAuthMode} onLoginSuccess={handleLoginSuccess} returnPath={authReturnPath} />} />
               <Route
                 path={ROUTES.userDashboard}
                 element={
                   currentUser?.role === "user" ? (
-                    <UserDashboard currentUser={currentUser} recentOrders={orders} onSignOut={logout} navigate={navigate} startLogin={startLogin} prioritizedCentres={prioritizedCentres} selectCentreByCode={selectCentreByCode} selectCentreAndUpload={selectCentreAndUpload} locationLoading={locationLoading} locationError={locationError} />
+                    <UserDashboard currentUser={currentUser} recentOrders={orders} onSignOut={logout} navigate={navigate} startLogin={startLogin} prioritizedCentres={prioritizedCentres} selectCentreByCode={selectCentreByCode} selectCentreAndUpload={selectCentreAndUpload} />
                   ) : (
                     <RouteNotice title="User Login Required" message="Please login as a user to view your dashboard." actionLabel="Login as User" onAction={() => startLogin("user")} />
                   )

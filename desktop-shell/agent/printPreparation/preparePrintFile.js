@@ -7,7 +7,7 @@
  * Rules:
  * - PDF: no conversion.
  * - Image: convert/wrap to PDF once and cache.
- * - Office: convert with LibreOffice headless if installed; cache result.
+ * - Office: convert with bundled/local LibreOffice headless; cache result.
  * - Text: render to PDF and cache.
  * - Unsupported/archive: fail safely.
  */

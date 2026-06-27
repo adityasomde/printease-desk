@@ -1,7 +1,8 @@
 /**
  * Office-to-PDF conversion through LibreOffice headless.
  *
- * LibreOffice is not bundled. This module detects installed soffice/libreoffice and fails clearly if missing.
+ * LibreOffice is bundled into release installers and can also be detected from
+ * a local system install during development builds.
  */
 
 import fs from 'node:fs/promises';

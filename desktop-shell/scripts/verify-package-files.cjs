@@ -46,6 +46,10 @@ const requiredResourceFiles = [
   "frontend-dist/index.html"
 ];
 
+const requiredPlatformResourceFiles = targetPlatform === "win32"
+  ? ["vendor/libreoffice/win/program/soffice.exe"]
+  : ["vendor/libreoffice/linux/program/soffice"];
+
 const platformDir = targetPlatform === "win32" ? "win-unpacked" : "linux-unpacked";
 const scanRoot = path.join(root, platformDir);
 
@@ -197,6 +201,13 @@ for (const required of requiredAppFiles) {
 for (const required of requiredResourceFiles) {
   if (!hasLooseFile(required)) {
     console.error(`Required resource missing: ${required}`);
+    failed = true;
+  }
+}
+
+for (const required of requiredPlatformResourceFiles) {
+  if (!hasLooseFile(required)) {
+    console.error(`Required platform resource missing: ${required}`);
     failed = true;
   }
 }

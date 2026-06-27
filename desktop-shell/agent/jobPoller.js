@@ -35,7 +35,7 @@ export async function getNextJob({ agentToken } = {}) {
   }
 }
 
-export async function getPredownloadCandidates({ agentToken, limit = 1 } = {}) {
+export async function getPredownloadCandidates({ agentToken, limit = 15 } = {}) {
   if (!agentToken) {
     return {
       success: false,
@@ -266,13 +266,14 @@ async function reportDesktopPreparationResult({ agentToken, file, cachedFilePath
   });
 }
 
-export async function predownloadPendingDocuments({ agentToken, limit = 1 } = {}) {
+export async function predownloadPendingDocuments({ agentToken, limit = 15 } = {}) {
   const candidates = await getPredownloadCandidates({ agentToken, limit });
   if (!candidates.success) return candidates;
 
   const files = Array.isArray(candidates.files) ? candidates.files : [];
   const cachedFiles = [];
   const failures = [];
+  let conversionsInCycle = 0;
 
   for (const file of files) {
     const documentId = file.documentId;
@@ -281,6 +282,15 @@ export async function predownloadPendingDocuments({ agentToken, limit = 1 } = {}
     });
 
     if (!documentId || !file.fileUrl || !expectedHash) continue;
+
+    const needsConversion = file.requiresDesktopPreparation && file.preparationStatus === "pending";
+    if (needsConversion) {
+      if (conversionsInCycle >= 1) {
+        // Skip extra conversions in this cycle to prevent blocking normal PDF downloads
+        continue;
+      }
+      conversionsInCycle++;
+    }
 
     const alreadyCached = await findCachedDocument(documentId, expectedHash);
     if (alreadyCached) {

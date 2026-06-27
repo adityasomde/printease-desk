@@ -3,7 +3,7 @@ import electron from "electron"; const { app, shell, net } = electron;
 import { appState } from "../state/appState.js";
 import { getBackendUrl, getApiBaseUrl } from "../../config/backend.js";
 import { getDocumentCacheDirectory, getDocumentCacheMaxAgeDays, getDocumentCacheMaxSizeBytes } from "../../agent/documentCache.js";
-const VERSION = "0.1.85";
+const VERSION = "0.1.94";
 import { secureHandle } from "../../security/ipcSecurity.js";
 import { checkForUpdates, getUpdateStatus, installUpdateNow } from "../../updater.js";
 import { isSafeApprovalUrl } from "../../security/urlValidator.js";

@@ -85,10 +85,13 @@ export async function syncPrinters({ agentToken, printers = [] } = {}) {
       },
     });
   } catch (error) {
+    const backendMessage = error.details?.message || error.details?.error || error.message;
+    const statusSuffix = error.status ? ` (HTTP ${error.status})` : "";
     return {
       success: false,
-      message: error.message || "Could not sync printers.",
+      message: `${backendMessage || "Could not sync printers."}${statusSuffix}`,
       status: error.status || 0,
+      details: error.details || null,
     };
   }
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { FileDown, FileText, Settings, TriangleAlert } from "lucide-react";
 import Card from "../components/Card";
-import { onAgentUpdated, getDesktopStatus, diagnoseLibreOffice, checkBackendHealth } from "../utils/desktopBridge";
+import { onAgentUpdated, getDesktopStatus, getAgentStatus, diagnoseLibreOffice, checkBackendHealth } from "../utils/desktopBridge";
 
 export default function ConversionAgentPage() {
   const [agentSession, setAgentSession] = useState(null);
@@ -20,6 +20,13 @@ export default function ConversionAgentPage() {
         return;
       }
       setStatus(nextStatus);
+    });
+
+    getAgentStatus().then((session) => {
+      if (!active) return;
+      if (session?.success) {
+        setAgentSession(session);
+      }
     });
 
     const unsubscribeAgent = onAgentUpdated((result) => {

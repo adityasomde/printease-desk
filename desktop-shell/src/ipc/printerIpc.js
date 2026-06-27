@@ -15,7 +15,7 @@ async function reportPrinterDiagnostic(event, result) {
         deviceId: appState.agentSession.deviceId || null,
         deviceName: appState.agentSession.deviceName || null,
         platform: process.platform,
-        version: "0.1.85",
+        version: "0.1.94",
         paired: Boolean(appState.agentSession.accessToken),
         result,
       }),

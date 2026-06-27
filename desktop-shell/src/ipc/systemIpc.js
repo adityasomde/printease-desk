@@ -6,7 +6,7 @@ import { checkForUpdates, getUpdateStatus, installUpdateNow } from "../../update
 import { appState } from "../state/appState.js";
 import { isAllowedNavigation } from "../frontendLoader.js";
 
-const VERSION = "0.1.85";
+const VERSION = "0.1.94";
 const DESKTOP_PROTOCOL_ORIGIN = "app://printease";
 
 async function checkBackendHealth() {
@@ -35,6 +35,7 @@ export function registerSystemIpc() {
         maxAgeDays: getDocumentCacheMaxAgeDays(),
         maxSizeBytes: getDocumentCacheMaxSizeBytes(),
       },
+      agentSession: { ...appState.agentSession },
       printerResult: appState.latestPrinterResult,
     };
   }, app.isPackaged);

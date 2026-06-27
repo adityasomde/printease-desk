@@ -2252,7 +2252,34 @@ export default function App() {
                 path={ROUTES.home}
                 element={<HomePage currentUser={currentUser} navigate={navigate} startLogin={startLogin} handleSignOut={logout} prioritizedCentres={prioritizedCentres} selectCentreByCode={selectCentreByCode} selectCentreAndUpload={selectCentreAndUpload} />}
               />
-              <Route path={ROUTES.auth} element={<AuthPage authMode={authMode} setAuthMode={setAuthMode} onLoginSuccess={handleLoginSuccess} returnPath={authReturnPath} />} />
+              <Route path={ROUTES.auth} element={<AuthPage 
+                authRole={authRole}
+                setAuthRole={setAuthRole}
+                authMode={authMode} 
+                setAuthMode={setAuthMode} 
+                email={email}
+                setEmail={setEmail}
+                password={password}
+                setPassword={setPassword}
+                showPassword={showPassword}
+                setShowPassword={setShowPassword}
+                username={username}
+                setUsername={setUsernameState}
+                usernameStatus={usernameStatus}
+                name={name}
+                setName={setName}
+                mobile={mobile}
+                setMobile={setMobile}
+                hubName={hubName}
+                setHubName={setHubName}
+                hubCode={hubCode}
+                setHubCode={setHubCode}
+                generateStrongPassword={generateStrongPassword}
+                handleAuthSubmit={handleAuthSubmit}
+                handleGoogleLogin={handleGoogleLogin}
+                authError={authError}
+                authLoading={authLoading}
+              />} />
               <Route
                 path={ROUTES.userDashboard}
                 element={

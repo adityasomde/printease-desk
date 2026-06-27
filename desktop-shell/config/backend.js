@@ -16,15 +16,17 @@ export function getBackendUrl() {
   );
 
   if (configuredUrl && configuredUrl !== OFFICIAL_RENDER_BACKEND_URL) {
-    console.warn("[DESKTOP BACKEND CONFIG] Ignoring untrusted backend URL. PrintEase Desktop is pinned to official Render backend.", {
+    console.warn("[DESKTOP BACKEND CONFIG] Using custom backend URL (development/unpacked mode).", {
       configuredUrl,
       officialBackendUrl: OFFICIAL_RENDER_BACKEND_URL,
     });
+    // Let the desktop agent connect to the local server in development
+    return configuredUrl;
   }
 
   return OFFICIAL_RENDER_BACKEND_URL;
 }
 
 export function getApiBaseUrl() {
-  return `${OFFICIAL_RENDER_BACKEND_URL}/api`;
+  return `${getBackendUrl()}/api`;
 }

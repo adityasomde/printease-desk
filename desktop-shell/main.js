@@ -54,17 +54,6 @@ const STARTUP_LOG_FILE = "startup.log";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
-let mainWindow = null;
-let ipcHandlersRegistered = false;
-let latestPrinterResult = null;
-let heartbeatTimer = null;
-let printerSyncTimer = null;
-let jobPollTimer = null;
-let predownloadTimer = null;
-let conversionTimer = null;
-let isPollingJobs = false;
-let isPredownloading = false;
-let isConverting = false;
 let agentSession = {
   deviceId: "",
   deviceName: "",
@@ -357,9 +346,9 @@ function findPrinterByName(printerResult, printerName) {
 }
 function resolveLocalPrinterName() {
   if (agentSession.selectedPrinterName) return agentSession.selectedPrinterName;
-  if (!latestPrinterResult) return "";
-  const printers = Array.isArray(latestPrinterResult.printers) ? latestPrinterResult.printers : [];
-  const preferred = printers.find(printer => printer.isDefault) || latestPrinterResult.defaultPrinter;
+  if (!agentState.latestPrinterResult) return "";
+  const printers = Array.isArray(agentState.latestPrinterResult.printers) ? agentState.latestPrinterResult.printers : [];
+  const preferred = printers.find(printer => printer.isDefault) || agentState.latestPrinterResult.defaultPrinter;
   return preferred?.printerName || printers[0]?.printerName || "";
 }
 function requirePairedAgent() {
@@ -380,7 +369,7 @@ function startHeartbeatLoop() {
       session: sanitizeAgentSession()
     };
   }
-  if (heartbeatTimer) {
+  if (agentState.heartbeatTimer) {
     console.log("[DESKTOP AGENT BACKGROUND] already running heartbeat");
     return {
       success: true,
@@ -388,14 +377,14 @@ function startHeartbeatLoop() {
       session: sanitizeAgentSession()
     };
   }
-  heartbeatTimer = setInterval(() => {
+  agentState.heartbeatTimer = setInterval(() => {
     sendAgentHeartbeat().catch(error => {
       agentSession.lastHeartbeatError = error.message || "Heartbeat failed.";
       emitAgentSession();
       console.warn("[DESKTOP HEARTBEAT FAILED]", error.message || error);
     });
   }, HEARTBEAT_INTERVAL_MS);
-  heartbeatTimer.unref?.();
+  agentState.heartbeatTimer.unref?.();
   emitAgentSession();
   return {
     success: true,
@@ -411,7 +400,7 @@ function startPrinterSyncLoop() {
       session: sanitizeAgentSession()
     };
   }
-  if (printerSyncTimer) {
+  if (agentState.printerSyncTimer) {
     console.log("[DESKTOP AGENT BACKGROUND] already running printer sync");
     return {
       success: true,
@@ -419,14 +408,14 @@ function startPrinterSyncLoop() {
       session: sanitizeAgentSession()
     };
   }
-  printerSyncTimer = setInterval(() => {
+  agentState.printerSyncTimer = setInterval(() => {
     syncLatestPrinterStatus("agent:printer-sync-loop").catch(error => {
       agentSession.lastPrinterSyncError = error.message || "Printer sync failed.";
       emitAgentSession();
       console.warn("[DESKTOP PRINTER SYNC FAILED]", error.message || error);
     });
   }, PRINTER_SYNC_INTERVAL_MS);
-  printerSyncTimer.unref?.();
+  agentState.printerSyncTimer.unref?.();
   emitAgentSession();
   return {
     success: true,
@@ -437,7 +426,7 @@ function startPrinterSyncLoop() {
 function startPredownloadLoop(reason = "manual-start", payload = {}) {
   const pairingError = requirePairedAgent();
   if (pairingError) return pairingError;
-  if (predownloadTimer) {
+  if (agentState.predownloadTimer) {
     return {
       success: true,
       message: "Predownload loop is already running.",
@@ -445,12 +434,12 @@ function startPredownloadLoop(reason = "manual-start", payload = {}) {
     };
   }
   const intervalMs = Math.max(60000, Number(payload.predownloadIntervalMs) || PREDOWNLOAD_INTERVAL_MS);
-  predownloadTimer = setInterval(() => {
+  agentState.predownloadTimer = setInterval(() => {
     runPredownloadNow("predownload-loop").catch(error => {
       console.warn("[DESKTOP AGENT BACKGROUND] predownload fail", error.message || error);
     });
   }, intervalMs);
-  predownloadTimer.unref?.();
+  agentState.predownloadTimer.unref?.();
   agentSession.predownloadLoopRunning = true;
   runPredownloadNow(reason).catch(error => {
     console.warn("[DESKTOP AGENT BACKGROUND] initial predownload fail", error.message || error);
@@ -469,14 +458,14 @@ function startPredownloadLoop(reason = "manual-start", payload = {}) {
 function startConversionLoop(reason = "manual-start") {
   const pairingError = requirePairedAgent();
   if (pairingError) return pairingError;
-  if (conversionTimer) return {
+  if (agentState.conversionTimer) return {
     success: true,
     message: "Conversion loop is already running."
   };
-  conversionTimer = setInterval(() => {
+  agentState.conversionTimer = setInterval(() => {
     runConversionNow("conversion-loop").catch(() => {});
   }, 4000);
-  conversionTimer.unref?.();
+  agentState.conversionTimer.unref?.();
   runConversionNow(reason).catch(() => {});
   return {
     success: true,
@@ -486,7 +475,7 @@ function startConversionLoop(reason = "manual-start") {
 function startJobPollLoop(reason = "manual-start", payload = {}) {
   const pairingError = requirePairedAgent();
   if (pairingError) return pairingError;
-  if (jobPollTimer) {
+  if (agentState.jobPollTimer) {
     console.log("[DESKTOP AGENT BACKGROUND] already running job polling", {
       reason
     });
@@ -497,14 +486,14 @@ function startJobPollLoop(reason = "manual-start", payload = {}) {
     };
   }
   const intervalMs = Math.max(3000, Number(payload.intervalMs) || JOB_POLL_INTERVAL_MS);
-  jobPollTimer = setInterval(() => {
+  agentState.jobPollTimer = setInterval(() => {
     pollJobsNow("job-poll-loop").catch(error => {
       agentSession.lastJobPollError = error.message || "Job poll failed.";
       emitAgentSession();
       console.warn("[DESKTOP AGENT BACKGROUND] job poll fail", agentSession.lastJobPollError);
     });
   }, intervalMs);
-  jobPollTimer.unref?.();
+  agentState.jobPollTimer.unref?.();
   pollJobsNow(reason, payload).catch(error => {
     agentSession.lastJobPollError = error.message || "Initial job poll failed.";
     emitAgentSession();
@@ -543,7 +532,7 @@ function createMainWindow() {
     frontendUrl: DEV_FRONTEND_URL,
     preload: PRELOAD_PATH
   });
-  mainWindow = new BrowserWindow({
+  agentState.mainWindow = new BrowserWindow({
     width: 1300,
     height: 850,
     minWidth: 1000,
@@ -561,10 +550,10 @@ function createMainWindow() {
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
     callback(false);
   });
-  mainWindow.webContents.setWindowOpenHandler(() => ({
+  agentState.mainWindow.webContents.setWindowOpenHandler(() => ({
     action: "deny"
   }));
-  mainWindow.webContents.on("preload-error", (_event, preloadPath, error) => {
+  agentState.mainWindow.webContents.on("preload-error", (_event, preloadPath, error) => {
     writeStartupLog("preload-error", {
       preloadPath,
       error: serializeStartupError(error)
@@ -574,42 +563,42 @@ function createMainWindow() {
       error: error?.stack || error?.message || String(error)
     });
   });
-  mainWindow.webContents.on("render-process-gone", (_event, details) => {
+  agentState.mainWindow.webContents.on("render-process-gone", (_event, details) => {
     writeStartupLog("render-process-gone", details || {});
     console.error("[DESKTOP RENDER PROCESS GONE]", details);
   });
-  mainWindow.webContents.on("did-start-loading", () => {
+  agentState.mainWindow.webContents.on("did-start-loading", () => {
     writeStartupLog("did-start-loading", {
-      url: mainWindow?.webContents.getURL()
+      url: agentState.mainWindow?.webContents.getURL()
     });
-    console.log("[DESKTOP LOAD START]", mainWindow?.webContents.getURL());
+    console.log("[DESKTOP LOAD START]", agentState.mainWindow?.webContents.getURL());
   });
-  mainWindow.webContents.on("dom-ready", () => {
+  agentState.mainWindow.webContents.on("dom-ready", () => {
     writeStartupLog("dom-ready", {
-      url: mainWindow?.webContents.getURL()
+      url: agentState.mainWindow?.webContents.getURL()
     });
-    console.log("[DESKTOP DOM READY]", mainWindow?.webContents.getURL());
+    console.log("[DESKTOP DOM READY]", agentState.mainWindow?.webContents.getURL());
     if (process.env.PE_DEBUG_RENDERER === "1") {
-      mainWindow?.webContents.openDevTools({
+      agentState.mainWindow?.webContents.openDevTools({
         mode: "detach"
       });
     }
   });
-  mainWindow.webContents.on("did-stop-loading", () => {
+  agentState.mainWindow.webContents.on("did-stop-loading", () => {
     writeStartupLog("did-stop-loading", {
-      url: mainWindow?.webContents.getURL()
+      url: agentState.mainWindow?.webContents.getURL()
     });
-    console.log("[DESKTOP LOAD STOP]", mainWindow?.webContents.getURL());
+    console.log("[DESKTOP LOAD STOP]", agentState.mainWindow?.webContents.getURL());
   });
-  mainWindow.webContents.on("unresponsive", () => {
+  agentState.mainWindow.webContents.on("unresponsive", () => {
     writeStartupLog("renderer-unresponsive");
     console.warn("[DESKTOP RENDERER UNRESPONSIVE]");
   });
-  mainWindow.on("closed", () => {
+  agentState.mainWindow.on("closed", () => {
     writeStartupLog("main-window-closed");
-    mainWindow = null;
+    agentState.mainWindow = null;
   });
-  mainWindow.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+  agentState.mainWindow.webContents.on("console-message", (_event, level, message, line, sourceId) => {
     const payload = {
       level,
       message: String(message),
@@ -620,12 +609,12 @@ function createMainWindow() {
     const prefix = level >= 2 ? "[DESKTOP RENDERER CONSOLE ERROR]" : "[DESKTOP RENDERER CONSOLE]";
     console.log(prefix, payload);
   });
-  mainWindow.webContents.on("will-navigate", (event, url) => {
+  agentState.mainWindow.webContents.on("will-navigate", (event, url) => {
     if (!isAllowedNavigation(url)) {
       event.preventDefault();
     }
   });
-  mainWindow.webContents.on("did-fail-load", async (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+  agentState.mainWindow.webContents.on("did-fail-load", async (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
     if (!isMainFrame) return;
     console.warn("[DESKTOP LOAD FAILED]", {
       errorCode,
@@ -642,46 +631,46 @@ function createMainWindow() {
       if (fs.existsSync(localIndex)) {
         const failedHash = new URL(validatedURL).hash;
         if (app.isPackaged) {
-          await mainWindow?.loadURL(getDesktopAppUrl());
+          await agentState.mainWindow?.loadURL(getDesktopAppUrl());
         } else {
-          await mainWindow?.loadFile(localIndex);
+          await agentState.mainWindow?.loadFile(localIndex);
         }
         if (failedHash && failedHash !== "#") {
-          await mainWindow?.webContents.executeJavaScript(`window.location.hash = ${JSON.stringify(failedHash.slice(1))};`);
+          await agentState.mainWindow?.webContents.executeJavaScript(`window.location.hash = ${JSON.stringify(failedHash.slice(1))};`);
         }
       }
       return;
     }
     if (!app.isPackaged && validatedURL.startsWith(DEV_FRONTEND_URL)) {
-      await mainWindow?.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(getDevServerErrorHtml())}`);
+      await agentState.mainWindow?.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(getDevServerErrorHtml())}`);
     }
   });
-  mainWindow.webContents.on("did-finish-load", () => {
+  agentState.mainWindow.webContents.on("did-finish-load", () => {
     writeStartupLog("did-finish-load", {
-      url: mainWindow.webContents.getURL()
+      url: agentState.mainWindow.webContents.getURL()
     });
-    mainWindow.webContents.executeJavaScript(`({
+    agentState.mainWindow.webContents.executeJavaScript(`({
         hasBridge: Boolean(window.printeaseDesktop),
         isDesktop: Boolean(window.printeaseDesktop?.isDesktop),
         bridgeVersion: window.printeaseDesktop?.bridgeVersion || null,
         bridgeKeys: window.printeaseDesktop ? Object.keys(window.printeaseDesktop) : []
       })`).then(bridgeState => {
       console.log("[DESKTOP RENDERER]", {
-        url: mainWindow.webContents.getURL(),
+        url: agentState.mainWindow.webContents.getURL(),
         ...bridgeState
       });
     }).catch(error => {
       console.warn("[DESKTOP RENDERER CHECK FAILED]", error.message || error);
     });
-    if (latestPrinterResult) emitPrinterResult(latestPrinterResult);
+    if (agentState.latestPrinterResult) emitPrinterResult(agentState.latestPrinterResult);
   });
-  loadFrontend(mainWindow).catch(async error => {
+  loadFrontend(agentState.mainWindow).catch(async error => {
     writeStartupLog("load-frontend:failed", {
       error: serializeStartupError(error)
     });
     console.error("[DESKTOP LOAD FRONTEND FAILED]", error);
     try {
-      await mainWindow?.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(getDevServerErrorHtml())}`);
+      await agentState.mainWindow?.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(getDevServerErrorHtml())}`);
     } catch (fallbackError) {
       writeStartupLog("load-frontend-fallback:failed", {
         error: serializeStartupError(fallbackError)
@@ -724,7 +713,7 @@ app.whenReady().then(async () => {
   });
   runStartupStep("migrate-file-local-storage-auth", () => migrateFileLocalStorageAuth());
   runStartupStep("initialize-updater", () => initializeUpdater({
-    mainWindow
+    mainWindow: agentState.mainWindow
   }));
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {

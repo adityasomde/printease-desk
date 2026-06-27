@@ -2,6 +2,7 @@ const DESKTOP_AUTH_FILE = "desktop-auth.json";
 const HEARTBEAT_INTERVAL_MS = 25000;
 const DESKTOP_AGENT_FILE = "desktop-agent.json";
 import fs from "node:fs";
+import { loadConfig, saveConfig } from "../../local/config.js";
 import path from "node:path";
 import electron from "electron"; const { app, net, safeStorage } = electron;
 import { agentState, agentSession } from "../state/agentState.js";
@@ -353,10 +354,10 @@ export function sanitizeAgentSession() {
     lastJobPollAt: agentSession.lastJobPollAt,
     lastJobPollError: agentSession.lastJobPollError,
     lastJobPollMessage: agentSession.lastJobPollMessage,
-    predownloadRunning: Boolean(isPredownloading || agentSession.predownloadRunning),
-    predownloadLoopRunning: Boolean(predownloadTimer || agentSession.predownloadLoopRunning),
-    isConverting: Boolean(isConverting),
-    conversionLoopRunning: Boolean(conversionTimer),
+    predownloadRunning: Boolean(agentState.isPredownloading || agentSession.predownloadRunning),
+    predownloadLoopRunning: Boolean(agentState.predownloadTimer || agentSession.predownloadLoopRunning),
+    isConverting: Boolean(agentState.isConverting),
+    conversionLoopRunning: Boolean(agentState.conversionTimer),
     lastConversionAt: agentSession.lastConversionAt,
     lastConversionError: agentSession.lastConversionError,
     lastConversionMessage: agentSession.lastConversionMessage,
@@ -367,10 +368,10 @@ export function sanitizeAgentSession() {
     lastPredownloadChecked: agentSession.lastPredownloadChecked,
     lastPredownloadCached: agentSession.lastPredownloadCached,
     lastPredownloadFailures: agentSession.lastPredownloadFailures,
-    heartbeatRunning: Boolean(heartbeatTimer),
-    printerSyncRunning: Boolean(printerSyncTimer),
-    polling: Boolean(jobPollTimer),
-    autoPrintRunning: Boolean(heartbeatTimer && printerSyncTimer && jobPollTimer)
+    heartbeatRunning: Boolean(agentState.heartbeatTimer),
+    printerSyncRunning: Boolean(agentState.printerSyncTimer),
+    polling: Boolean(agentState.jobPollTimer),
+    autoPrintRunning: Boolean(agentState.heartbeatTimer && agentState.printerSyncTimer && agentState.jobPollTimer)
   };
 }
 

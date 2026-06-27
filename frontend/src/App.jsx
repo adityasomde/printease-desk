@@ -2312,7 +2312,7 @@ export default function App() {
                 path={ROUTES.profile}
                 element={
                   currentUser ? (
-                    <ProfilePage currentUser={currentUser} onProfileUpdate={handleProfileUpdate} onSignOut={logout} />
+                    <ProfilePage currentUser={currentUser} updateProfile={updateProfile} navigate={navigate} />
                   ) : (
                     <RouteNotice title="Login Required" message="Please login to view your profile." actionLabel="Login" onAction={() => startLogin("user")} />
                   )

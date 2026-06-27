@@ -293,13 +293,28 @@ export async function processNextConversionJob({ agentToken } = {}) {
       responseBody: response.body,
     });
 
+    let reportResult;
     if (cached.success) {
-      await reportDesktopPreparationResult({
+      // Force preparationStatus pending since backend doesn't supply it for conversion-jobs
+      job.preparationStatus = "pending";
+      
+      console.log(`[Conversion] Fetched job ${job.documentId}, converting...`);
+      reportResult = await reportDesktopPreparationResult({
         agentToken,
         file: job,
         cachedFilePath: cached.filePath,
         expectedHash
       });
+      
+      if (!reportResult) {
+        throw new Error("REPORT_SKIPPED_MISSING_PENDING_FLAGS");
+      }
+      
+      if (reportResult && !reportResult.success) {
+        throw new Error(reportResult.message || "Backend rejected preparation result");
+      }
+      
+      console.log(`[Conversion] Job ${job.documentId} converted and reported successfully.`);
     } else {
       throw new Error(cached.message || "Failed to cache document for conversion");
     }

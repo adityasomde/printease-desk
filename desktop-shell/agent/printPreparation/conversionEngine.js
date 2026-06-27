@@ -59,7 +59,7 @@ function getBundledSofficePath(platform) {
   if (!resourcesPath) return null;
 
   if (platform === 'win32') {
-    return path.join(resourcesPath, 'vendor', 'libreoffice', 'win', 'program', 'soffice.exe');
+    return path.join(resourcesPath, 'vendor', 'libreoffice', 'win', 'program', 'soffice.com');
   }
   return path.join(resourcesPath, 'vendor', 'libreoffice', 'linux', 'program', 'soffice');
 }
@@ -76,9 +76,15 @@ export async function findLibreOfficeExecutable({ platform = process.platform, e
 
   // 2. Also check relative vendor/ dir (for dev mode when running from source)
   const devVendorPath = platform === 'win32'
-    ? path.resolve('vendor', 'libreoffice', 'win', 'program', 'soffice.exe')
+    ? path.resolve('vendor', 'libreoffice', 'win', 'program', 'soffice.com')
     : path.resolve('vendor', 'libreoffice', 'linux', 'program', 'soffice');
-  candidates.push(devVendorPath);
+  
+  if (platform === 'win32') {
+    candidates.push(devVendorPath);
+    candidates.push(devVendorPath.replace(/\.com$/, '.exe'));
+  } else {
+    candidates.push(devVendorPath);
+  }
 
   // 3. Any extra paths provided by caller
   for (const item of extraPaths) {
@@ -88,7 +94,9 @@ export async function findLibreOfficeExecutable({ platform = process.platform, e
   // 4. Common system installation paths
   if (platform === 'win32') {
     candidates.push(
+      'C:\\Program Files\\LibreOffice\\program\\soffice.com',
       'C:\\Program Files\\LibreOffice\\program\\soffice.exe',
+      'C:\\Program Files (x86)\\LibreOffice\\program\\soffice.com',
       'C:\\Program Files (x86)\\LibreOffice\\program\\soffice.exe'
     );
   } else if (platform === 'darwin') {
@@ -98,6 +106,9 @@ export async function findLibreOfficeExecutable({ platform = process.platform, e
   }
 
   // 5. PATH fallback. spawn can resolve these names.
+  if (platform === 'win32') {
+    candidates.push('soffice.com');
+  }
   candidates.push('soffice', 'libreoffice');
 
   for (const candidate of candidates) {

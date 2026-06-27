@@ -119,6 +119,34 @@ export async function findLibreOfficeExecutable({ platform = process.platform, e
 
     const result = await runCommand(candidate, ['--version'], { timeoutMs: 8000 });
     if (result.success || result.stdout || result.stderr) {
+      // Smoke test: verify the candidate can actually perform a conversion.
+      // Some vendor/portable copies respond to --version but crash on real work.
+      const os = await import('node:os');
+      const smokeDir = path.join(os.default.tmpdir(), `printease-lo-smoketest-${Date.now()}`);
+      const smokeInput = path.join(smokeDir, 'smoke.txt');
+      try {
+        await fs.mkdir(smokeDir, { recursive: true });
+        await fs.writeFile(smokeInput, 'printease smoke test', 'utf8');
+        const smokeProfile = path.join(os.default.tmpdir(), `printease-lo-smokeprofile-${Date.now()}`);
+        const smokeResult = await runCommand(candidate, [
+          `-env:UserInstallation=file://${smokeProfile.replace(/\\/g, '/')}`,
+          '--headless', '--nologo', '--nofirststartwizard', '--nodefault', '--nolockcheck',
+          '--convert-to', 'pdf', '--outdir', smokeDir, smokeInput,
+        ], { timeoutMs: 30000 });
+        await fs.rm(smokeProfile, { recursive: true, force: true }).catch(() => {});
+        const smokeOutput = path.join(smokeDir, 'smoke.pdf');
+        const smokeWorked = smokeResult.success && await exists(smokeOutput);
+        await fs.rm(smokeDir, { recursive: true, force: true }).catch(() => {});
+        if (!smokeWorked) {
+          console.warn(`[CONVERSION ENGINE] candidate "${candidate}" failed smoke test, skipping.`, smokeResult.stderr || smokeResult.stdout || '');
+          continue;
+        }
+      } catch (smokeError) {
+        await fs.rm(smokeDir, { recursive: true, force: true }).catch(() => {});
+        console.warn(`[CONVERSION ENGINE] candidate "${candidate}" smoke test error, skipping.`, smokeError?.message || '');
+        continue;
+      }
+
       return {
         found: true,
         executable: candidate,

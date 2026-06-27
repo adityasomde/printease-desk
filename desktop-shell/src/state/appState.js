@@ -53,11 +53,17 @@ export function sanitizeAgentSession() {
     appState.agentSession.accessToken
   );
 
+  const rawPrinterName = appState.agentSession.selectedPrinterName;
+  const selectedPrinterName = typeof rawPrinterName === "string"
+    ? rawPrinterName
+    : (rawPrinterName?.printerName || rawPrinterName?.name || rawPrinterName?.displayName || "");
+
   return {
     ...appState.agentSession,
     success: true,
     accessToken: undefined,
     paired,
+    selectedPrinterName,
     heartbeatRunning: Boolean(appState.heartbeatTimer),
     printerSyncRunning: Boolean(appState.printerSyncTimer),
     polling: Boolean(appState.jobPollTimer),

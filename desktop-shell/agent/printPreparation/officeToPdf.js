@@ -90,7 +90,7 @@ export async function convertOfficeToPdf({ inputPath, outputDir, timeoutMs = 2 *
       };
     }
 
-    const profileDir = path.join(os.tmpdir(), `printease-libreoffice-profile-${process.pid}`);
+    const profileDir = path.join(os.tmpdir(), `printease-libreoffice-profile-${process.pid}-${Date.now()}`);
     try {
       const args = [
         `-env:UserInstallation=file://${profileDir.replace(/\\/g, '/')}`,

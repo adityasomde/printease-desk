@@ -118,6 +118,15 @@ export async function clearStoredDesktopAuth() {
   }
 }
 
+function extractPrinterNameString(value) {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "object") {
+    return value.printerName || value.name || value.displayName || "";
+  }
+  return String(value);
+}
+
 export function normalizeDesktopAgentPayload(payload = {}) {
   const token = typeof payload.agentToken === "string" ? payload.agentToken : payload.accessToken;
   const agentId = typeof payload.agentId === "string" ? payload.agentId : "";
@@ -136,7 +145,7 @@ export function normalizeDesktopAgentPayload(payload = {}) {
     deviceId,
     deviceName,
     pairedAt: typeof payload.pairedAt === "string" ? payload.pairedAt : new Date().toISOString(),
-    selectedPrinterName: typeof payload.selectedPrinterName === "string" ? payload.selectedPrinterName : appState.agentSession.selectedPrinterName,
+    selectedPrinterName: extractPrinterNameString(payload.selectedPrinterName || appState.agentSession.selectedPrinterName),
     savedAt: new Date().toISOString()
   };
 }
@@ -149,7 +158,7 @@ export function applyStoredAgentToSession(agent) {
   appState.agentSession.hubId = agent.hubId || "";
   appState.agentSession.accessToken = agent.agentToken || "";
   appState.agentSession.pairedAt = agent.pairedAt || "";
-  appState.agentSession.selectedPrinterName = agent.selectedPrinterName || appState.agentSession.selectedPrinterName || "";
+  appState.agentSession.selectedPrinterName = extractPrinterNameString(agent.selectedPrinterName || appState.agentSession.selectedPrinterName || "");
   appState.agentSession.pairingCode = "";
   appState.agentSession.pairingSessionId = "";
   appState.agentSession.expiresAt = "";
@@ -352,7 +361,7 @@ export function sanitizeAgentSession() {
     pairedAt: appState.agentSession.pairedAt,
     lastHeartbeatAt: appState.agentSession.lastHeartbeatAt,
     lastHeartbeatError: appState.agentSession.lastHeartbeatError,
-    selectedPrinterName: appState.agentSession.selectedPrinterName,
+    selectedPrinterName: extractPrinterNameString(appState.agentSession.selectedPrinterName),
     lastPrinterSyncAt: appState.agentSession.lastPrinterSyncAt,
     lastPrinterSyncError: appState.agentSession.lastPrinterSyncError,
     lastJobPollAt: appState.agentSession.lastJobPollAt,
@@ -384,7 +393,7 @@ export async function ensureDeviceIdentity(deviceName) {
   const savedConfig = await loadConfig();
   appState.agentSession.deviceId = savedConfig.deviceId || randomUUID();
   appState.agentSession.deviceName = deviceName || savedConfig.deviceName || os.hostname() || "PrintEase Desktop";
-  appState.agentSession.selectedPrinterName = savedConfig.selectedPrinterName || appState.agentSession.selectedPrinterName || "";
+  appState.agentSession.selectedPrinterName = extractPrinterNameString(savedConfig.selectedPrinterName || appState.agentSession.selectedPrinterName || "");
   await saveConfig({
     deviceId: appState.agentSession.deviceId,
     deviceName: appState.agentSession.deviceName,

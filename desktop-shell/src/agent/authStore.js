@@ -82,6 +82,15 @@ export async function clearStoredDesktopAuth() {
   }
 }
 
+function extractPrinterNameString(value) {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "object") {
+    return value.printerName || value.name || value.displayName || "";
+  }
+  return String(value);
+}
+
 function normalizeDesktopAgentPayload(payload = {}) {
   const token = typeof payload.agentToken === "string" ? payload.agentToken : payload.accessToken;
   const agentId = typeof payload.agentId === "string" ? payload.agentId : "";
@@ -98,7 +107,7 @@ function normalizeDesktopAgentPayload(payload = {}) {
     deviceId,
     deviceName,
     pairedAt: typeof payload.pairedAt === "string" ? payload.pairedAt : new Date().toISOString(),
-    selectedPrinterName: typeof payload.selectedPrinterName === "string" ? payload.selectedPrinterName : appState.agentSession.selectedPrinterName,
+    selectedPrinterName: extractPrinterNameString(payload.selectedPrinterName || appState.agentSession.selectedPrinterName),
     savedAt: new Date().toISOString(),
   };
 }
@@ -115,7 +124,7 @@ export function applyStoredAgentToSession(agent) {
   appState.agentSession.hubId = agent.hubId || "";
   appState.agentSession.accessToken = agent.agentToken || "";
   appState.agentSession.pairedAt = agent.pairedAt || "";
-  appState.agentSession.selectedPrinterName = agent.selectedPrinterName || appState.agentSession.selectedPrinterName || "";
+  appState.agentSession.selectedPrinterName = extractPrinterNameString(agent.selectedPrinterName || appState.agentSession.selectedPrinterName || "");
   appState.agentSession.pairingCode = "";
   appState.agentSession.pairingSessionId = "";
   appState.agentSession.expiresAt = "";
@@ -213,7 +222,7 @@ export async function ensureDeviceIdentity(deviceName) {
   const savedConfig = await import("../../local/config.js").then(m => m.loadConfig());
   appState.agentSession.deviceId = savedConfig.deviceId || (await import("node:crypto")).randomUUID();
   appState.agentSession.deviceName = deviceName || savedConfig.deviceName || (await import("node:os")).hostname() || "PrintEase Desktop";
-  appState.agentSession.selectedPrinterName = savedConfig.selectedPrinterName || appState.agentSession.selectedPrinterName || "";
+  appState.agentSession.selectedPrinterName = extractPrinterNameString(savedConfig.selectedPrinterName || appState.agentSession.selectedPrinterName || "");
   await import("../../local/config.js").then(m => m.saveConfig({
     deviceId: appState.agentSession.deviceId,
     deviceName: appState.agentSession.deviceName,

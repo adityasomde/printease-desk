@@ -2294,7 +2294,15 @@ export default function App() {
                 path={ROUTES.hubDashboard}
                 element={
                   currentUser?.role === "hub" ? (
-                    <HubDashboard currentHub={currentHub} onSignOut={logout} updateCentreStatus={updateCentreStatus} updateCentrePrice={updateCentrePrice} />
+                    <HubDashboard 
+                      currentHub={currentHub} 
+                      hubOrders={orders} 
+                      updateOrderStatus={updateOrderStatus} 
+                      refreshOrders={() => loadOrdersForSession(currentUser, centres)} 
+                      onOrderSaved={applySavedOrderUpdate} 
+                      onAfterOrderSettingsUpdate={updateCentreAfterOrderSettings} 
+                      navigate={navigate} 
+                    />
                   ) : (
                     <RouteNotice title="Print Hub Login Required" message="Please login as a print hub to access the hub dashboard." actionLabel="Login as Print Hub" onAction={() => startLogin("hub")} />
                   )

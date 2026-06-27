@@ -62,6 +62,18 @@ export async function convertOfficeToPdf({ inputPath, outputDir, timeoutMs = 2 *
   try {
     await fs.mkdir(outputDir, { recursive: true });
 
+    let dynamicTimeoutMs = timeoutMs || 2 * 60 * 1000;
+    try {
+      const stat = await fs.stat(inputPath);
+      if (stat.size > 1024 * 1024) {
+        dynamicTimeoutMs = 5 * 60 * 1000; // 5 mins for > 1MB
+      } else {
+        dynamicTimeoutMs = 2 * 60 * 1000; // 2 mins for <= 1MB
+      }
+    } catch (e) {
+      console.warn("Could not stat inputPath for dynamic timeout", e);
+    }
+
   const engine = libreOfficePath
     ? { found: true, executable: libreOfficePath }
     : await findLibreOfficeExecutable();
@@ -88,7 +100,7 @@ export async function convertOfficeToPdf({ inputPath, outputDir, timeoutMs = 2 *
     inputPath,
   ];
 
-  const result = await waitForProcess(engine.executable, args, { timeoutMs });
+  const result = await waitForProcess(engine.executable, args, { timeoutMs: dynamicTimeoutMs });
   if (!result.success) {
     return {
       success: false,

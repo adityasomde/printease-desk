@@ -266,6 +266,65 @@ async function reportDesktopPreparationResult({ agentToken, file, cachedFilePath
   });
 }
 
+export async function processNextConversionJob({ agentToken } = {}) {
+  const nextJobReq = await backendRequest({
+    endpoint: "/agent/conversion-jobs/next",
+    method: "GET",
+    agentToken
+  });
+
+  if (!nextJobReq.success || !nextJobReq.job) return nextJobReq;
+
+  const job = nextJobReq.job;
+  
+  if (!job.fileUrl || !job.documentId) return { success: false, message: "Invalid conversion job" };
+
+  try {
+    const expectedHash = getExpectedFileHash({ fileHash: job.fileSha256 });
+    const response = await fetch(job.fileUrl);
+    if (!response.ok || !response.body) {
+      throw new Error(`Download failed with status ${response.status}`);
+    }
+
+    const cached = await cacheReadableDocument({
+      documentId: job.documentId,
+      fileName: job.fileName || "document.docx",
+      expectedHash,
+      responseBody: response.body,
+    });
+
+    if (cached.success) {
+      await reportDesktopPreparationResult({
+        agentToken,
+        file: job,
+        cachedFilePath: cached.filePath,
+        expectedHash
+      });
+    } else {
+      throw new Error(cached.message || "Failed to cache document for conversion");
+    }
+
+    return { success: true, message: "Conversion completed", documentId: job.documentId };
+  } catch (error) {
+    console.error("[Conversion] Conversion failed:", error);
+    // Send failure status back
+    const formData = new FormData();
+    formData.append("documentId", job.documentId);
+    formData.append("preparationStatus", "failed");
+    formData.append("errorCode", "CONVERSION_ERROR");
+    formData.append("errorMessage", error.message || "Conversion failed");
+    
+    await backendRequest({
+      endpoint: "/agent/preparation-result",
+      method: "POST",
+      agentToken,
+      body: formData
+    }).catch(e => console.error("Failed to report conversion error", e));
+
+    return { success: false, message: error.message };
+  }
+}
+
 export async function predownloadPendingDocuments({ agentToken, limit = 15 } = {}) {
   const candidates = await getPredownloadCandidates({ agentToken, limit });
   if (!candidates.success) return candidates;
@@ -283,32 +342,11 @@ export async function predownloadPendingDocuments({ agentToken, limit = 15 } = {
 
     if (!documentId || !file.fileUrl || !expectedHash) continue;
 
-    const needsConversion = file.requiresDesktopPreparation && file.preparationStatus === "pending";
-    if (needsConversion) {
-      if (conversionsInCycle >= 1) {
-        // Skip extra conversions in this cycle to prevent blocking normal PDF downloads
-        continue;
-      }
-      conversionsInCycle++;
-    }
+    // Skip conversion jobs in predownload (handled independently now)
+    if (file.requiresDesktopPreparation) continue;
 
     const alreadyCached = await findCachedDocument(documentId, expectedHash);
     if (alreadyCached) {
-      try {
-        await reportDesktopPreparationResult({
-          agentToken,
-          file,
-          cachedFilePath: alreadyCached,
-          expectedHash
-        });
-      } catch (error) {
-        failures.push({
-          documentId,
-          orderId: file.orderId || null,
-          message: error.message || "Cached document preparation failed.",
-        });
-      }
-
       cachedFiles.push({
         documentId,
         orderId: file.orderId || null,
@@ -336,22 +374,6 @@ export async function predownloadPendingDocuments({ agentToken, limit = 15 } = {
       });
 
       if (cached.success) {
-        try {
-          await reportDesktopPreparationResult({
-            agentToken,
-            file,
-            cachedFilePath: cached.filePath,
-            expectedHash
-          });
-        } catch (e) {
-          console.warn("Predownload preparation failed:", e);
-          failures.push({
-            documentId,
-            orderId: file.orderId || null,
-            message: e.message || "Desktop conversion/preparation failed.",
-          });
-        }
-
         cachedFiles.push({
           documentId,
           orderId: file.orderId || null,
@@ -532,8 +554,10 @@ export async function processNextJob({ agentToken, printerName } = {}) {
 
 export function createJobPoller(options = {}) {
   let timer = null;
-  let isPredownloading = false;
+  let conversionTimer = null;
   let isProcessingJob = false;
+  let isConverting = false;
+  let isPredownloading = false;
 
   async function runPollCycle(overrides = {}) {
     const pollOptions = { ...options, ...overrides };
@@ -588,6 +612,18 @@ export function createJobPoller(options = {}) {
         runPollCycle(pollOptions).catch(() => {});
       }, intervalMs);
 
+      conversionTimer = setInterval(async () => {
+        if (isConverting) return;
+        isConverting = true;
+        try {
+          await processNextConversionJob(pollOptions);
+        } catch (e) {
+          console.error("Conversion loop error", e);
+        } finally {
+          isConverting = false;
+        }
+      }, 3000);
+
       return {
         success: true,
         message: "Job polling started.",
@@ -598,6 +634,10 @@ export function createJobPoller(options = {}) {
       if (timer) {
         clearInterval(timer);
         timer = null;
+      }
+      if (conversionTimer) {
+        clearInterval(conversionTimer);
+        conversionTimer = null;
       }
 
       return {

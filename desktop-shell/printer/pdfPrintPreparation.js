@@ -186,7 +186,9 @@ export async function preparePdfForPrinting(inputFilePathOrObj, printOptions = {
       try {
         fs.unlinkSync(tempFilePath);
         fs.rmdirSync(tempDir);
-      } catch (err) {}
+      } catch (err) {
+        console.error(`[PDF PREP] Failed to clean up sliced/wm temp file ${tempFilePath}:`, err);
+      }
     });
   }
 
@@ -397,7 +399,9 @@ export async function preparePdfForPrinting(inputFilePathOrObj, printOptions = {
       for (const cleanupFn of cleanups) {
         try {
           cleanupFn();
-        } catch (err) {}
+        } catch (err) {
+          console.error(`[PDF PREP] Cleanup step failed:`, err);
+        }
       }
       // Cleanup final file
       try {

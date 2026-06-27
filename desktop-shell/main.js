@@ -4,52 +4,15 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import electron from "electron";
+import { registerIpcHandlers } from "./src/ipc/handlers.js";
+
+import { runPredownloadNow, pollJobsNow, runConversionNow, startAgentRuntime, stopAgentRuntime, syncAgentPrinters, pollAgentOnce, startAgentPolling, stopAgentPolling } from "./src/services/pollingService.js";
+import { getStoredDesktopAuth, setStoredDesktopAuth, clearStoredDesktopAuth, getStoredDesktopAgent, setStoredDesktopAgent, restoreStoredDesktopAgent, clearStoredDesktopAgent, migrateFileLocalStorageAuth, ensureDeviceIdentity, sanitizeAgentSession, startAgentPairing, confirmAgentPairing, sendAgentHeartbeat, applyStoredAgentToSession, getDesktopAuthPath, getDesktopAgentPath, normalizeDesktopAuthPayload, encodeDesktopAuth, decodeDesktopAuth, normalizeDesktopAgentPayload } from "./src/services/authService.js";
+import { diagnoseWindowsPrintHelperSafe, diagnoseLibreOfficeSafe, checkBackendHealth, reportPrinterDiagnostic, syncPrintersToCloud, applyPrinterDiscoveryResult, refreshLocalPrinterResult, syncLatestPrinterStatus, selectDesktopPrinter } from "./src/services/diagnosticService.js";
 import { diagnosePrinters, listPrinters, stopPrinting, testPrint } from "./printer/printExecutor.js";
 import { findLibreOfficeExecutable, LIBREOFFICE_MANUAL_DOWNLOAD_URL } from "./agent/printPreparation/conversionEngine.js";
-
-async function diagnoseWindowsPrintHelperSafe() {
-  if (process.platform !== "win32") {
-    return {
-      success: false,
-      platform: process.platform,
-      message: "Windows print helper diagnostics are only available on Windows.",
-    };
-  }
-
-  const module = await import("./printer/windows/windowsPrinter.js");
-  return module.diagnoseWindowsPrintHelper();
-}
-
-async function diagnoseLibreOfficeSafe() {
-  try {
-    const result = await findLibreOfficeExecutable();
-    return {
-      success: result.found,
-      ...result,
-      manualDownloadUrl: result.manualDownloadUrl || LIBREOFFICE_MANUAL_DOWNLOAD_URL,
-      message: result.found
-        ? `LibreOffice detected from ${result.source || "system"}.`
-        : result.message,
-    };
-  } catch (error) {
-    return {
-      success: false,
-      found: false,
-      reasonCode: "CONVERSION_ENGINE_DIAGNOSTIC_FAILED",
-      message: error?.message || "Could not inspect LibreOffice.",
-      manualDownloadUrl: LIBREOFFICE_MANUAL_DOWNLOAD_URL,
-    };
-  }
-}
 import { confirmPairing, sendHeartbeat, startPairing } from "./agent/heartbeat.js";
-import {
-  cleanupDocumentCache,
-  findCachedDocument,
-  getDocumentCacheDirectory,
-  getDocumentCacheMaxAgeDays,
-  getDocumentCacheMaxSizeBytes,
-  setDocumentCacheDirectory,
-} from "./agent/documentCache.js";
+import { cleanupDocumentCache, findCachedDocument, getDocumentCacheDirectory, getDocumentCacheMaxAgeDays, getDocumentCacheMaxSizeBytes, setDocumentCacheDirectory } from "./agent/documentCache.js";
 import { predownloadPendingDocuments, processNextJob, processNextConversionJob } from "./agent/jobPoller.js";
 import { syncPrinters } from "./agent/statusReporter.js";
 import { getApiBaseUrl, getBackendUrl } from "./config/backend.js";
@@ -57,21 +20,26 @@ import { loadConfig, saveConfig, setConfigDirectory } from "./local/config.js";
 import { checkForUpdates, getUpdateStatus, initializeUpdater, installUpdateNow } from "./updater.js";
 import { secureHandle } from "./security/ipcSecurity.js";
 import { isSafeApprovalUrl } from "./security/urlValidator.js";
-
-const { app, BrowserWindow, dialog, ipcMain, net, protocol, safeStorage, session, shell } = electron;
-
-protocol.registerSchemesAsPrivileged([
-  {
-    scheme: "app",
-    privileges: {
-      standard: true,
-      secure: true,
-      supportFetchAPI: true,
-      corsEnabled: true,
-    },
-  },
-]);
-
+const {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  net,
+  protocol,
+  safeStorage,
+  session,
+  shell
+} = electron;
+protocol.registerSchemesAsPrivileged([{
+  scheme: "app",
+  privileges: {
+    standard: true,
+    secure: true,
+    supportFetchAPI: true,
+    corsEnabled: true
+  }
+}]);
 const DEV_FRONTEND_URL = process.env.PRINTEASE_FRONTEND_URL || "http://127.0.0.1:5175";
 const USE_DEV_FRONTEND = process.env.PRINTEASE_USE_DEV_FRONTEND === "1";
 const VERSION = "0.1.78";
@@ -83,11 +51,9 @@ const DESKTOP_PROTOCOL_ORIGIN = "app://printease";
 const DESKTOP_AUTH_FILE = "desktop-auth.json";
 const DESKTOP_AGENT_FILE = "desktop-agent.json";
 const STARTUP_LOG_FILE = "startup.log";
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
-
 let mainWindow = null;
 let ipcHandlersRegistered = false;
 let latestPrinterResult = null;
@@ -128,24 +94,23 @@ let agentSession = {
   lastConversionMessage: "",
   lastConversionError: "",
   lastConversionAt: "",
-  converterPath: "",
+  converterPath: ""
 };
-
 function serializeStartupError(error) {
   if (!error) return "";
   return error.stack || error.message || String(error);
 }
-
 function getStartupLogPath() {
   try {
     const userData = app.getPath("userData");
-    fs.mkdirSync(userData, { recursive: true });
+    fs.mkdirSync(userData, {
+      recursive: true
+    });
     return path.join(userData, STARTUP_LOG_FILE);
   } catch {
     return path.join(os.tmpdir(), `printease-desktop-${STARTUP_LOG_FILE}`);
   }
 }
-
 function writeStartupLog(event, detail = {}) {
   const entry = {
     at: new Date().toISOString(),
@@ -154,16 +119,14 @@ function writeStartupLog(event, detail = {}) {
     packaged: app.isPackaged,
     platform: process.platform,
     arch: process.arch,
-    ...detail,
+    ...detail
   };
-
   try {
     fs.appendFileSync(getStartupLogPath(), `${JSON.stringify(entry)}\n`, "utf8");
   } catch {
     // Last-resort startup diagnostics should never crash the app.
   }
 }
-
 async function runStartupStep(name, task) {
   writeStartupLog(`${name}:start`);
   try {
@@ -171,48 +134,46 @@ async function runStartupStep(name, task) {
     writeStartupLog(`${name}:ok`);
     return result;
   } catch (error) {
-    writeStartupLog(`${name}:failed`, { error: serializeStartupError(error) });
+    writeStartupLog(`${name}:failed`, {
+      error: serializeStartupError(error)
+    });
     console.warn(`[DESKTOP STARTUP] ${name} failed`, error?.stack || error?.message || error);
     return null;
   }
 }
-
-process.on("uncaughtException", (error) => {
-  writeStartupLog("uncaughtException", { error: serializeStartupError(error) });
+process.on("uncaughtException", error => {
+  writeStartupLog("uncaughtException", {
+    error: serializeStartupError(error)
+  });
   console.error("[DESKTOP UNCAUGHT EXCEPTION]", error);
 });
-
-process.on("unhandledRejection", (reason) => {
-  writeStartupLog("unhandledRejection", { error: serializeStartupError(reason) });
+process.on("unhandledRejection", reason => {
+  writeStartupLog("unhandledRejection", {
+    error: serializeStartupError(reason)
+  });
   console.error("[DESKTOP UNHANDLED REJECTION]", reason);
 });
-
 function getProductionIndexPath() {
   if (app.isPackaged) {
     return path.join(process.resourcesPath, "frontend-dist", "index.html");
   }
-
   const bundledIndex = path.join(__dirname, "..", "frontend-dist", "index.html");
   if (fs.existsSync(bundledIndex)) return bundledIndex;
 
   // Development fallback: after `npm run build --prefix frontend`, Vite outputs here.
   return path.join(__dirname, "..", "frontend", "dist", "index.html");
 }
-
 function getFrontendDistRoot() {
   return path.dirname(getProductionIndexPath());
 }
-
 function getDesktopAppUrl() {
   return `${DESKTOP_PROTOCOL_ORIGIN}/index.html`;
 }
-
 function getFrontendBundleDiagnostics() {
   const indexPath = getProductionIndexPath();
   const frontendRoot = path.dirname(indexPath);
   const assetsPath = path.join(frontendRoot, "assets");
   let assetSample = [];
-
   try {
     if (fs.existsSync(assetsPath)) {
       assetSample = fs.readdirSync(assetsPath).slice(0, 12);
@@ -220,7 +181,6 @@ function getFrontendBundleDiagnostics() {
   } catch (error) {
     assetSample = [`Could not read assets: ${error.message || error}`];
   }
-
   return {
     isPackaged: app.isPackaged,
     appPath: app.getAppPath(),
@@ -231,61 +191,57 @@ function getFrontendBundleDiagnostics() {
     assetsPath,
     assetsExists: fs.existsSync(assetsPath),
     assetSample,
-    protocolUrl: getDesktopAppUrl(),
+    protocolUrl: getDesktopAppUrl()
   };
 }
-
 function isPathInside(parentPath, childPath) {
   const relative = path.relative(parentPath, childPath);
-  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+  return relative === "" || !relative.startsWith("..") && !path.isAbsolute(relative);
 }
-
 function registerDesktopProtocol() {
-  protocol.handle("app", async (request) => {
+  protocol.handle("app", async request => {
     const frontendRoot = getFrontendDistRoot();
-
     try {
       const requestUrl = new URL(request.url);
       if (requestUrl.hostname !== "printease") {
-        return new Response("Not found", { status: 404 });
+        return new Response("Not found", {
+          status: 404
+        });
       }
-
       const requestedPath = decodeURIComponent(requestUrl.pathname || "/");
       if (requestedPath.startsWith("/cache/")) {
         const documentId = requestedPath.replace(/^\/cache\/+/, "");
         const cachedDocumentPath = await findCachedDocument(documentId);
         const cacheRoot = getDocumentCacheDirectory();
-
         if (!cachedDocumentPath || !isPathInside(cacheRoot, cachedDocumentPath)) {
-          return new Response("Cached document not found", { status: 404 });
+          return new Response("Cached document not found", {
+            status: 404
+          });
         }
-
         return net.fetch(pathToFileURL(cachedDocumentPath).toString());
       }
-
       const relativePath = requestedPath === "/" ? "index.html" : requestedPath.replace(/^\/+/, "");
       const candidatePath = path.normalize(path.join(frontendRoot, relativePath));
-
       if (!isPathInside(frontendRoot, candidatePath)) {
-        return new Response("Forbidden", { status: 403 });
+        return new Response("Forbidden", {
+          status: 403
+        });
       }
-
       if (fs.existsSync(candidatePath) && fs.statSync(candidatePath).isFile()) {
         return net.fetch(pathToFileURL(candidatePath).toString());
       }
-
       if (!path.extname(candidatePath)) {
         return net.fetch(pathToFileURL(getProductionIndexPath()).toString());
       }
-
-      return new Response("Not found", { status: 404 });
+      return new Response("Not found", {
+        status: 404
+      });
     } catch (error) {
       console.warn("[DESKTOP PROTOCOL FAILED]", error?.message || error);
       return net.fetch(pathToFileURL(getProductionIndexPath()).toString());
     }
   });
 }
-
 function getDevServerErrorHtml() {
   return `<!doctype html>
 <html>
@@ -337,13 +293,11 @@ function getDevServerErrorHtml() {
   </body>
 </html>`;
 }
-
 async function loadFrontend(window) {
   const localIndex = getProductionIndexPath();
   const bundleDiagnostics = getFrontendBundleDiagnostics();
   console.log("[DESKTOP FRONTEND BUNDLE]", bundleDiagnostics);
   writeStartupLog("frontend-bundle", bundleDiagnostics);
-
   if (app.isPackaged) {
     try {
       await window.loadURL(getDesktopAppUrl());
@@ -353,12 +307,10 @@ async function loadFrontend(window) {
     }
     return;
   }
-
   if (!USE_DEV_FRONTEND && fs.existsSync(localIndex)) {
     await window.loadFile(localIndex);
     return;
   }
-
   try {
     await window.loadURL(DEV_FRONTEND_URL);
   } catch {
@@ -366,376 +318,12 @@ async function loadFrontend(window) {
       await window.loadFile(localIndex);
       return;
     }
-
     await window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(getDevServerErrorHtml())}`);
   }
 }
-
-function getDesktopAuthPath() {
-  return path.join(app.getPath("userData"), DESKTOP_AUTH_FILE);
-}
-
-function getDesktopAgentPath() {
-  return path.join(app.getPath("userData"), DESKTOP_AGENT_FILE);
-}
-
-function normalizeDesktopAuthPayload(payload = {}) {
-  const token = typeof payload.token === "string" ? payload.token : "";
-  const user = payload.user && typeof payload.user === "object" ? payload.user : null;
-
-  if (!token || !user) {
-    return null;
-  }
-
-  return {
-    token,
-    user,
-    savedAt: new Date().toISOString(),
-  };
-}
-
-function encodeDesktopAuth(payload) {
-  const text = JSON.stringify(payload);
-
-  if (safeStorage?.isEncryptionAvailable?.()) {
-    return {
-      encrypted: true,
-      data: Buffer.from(safeStorage.encryptString(text)).toString("base64"),
-    };
-  }
-
-  return {
-    encrypted: false,
-    data: text,
-  };
-}
-
-function decodeDesktopAuth(stored) {
-  if (!stored || typeof stored !== "object") return null;
-
-  if (stored.encrypted) {
-    const decrypted = safeStorage.decryptString(Buffer.from(String(stored.data || ""), "base64"));
-    return JSON.parse(decrypted);
-  }
-
-  return JSON.parse(String(stored.data || "{}"));
-}
-
-async function getStoredDesktopAuth() {
-  try {
-    const authPath = getDesktopAuthPath();
-    if (!fs.existsSync(authPath)) {
-      return { success: true, auth: null };
-    }
-
-    const stored = JSON.parse(await fs.promises.readFile(authPath, "utf8"));
-    const auth = decodeDesktopAuth(stored);
-
-    return {
-      success: true,
-      auth: normalizeDesktopAuthPayload(auth),
-      encrypted: Boolean(stored.encrypted),
-    };
-  } catch (error) {
-    return {
-      success: false,
-      auth: null,
-      error: error?.message || "Could not read desktop auth storage.",
-    };
-  }
-}
-
-async function setStoredDesktopAuth(_event, payload = {}) {
-  try {
-    const auth = normalizeDesktopAuthPayload(payload);
-    if (!auth) {
-      return { success: false, error: "Desktop auth payload is invalid." };
-    }
-
-    await fs.promises.mkdir(app.getPath("userData"), { recursive: true });
-    await fs.promises.writeFile(getDesktopAuthPath(), JSON.stringify(encodeDesktopAuth(auth), null, 2), "utf8");
-
-    return { success: true };
-  } catch (error) {
-    return {
-      success: false,
-      error: error?.message || "Could not save desktop auth storage.",
-    };
-  }
-}
-
-async function clearStoredDesktopAuth() {
-  try {
-    await fs.promises.rm(getDesktopAuthPath(), { force: true });
-    return { success: true };
-  } catch (error) {
-    return {
-      success: false,
-      error: error?.message || "Could not clear desktop auth storage.",
-    };
-  }
-}
-
-function normalizeDesktopAgentPayload(payload = {}) {
-  const token = typeof payload.agentToken === "string" ? payload.agentToken : payload.accessToken;
-  const agentId = typeof payload.agentId === "string" ? payload.agentId : "";
-  const hubId = typeof payload.hubId === "string" ? payload.hubId : payload.shopId;
-  const deviceId = typeof payload.deviceId === "string" ? payload.deviceId : agentSession.deviceId;
-  const deviceName = typeof payload.deviceName === "string" ? payload.deviceName : agentSession.deviceName;
-
-  if (!token || !agentId || !hubId || !deviceId || !deviceName) {
-    return null;
-  }
-
-  return {
-    agentToken: token,
-    agentId,
-    hubId,
-    linkedHubUserId: typeof payload.linkedHubUserId === "string" ? payload.linkedHubUserId : "",
-    linkedHubCentreId: typeof payload.linkedHubCentreId === "string" ? payload.linkedHubCentreId : "",
-    deviceId,
-    deviceName,
-    pairedAt: typeof payload.pairedAt === "string" ? payload.pairedAt : new Date().toISOString(),
-    selectedPrinterName: typeof payload.selectedPrinterName === "string"
-      ? payload.selectedPrinterName
-      : agentSession.selectedPrinterName,
-    savedAt: new Date().toISOString(),
-  };
-}
-
-function applyStoredAgentToSession(agent) {
-  if (!agent) return false;
-
-  agentSession.deviceId = agent.deviceId || agentSession.deviceId;
-  agentSession.deviceName = agent.deviceName || agentSession.deviceName;
-  agentSession.agentId = agent.agentId || "";
-  agentSession.hubId = agent.hubId || "";
-  agentSession.accessToken = agent.agentToken || "";
-  agentSession.pairedAt = agent.pairedAt || "";
-  agentSession.selectedPrinterName = agent.selectedPrinterName || agentSession.selectedPrinterName || "";
-  agentSession.pairingCode = "";
-  agentSession.pairingSessionId = "";
-  agentSession.expiresAt = "";
-  return isAgentPaired();
-}
-
-async function getStoredDesktopAgent() {
-  try {
-    const agentPath = getDesktopAgentPath();
-    if (!fs.existsSync(agentPath)) {
-      return { success: true, agent: null };
-    }
-
-    const stored = JSON.parse(await fs.promises.readFile(agentPath, "utf8"));
-    const agent = normalizeDesktopAgentPayload(decodeDesktopAuth(stored));
-
-    return {
-      success: true,
-      agent: agent ? {
-        agentId: agent.agentId,
-        hubId: agent.hubId,
-        deviceId: agent.deviceId,
-        deviceName: agent.deviceName,
-        linkedHubUserId: agent.linkedHubUserId,
-        linkedHubCentreId: agent.linkedHubCentreId,
-        pairedAt: agent.pairedAt,
-        selectedPrinterName: agent.selectedPrinterName,
-        savedAt: agent.savedAt,
-      } : null,
-      encrypted: Boolean(stored.encrypted),
-      session: sanitizeAgentSession(),
-    };
-  } catch (error) {
-    return {
-      success: false,
-      agent: null,
-      error: error?.message || "Could not read desktop agent storage.",
-      session: sanitizeAgentSession(),
-    };
-  }
-}
-
-async function setStoredDesktopAgent(_event, payload = {}) {
-  try {
-    const agent = normalizeDesktopAgentPayload(payload);
-    if (!agent) {
-      return { success: false, error: "Desktop agent credential payload is invalid.", session: sanitizeAgentSession() };
-    }
-
-    await fs.promises.mkdir(app.getPath("userData"), { recursive: true });
-    await fs.promises.writeFile(getDesktopAgentPath(), JSON.stringify(encodeDesktopAuth(agent), null, 2), "utf8");
-    applyStoredAgentToSession(agent);
-
-    await saveConfig({
-      deviceId: agentSession.deviceId,
-      deviceName: agentSession.deviceName,
-      agentId: agentSession.agentId,
-      hubId: agentSession.hubId,
-      selectedPrinterName: agentSession.selectedPrinterName,
-    });
-
-    const runtime = await startAgentRuntime("agent-stored");
-    emitAgentSession();
-    return { success: true, runtime, session: sanitizeAgentSession() };
-  } catch (error) {
-    return {
-      success: false,
-      error: error?.message || "Could not save desktop agent credential.",
-      session: sanitizeAgentSession(),
-    };
-  }
-}
-
-async function restoreStoredDesktopAgent() {
-  try {
-    const agentPath = getDesktopAgentPath();
-    if (!fs.existsSync(agentPath)) return { success: true, restored: false };
-
-    const stored = JSON.parse(await fs.promises.readFile(agentPath, "utf8"));
-    const agent = normalizeDesktopAgentPayload(decodeDesktopAuth(stored));
-    const restored = applyStoredAgentToSession(agent);
-
-    if (restored) {
-      await saveConfig({
-        deviceId: agentSession.deviceId,
-        deviceName: agentSession.deviceName,
-        agentId: agentSession.agentId,
-        hubId: agentSession.hubId,
-        selectedPrinterName: agentSession.selectedPrinterName,
-      });
-      console.log("[DESKTOP AGENT] restored stored agent credential", {
-        agentId: agentSession.agentId,
-        hubId: agentSession.hubId,
-        deviceId: agentSession.deviceId,
-      });
-    }
-
-    return { success: true, restored };
-  } catch (error) {
-    console.warn("[DESKTOP AGENT RESTORE FAILED]", error?.message || error);
-    return { success: false, restored: false, error: error?.message || "Could not restore desktop agent credential." };
-  }
-}
-
-async function clearStoredDesktopAgent() {
-  try {
-    await fs.promises.rm(getDesktopAgentPath(), { force: true });
-    stopAgentRuntime("agent-cleared");
-    agentSession.agentId = "";
-    agentSession.hubId = "";
-    agentSession.accessToken = "";
-    agentSession.pairedAt = "";
-    agentSession.pairingCode = "";
-    agentSession.pairingSessionId = "";
-    agentSession.expiresAt = "";
-    agentSession.lastJobPollError = "";
-    agentSession.lastJobPollMessage = "";
-    emitAgentSession();
-    return { success: true, session: sanitizeAgentSession() };
-  } catch (error) {
-    return {
-      success: false,
-      error: error?.message || "Could not clear desktop agent credential.",
-      session: sanitizeAgentSession(),
-    };
-  }
-}
-
-async function migrateFileLocalStorageAuth() {
-  if (!app.isPackaged) return;
-
-  const existing = await getStoredDesktopAuth();
-  if (existing?.auth?.token && existing.auth.user) return;
-
-  const localIndex = getProductionIndexPath();
-  if (!fs.existsSync(localIndex)) return;
-
-  const migrationWindow = new BrowserWindow({
-    show: false,
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false,
-    },
-  });
-
-  try {
-    await migrationWindow.loadFile(localIndex);
-    const stored = await migrationWindow.webContents.executeJavaScript(`(() => {
-      const token = localStorage.getItem("printease_token");
-      const userText = localStorage.getItem("printease_user");
-      return { token, userText };
-    })()`);
-
-    if (stored?.token && stored?.userText) {
-      const user = JSON.parse(stored.userText);
-      await setStoredDesktopAuth(null, { token: stored.token, user });
-      console.log("[DESKTOP AUTH] migrated file localStorage auth");
-    }
-  } catch (error) {
-    console.warn("[DESKTOP AUTH MIGRATION FAILED]", error?.message || error);
-  } finally {
-    migrationWindow.destroy();
-  }
-}
-
-async function checkBackendHealth() {
-  const backendUrl = getBackendUrl({ packaged: app.isPackaged });
-  const apiBaseUrl = getApiBaseUrl({ packaged: app.isPackaged });
-
-  try {
-    const response = await fetch(`${apiBaseUrl}/health`, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-      },
-    });
-    const data = await response.json().catch(() => null);
-
-    return {
-      success: response.ok,
-      status: response.status,
-      backendUrl,
-      apiBaseUrl,
-      data,
-    };
-  } catch (error) {
-    return {
-      success: false,
-      backendUrl,
-      apiBaseUrl,
-      error: error.message || "Could not reach backend health endpoint.",
-    };
-  }
-}
-
-async function reportPrinterDiagnostic(event, result) {
-  try {
-    await fetch(`${getApiBaseUrl({ packaged: app.isPackaged })}/desktop/printer-diagnostics`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify({
-        event,
-        deviceId: agentSession.deviceId || null,
-        deviceName: agentSession.deviceName || null,
-        platform: process.platform,
-        version: VERSION,
-        paired: Boolean(agentSession.accessToken),
-        result,
-      }),
-    });
-  } catch (error) {
-    console.warn("[DESKTOP PRINTER DIAGNOSTIC REPORT FAILED]", error.message || error);
-  }
-}
-
 function isAgentPaired() {
   return Boolean(agentSession.accessToken && agentSession.agentId && agentSession.hubId);
 }
-
 function emitAgentSession() {
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) {
@@ -743,7 +331,6 @@ function emitAgentSession() {
     }
   }
 }
-
 function emitPrinterResult(result) {
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) {
@@ -751,1100 +338,211 @@ function emitPrinterResult(result) {
     }
   }
 }
-
-async function syncPrintersToCloud(printerResult, event = "printers:sync") {
-  if (!isAgentPaired()) {
-    const result = {
-      success: false,
-      message: "Pair desktop before syncing printers to cloud.",
-      skipped: true,
-    };
-    agentSession.lastPrinterSyncError = result.message;
-    emitAgentSession();
-    return result;
-  }
-
-  if (!printerResult?.success) {
-    const result = {
-      success: false,
-      message: printerResult?.error || printerResult?.message || "Local printer discovery failed; cloud sync skipped.",
-    };
-    agentSession.lastPrinterSyncError = result.message;
-    emitAgentSession();
-    return result;
-  }
-
-  const syncResult = await syncPrinters({
-    agentToken: agentSession.accessToken,
-    printers: (printerResult.printers || []).map((printer) => ({
-      ...printer,
-      isDefault: agentSession.selectedPrinterName
-        ? printer.printerName === agentSession.selectedPrinterName
-        : Boolean(printer.isDefault),
-    })),
-  });
-
-  if (syncResult.success) {
-    agentSession.lastPrinterSyncAt = new Date().toISOString();
-    agentSession.lastPrinterSyncError = "";
-    console.log("[DESKTOP AGENT BACKGROUND] printer sync success", {
-      event,
-      printerCount: printerResult.printers?.length || 0,
-    });
-  } else {
-    agentSession.lastPrinterSyncError = syncResult.message || "Cloud printer sync failed.";
-    console.warn("[DESKTOP AGENT BACKGROUND] printer sync fail", {
-      event,
-      message: agentSession.lastPrinterSyncError,
-    });
-  }
-
-  console.log("[DESKTOP PRINTER CLOUD SYNC]", JSON.stringify({
-    event,
-    success: syncResult.success,
-    printerCount: printerResult.printers?.length || 0,
-    message: syncResult.message,
-  }, null, 2));
-  emitAgentSession();
-  return syncResult;
-}
-
-async function applyPrinterDiscoveryResult(result, event) {
-  latestPrinterResult = result;
-  emitPrinterResult(result);
-
-  if (isAgentPaired()) {
-    const cloudSync = await syncPrintersToCloud(result, event);
-    latestPrinterResult = { ...result, cloudSync };
-    emitPrinterResult(latestPrinterResult);
-    return latestPrinterResult;
-  }
-
-  agentSession.lastPrinterSyncError = result?.success
-    ? "Printer detected locally but not synced to hub. Pair desktop first."
-    : result?.message || result?.error || "Local printer discovery failed.";
-  emitAgentSession();
-  return result;
-}
-
-async function refreshLocalPrinterResult(event) {
-  const result = await listPrinters();
-  console.log("[DESKTOP PRINTERS]", JSON.stringify(result, null, 2));
-  await reportPrinterDiagnostic(event, result);
-  return applyPrinterDiscoveryResult(result, event);
-}
-
-async function syncLatestPrinterStatus(event) {
-  const result = await listPrinters();
-  console.log("[DESKTOP PRINTER STATUS SYNC]", JSON.stringify({
-    event,
-    success: result.success,
-    printerCount: result.printers?.length || 0,
-    defaultPrinter: result.defaultPrinter || null,
-    message: result.message || result.error || "Printer status discovered locally.",
-  }, null, 2));
-  return applyPrinterDiscoveryResult(result, event);
-}
-
 function reportStartupPrinterDiagnostics() {
-  refreshLocalPrinterResult("desktop:startup-list")
-    .then((result) => {
-      console.log("[DESKTOP STARTUP PRINTERS]", JSON.stringify(result, null, 2));
-    })
-    .catch((error) => {
-      console.warn("[DESKTOP STARTUP PRINTERS FAILED]", error.message || error);
-    });
-
-  diagnosePrinters()
-    .then(async (result) => {
-      console.log("[DESKTOP STARTUP PRINTER DIAGNOSTICS]", JSON.stringify(result, null, 2));
-      await reportPrinterDiagnostic("desktop:startup-diagnose", result);
-    })
-    .catch((error) => {
-      console.warn("[DESKTOP STARTUP PRINTER DIAGNOSTICS FAILED]", error.message || error);
-    });
-}
-
-function sanitizeAgentSession() {
-  return {
-    success: true,
-    deviceId: agentSession.deviceId,
-    deviceName: agentSession.deviceName,
-    pairingCode: agentSession.pairingCode,
-    pairingSessionId: agentSession.pairingSessionId,
-    expiresAt: agentSession.expiresAt,
-    agentId: agentSession.agentId,
-    hubId: agentSession.hubId,
-    paired: Boolean(agentSession.accessToken),
-    pairedAt: agentSession.pairedAt,
-    lastHeartbeatAt: agentSession.lastHeartbeatAt,
-    lastHeartbeatError: agentSession.lastHeartbeatError,
-    selectedPrinterName: agentSession.selectedPrinterName,
-    lastPrinterSyncAt: agentSession.lastPrinterSyncAt,
-    lastPrinterSyncError: agentSession.lastPrinterSyncError,
-    lastJobPollAt: agentSession.lastJobPollAt,
-    lastJobPollError: agentSession.lastJobPollError,
-    lastJobPollMessage: agentSession.lastJobPollMessage,
-    predownloadRunning: Boolean(isPredownloading || agentSession.predownloadRunning),
-    predownloadLoopRunning: Boolean(predownloadTimer || agentSession.predownloadLoopRunning),
-    isConverting: Boolean(isConverting),
-    conversionLoopRunning: Boolean(conversionTimer),
-    lastConversionAt: agentSession.lastConversionAt,
-    lastConversionError: agentSession.lastConversionError,
-    lastConversionMessage: agentSession.lastConversionMessage,
-    converterPath: agentSession.converterPath,
-    lastPredownloadAt: agentSession.lastPredownloadAt,
-    lastPredownloadError: agentSession.lastPredownloadError,
-    lastPredownloadMessage: agentSession.lastPredownloadMessage,
-    lastPredownloadChecked: agentSession.lastPredownloadChecked,
-    lastPredownloadCached: agentSession.lastPredownloadCached,
-    lastPredownloadFailures: agentSession.lastPredownloadFailures,
-    heartbeatRunning: Boolean(heartbeatTimer),
-    printerSyncRunning: Boolean(printerSyncTimer),
-    polling: Boolean(jobPollTimer),
-    autoPrintRunning: Boolean(heartbeatTimer && printerSyncTimer && jobPollTimer),
-  };
-}
-
-async function ensureDeviceIdentity(deviceName) {
-  if (agentSession.deviceId && agentSession.deviceName) return;
-
-  const savedConfig = await loadConfig();
-  agentSession.deviceId = savedConfig.deviceId || randomUUID();
-  agentSession.deviceName = deviceName || savedConfig.deviceName || os.hostname() || "PrintEase Desktop";
-  agentSession.selectedPrinterName = savedConfig.selectedPrinterName || agentSession.selectedPrinterName || "";
-
-  await saveConfig({
-    deviceId: agentSession.deviceId,
-    deviceName: agentSession.deviceName,
-    agentId: agentSession.agentId,
-    hubId: agentSession.hubId,
-    selectedPrinterName: agentSession.selectedPrinterName,
+  refreshLocalPrinterResult("desktop:startup-list").then(result => {
+    console.log("[DESKTOP STARTUP PRINTERS]", JSON.stringify(result, null, 2));
+  }).catch(error => {
+    console.warn("[DESKTOP STARTUP PRINTERS FAILED]", error.message || error);
+  });
+  diagnosePrinters().then(async result => {
+    console.log("[DESKTOP STARTUP PRINTER DIAGNOSTICS]", JSON.stringify(result, null, 2));
+    await reportPrinterDiagnostic("desktop:startup-diagnose", result);
+  }).catch(error => {
+    console.warn("[DESKTOP STARTUP PRINTER DIAGNOSTICS FAILED]", error.message || error);
   });
 }
-
 function findPrinterByName(printerResult, printerName) {
   const printers = Array.isArray(printerResult?.printers) ? printerResult.printers : [];
-  return printers.find((printer) => (
-    printer.printerName === printerName ||
-    printer.systemPrinterId === printerName ||
-    printer.displayName === printerName
-  )) || null;
+  return printers.find(printer => printer.printerName === printerName || printer.systemPrinterId === printerName || printer.displayName === printerName) || null;
 }
-
 function resolveLocalPrinterName() {
   if (agentSession.selectedPrinterName) return agentSession.selectedPrinterName;
   if (!latestPrinterResult) return "";
-
   const printers = Array.isArray(latestPrinterResult.printers) ? latestPrinterResult.printers : [];
-  const preferred = printers.find((printer) => printer.isDefault) || latestPrinterResult.defaultPrinter;
-
+  const preferred = printers.find(printer => printer.isDefault) || latestPrinterResult.defaultPrinter;
   return preferred?.printerName || printers[0]?.printerName || "";
 }
-
-async function selectDesktopPrinter(_event, payload = {}) {
-  const printerName = typeof payload === "string" ? payload : payload?.printerName;
-
-  if (!printerName) {
-    return {
-      success: false,
-      message: "Choose a printer before saving selection.",
-      session: sanitizeAgentSession(),
-    };
-  }
-
-  const printerResult = latestPrinterResult || await refreshLocalPrinterResult("printers:select-load");
-  const printer = findPrinterByName(printerResult, printerName);
-
-  if (!printer) {
-    return {
-      success: false,
-      message: "Selected printer was not found locally. Refresh printers and try again.",
-      session: sanitizeAgentSession(),
-    };
-  }
-
-  agentSession.selectedPrinterName = printer.printerName;
-  await saveConfig({
-    deviceId: agentSession.deviceId,
-    deviceName: agentSession.deviceName,
-    agentId: agentSession.agentId,
-    hubId: agentSession.hubId,
-    selectedPrinterName: agentSession.selectedPrinterName,
-  });
-
-  latestPrinterResult = {
-    ...printerResult,
-    printers: (printerResult.printers || []).map((item) => ({
-      ...item,
-      isDefault: item.printerName === agentSession.selectedPrinterName,
-    })),
-  };
-  emitPrinterResult(latestPrinterResult);
-
-  let heartbeat = null;
-  let printerSync = null;
-  if (isAgentPaired()) {
-    heartbeat = await sendAgentHeartbeat();
-    printerSync = await syncPrintersToCloud(latestPrinterResult, "printers:selected");
-    startJobPollLoop("printer-selected", { printerName: agentSession.selectedPrinterName });
-  } else {
-    agentSession.lastPrinterSyncError = "Printer selected locally but not synced to hub. Pair desktop first.";
-  }
-
-  emitAgentSession();
-
-  return {
-    success: true,
-    message: "Selected printer " + agentSession.selectedPrinterName + ".",
-    printer: findPrinterByName(latestPrinterResult, agentSession.selectedPrinterName),
-    heartbeat,
-    printerSync,
-    session: sanitizeAgentSession(),
-  };
-}
-
 function requirePairedAgent() {
   if (!agentSession.accessToken) {
     return {
       success: false,
       message: "Pair this desktop with a print hub before using agent actions.",
-      session: sanitizeAgentSession(),
+      session: sanitizeAgentSession()
     };
   }
-
   return null;
 }
-
-async function startAgentPairing(_event, payload = {}) {
-  await ensureDeviceIdentity(payload.deviceName);
-
-  const result = await startPairing({
-    deviceId: agentSession.deviceId,
-    agentName: agentSession.deviceName,
-  });
-
-  if (result.success) {
-    agentSession.pairingCode = result.pairingCode || "";
-    agentSession.pairingSessionId = result.pairingSessionId || "";
-    agentSession.expiresAt = result.expiresAt || "";
-  }
-
-  return {
-    ...result,
-    session: sanitizeAgentSession(),
-  };
-}
-
-async function confirmAgentPairing() {
-  await ensureDeviceIdentity();
-
-  if (!agentSession.pairingSessionId) {
-    return {
-      success: false,
-      paired: false,
-      message: "Start pairing before confirming.",
-      session: sanitizeAgentSession(),
-    };
-  }
-
-  const result = await confirmPairing({
-    pairingSessionId: agentSession.pairingSessionId,
-    deviceId: agentSession.deviceId,
-  });
-
-  const returnedAgentToken = result.accessToken || result.agentToken;
-
-  if (result.success && result.paired && returnedAgentToken) {
-    agentSession.accessToken = returnedAgentToken;
-    agentSession.agentId = result.agentId || "";
-    agentSession.hubId = result.hubId || result.shopId || "";
-    agentSession.pairedAt = new Date().toISOString();
-    agentSession.pairingCode = "";
-
-    await saveConfig({
-      deviceId: agentSession.deviceId,
-      deviceName: agentSession.deviceName,
-      agentId: agentSession.agentId,
-      hubId: agentSession.hubId,
-      selectedPrinterName: agentSession.selectedPrinterName,
-    });
-    await setStoredDesktopAgent(null, {
-      agentToken: agentSession.accessToken,
-      agentId: agentSession.agentId,
-      hubId: agentSession.hubId,
-      deviceId: agentSession.deviceId,
-      deviceName: agentSession.deviceName,
-      pairedAt: agentSession.pairedAt,
-      selectedPrinterName: agentSession.selectedPrinterName,
-    });
-
-    result.runtime = await startAgentRuntime("agent:paired");
-  }
-
-  return {
-    ...result,
-    accessToken: undefined,
-    agentToken: undefined,
-    refreshToken: undefined,
-    session: sanitizeAgentSession(),
-  };
-}
-
-async function sendAgentHeartbeat() {
-  const pairingError = requirePairedAgent();
-  if (pairingError) return pairingError;
-
-  const result = await sendHeartbeat({
-    agentToken: agentSession.accessToken,
-    selectedPrinter: agentSession.selectedPrinterName,
-  });
-
-  if (result.success) {
-    agentSession.lastHeartbeatAt = new Date().toISOString();
-    agentSession.lastHeartbeatError = "";
-    console.log("[DESKTOP AGENT BACKGROUND] heartbeat success", {
-      agentId: agentSession.agentId || null,
-      selectedPrinterName: agentSession.selectedPrinterName || null,
-    });
-  } else {
-    agentSession.lastHeartbeatError = result.message || "Heartbeat failed.";
-    console.warn("[DESKTOP AGENT BACKGROUND] heartbeat fail", {
-      status: result.status || null,
-      message: agentSession.lastHeartbeatError,
-    });
-    if (result.status === 401 || result.status === 403) {
-      await clearStoredDesktopAgent();
-      agentSession.lastHeartbeatError = "Stored desktop agent credential was rejected. Register or pair this desktop again.";
-    }
-  }
-
-  emitAgentSession();
-  return {
-    ...result,
-    session: sanitizeAgentSession(),
-  };
-}
-
 function startHeartbeatLoop() {
   if (!isAgentPaired()) {
     return {
       success: false,
       message: "Pair desktop before starting heartbeat.",
-      session: sanitizeAgentSession(),
+      session: sanitizeAgentSession()
     };
   }
-
   if (heartbeatTimer) {
     console.log("[DESKTOP AGENT BACKGROUND] already running heartbeat");
     return {
       success: true,
       message: "Heartbeat loop is already running.",
-      session: sanitizeAgentSession(),
+      session: sanitizeAgentSession()
     };
   }
-
   heartbeatTimer = setInterval(() => {
-    sendAgentHeartbeat().catch((error) => {
+    sendAgentHeartbeat().catch(error => {
       agentSession.lastHeartbeatError = error.message || "Heartbeat failed.";
       emitAgentSession();
       console.warn("[DESKTOP HEARTBEAT FAILED]", error.message || error);
     });
   }, HEARTBEAT_INTERVAL_MS);
-
   heartbeatTimer.unref?.();
   emitAgentSession();
   return {
     success: true,
     message: "Heartbeat loop started.",
-    session: sanitizeAgentSession(),
+    session: sanitizeAgentSession()
   };
 }
-
 function startPrinterSyncLoop() {
   if (!isAgentPaired()) {
     return {
       success: false,
       message: "Pair desktop before starting cloud printer sync.",
-      session: sanitizeAgentSession(),
+      session: sanitizeAgentSession()
     };
   }
-
   if (printerSyncTimer) {
     console.log("[DESKTOP AGENT BACKGROUND] already running printer sync");
     return {
       success: true,
       message: "Printer sync loop is already running.",
-      session: sanitizeAgentSession(),
+      session: sanitizeAgentSession()
     };
   }
-
   printerSyncTimer = setInterval(() => {
-    syncLatestPrinterStatus("agent:printer-sync-loop").catch((error) => {
+    syncLatestPrinterStatus("agent:printer-sync-loop").catch(error => {
       agentSession.lastPrinterSyncError = error.message || "Printer sync failed.";
       emitAgentSession();
       console.warn("[DESKTOP PRINTER SYNC FAILED]", error.message || error);
     });
   }, PRINTER_SYNC_INTERVAL_MS);
-
   printerSyncTimer.unref?.();
   emitAgentSession();
   return {
     success: true,
     message: "Printer sync loop started.",
-    session: sanitizeAgentSession(),
+    session: sanitizeAgentSession()
   };
 }
-
-function stopAgentRuntime(reason = "stopped") {
-  if (heartbeatTimer) {
-    clearInterval(heartbeatTimer);
-    heartbeatTimer = null;
-  }
-
-  if (printerSyncTimer) {
-    clearInterval(printerSyncTimer);
-    printerSyncTimer = null;
-  }
-
-  if (jobPollTimer) {
-    clearInterval(jobPollTimer);
-    jobPollTimer = null;
-  }
-
-  if (predownloadTimer) {
-    clearInterval(predownloadTimer);
-    predownloadTimer = null;
-  }
-
-  if (conversionTimer) {
-    clearInterval(conversionTimer);
-    conversionTimer = null;
-  }
-
-  isPollingJobs = false;
-  isPredownloading = false;
-  isConverting = false;
-  agentSession.predownloadRunning = false;
-  agentSession.predownloadLoopRunning = false;
-  console.log("[DESKTOP AGENT BACKGROUND] stopped", reason);
-  emitAgentSession();
-  return {
-    success: true,
-    message: "Background desktop agent stopped.",
-    reason,
-    session: sanitizeAgentSession(),
-  };
-}
-
-async function runPredownloadNow(reason = "manual") {
-  const pairingError = requirePairedAgent();
-  if (pairingError) return pairingError;
-
-  if (isPredownloading) {
-    return {
-      success: true,
-      skipped: true,
-      message: "Predownload already running.",
-      session: sanitizeAgentSession(),
-    };
-  }
-
-  isPredownloading = true;
-  agentSession.predownloadRunning = true;
-  agentSession.lastPredownloadMessage = "Checking pending documents for conversion.";
-  agentSession.lastPredownloadError = "";
-  emitAgentSession();
-
-  try {
-    const result = await predownloadPendingDocuments({
-      agentToken: agentSession.accessToken,
-    });
-
-    agentSession.lastPredownloadAt = new Date().toISOString();
-    agentSession.lastPredownloadChecked = Number(result?.checked || 0);
-    agentSession.lastPredownloadCached = Number(result?.cached || 0);
-    agentSession.lastPredownloadFailures = Array.isArray(result?.failures) ? result.failures.length : 0;
-    agentSession.lastPredownloadError = result?.success === false ? (result.message || "Predownload failed.") : "";
-    agentSession.lastPredownloadMessage = result?.success === false
-      ? agentSession.lastPredownloadError
-      : `Checked ${agentSession.lastPredownloadChecked}, cached/prepared ${agentSession.lastPredownloadCached}, failures ${agentSession.lastPredownloadFailures}.`;
-
-    if (result?.cached) {
-      console.log("[DESKTOP AGENT BACKGROUND] predownload cached pending documents", {
-        reason,
-        cached: result.cached,
-        checked: result.checked,
-        failures: Array.isArray(result.failures) ? result.failures.length : 0,
-      });
-    }
-
-    return {
-      ...result,
-      session: sanitizeAgentSession(),
-    };
-  } catch (error) {
-    agentSession.lastPredownloadAt = new Date().toISOString();
-    agentSession.lastPredownloadError = error.message || "Could not predownload pending documents.";
-    agentSession.lastPredownloadMessage = agentSession.lastPredownloadError;
-    return {
-      success: false,
-      message: agentSession.lastPredownloadError,
-      session: sanitizeAgentSession(),
-    };
-  } finally {
-    isPredownloading = false;
-    agentSession.predownloadRunning = false;
-    emitAgentSession();
-  }
-}
-
-async function pollJobsNow(reason = "manual", payload = {}) {
-  const pairingError = requirePairedAgent();
-  if (pairingError) return pairingError;
-
-  if (isPollingJobs) {
-    console.log("[DESKTOP AGENT BACKGROUND] poll skipped because previous poll still running", { reason });
-    return {
-      success: true,
-      skipped: true,
-      message: "Job poll already running.",
-      session: sanitizeAgentSession(),
-    };
-  }
-
-  isPollingJobs = true;
-
-  try {
-    if (!payload.printerName && !resolveLocalPrinterName()) {
-      await syncLatestPrinterStatus(`${reason}:resolve-printer`).catch(() => null);
-    }
-
-    const printerName = payload.printerName || resolveLocalPrinterName();
-    const knownPrinters = Array.isArray(latestPrinterResult?.printers) ? latestPrinterResult.printers : [];
-    if (!printerName && knownPrinters.length === 0) {
-      agentSession.lastJobPollAt = new Date().toISOString();
-      agentSession.lastJobPollError = "No local printer selected/available.";
-      agentSession.lastJobPollMessage = "Auto-print is online but waiting for a local printer.";
-      console.warn("[DESKTOP AGENT BACKGROUND] no local printer selected/available", { reason });
-      emitAgentSession();
-      return {
-        success: true,
-        skipped: true,
-        message: agentSession.lastJobPollError,
-        session: sanitizeAgentSession(),
-      };
-    }
-
-    const result = await processNextJob({
-      agentToken: agentSession.accessToken,
-      printerName,
-    });
-
-    agentSession.lastJobPollAt = new Date().toISOString();
-
-    if (result.success && result.job) {
-      agentSession.lastJobPollError = "";
-      agentSession.lastJobPollMessage = `Printed job ${result.job.jobId || result.job.orderId || ""}`.trim();
-      console.log("[DESKTOP AGENT BACKGROUND] job poll success/job printed", {
-        reason,
-        printerName,
-        jobId: result.job?.jobId || null,
-        orderId: result.job?.orderId || null,
-      });
-    } else if (result.success) {
-      agentSession.lastJobPollError = "";
-      agentSession.lastJobPollMessage = result.message || "No jobs.";
-      console.log("[DESKTOP AGENT BACKGROUND] job poll success/no jobs", {
-        reason,
-        printerName: printerName || null,
-      });
-    } else if (result.status === 401 || result.status === 403) {
-      agentSession.lastJobPollError = "Stored desktop agent credential was rejected. Register or pair this desktop again.";
-      console.warn("[DESKTOP AGENT BACKGROUND] stopped auth rejected", {
-        reason,
-        status: result.status,
-        message: result.message,
-      });
-      await clearStoredDesktopAgent();
-    } else if (result.job) {
-      agentSession.lastJobPollError = result.message || "Print job failed.";
-      agentSession.lastJobPollMessage = `Job failed ${result.job.jobId || result.job.orderId || ""}`.trim();
-      console.warn("[DESKTOP AGENT BACKGROUND] job poll success/job failed", {
-        reason,
-        printerName,
-        jobId: result.job?.jobId || null,
-        orderId: result.job?.orderId || null,
-        message: result.message,
-      });
-    }
-
-    emitAgentSession();
-    return {
-      ...result,
-      selectedPrinterName: printerName,
-      session: sanitizeAgentSession(),
-    };
-  } catch (error) {
-    agentSession.lastJobPollAt = new Date().toISOString();
-    agentSession.lastJobPollError = error.message || "Could not poll print jobs.";
-    console.warn("[DESKTOP AGENT BACKGROUND] job poll fail", {
-      reason,
-      printerName: printerName || null,
-      message: agentSession.lastJobPollError,
-    });
-    emitAgentSession();
-    return {
-      success: false,
-      message: agentSession.lastJobPollError,
-      session: sanitizeAgentSession(),
-    };
-  } finally {
-    isPollingJobs = false;
-  }
-}
-
 function startPredownloadLoop(reason = "manual-start", payload = {}) {
   const pairingError = requirePairedAgent();
   if (pairingError) return pairingError;
-
   if (predownloadTimer) {
     return {
       success: true,
       message: "Predownload loop is already running.",
-      session: sanitizeAgentSession(),
+      session: sanitizeAgentSession()
     };
   }
-
   const intervalMs = Math.max(60000, Number(payload.predownloadIntervalMs) || PREDOWNLOAD_INTERVAL_MS);
   predownloadTimer = setInterval(() => {
-    runPredownloadNow("predownload-loop").catch((error) => {
+    runPredownloadNow("predownload-loop").catch(error => {
       console.warn("[DESKTOP AGENT BACKGROUND] predownload fail", error.message || error);
     });
   }, intervalMs);
   predownloadTimer.unref?.();
   agentSession.predownloadLoopRunning = true;
-
-  runPredownloadNow(reason).catch((error) => {
+  runPredownloadNow(reason).catch(error => {
     console.warn("[DESKTOP AGENT BACKGROUND] initial predownload fail", error.message || error);
   });
-
-  console.log("[DESKTOP AGENT BACKGROUND] predownload loop started", { reason, intervalMs });
+  console.log("[DESKTOP AGENT BACKGROUND] predownload loop started", {
+    reason,
+    intervalMs
+  });
   return {
     success: true,
     message: "Predownload loop started.",
     intervalMs,
-    session: sanitizeAgentSession(),
+    session: sanitizeAgentSession()
   };
 }
-
-async function runConversionNow(reason = "loop") {
-  const pairingError = requirePairedAgent();
-  if (pairingError) return pairingError;
-
-  if (isConverting) return { success: true, skipped: true };
-
-  isConverting = true;
-  agentSession.lastConversionMessage = "Running conversion loop...";
-  emitAgentSession();
-
-  try {
-    const result = await processNextConversionJob({
-      agentToken: agentSession.accessToken,
-    });
-    
-    agentSession.lastConversionAt = new Date().toISOString();
-    
-    if (result.success && result.processed) {
-      agentSession.lastConversionError = "";
-      agentSession.lastConversionMessage = `Converted ${result.documentId}.`;
-      if (result.details && result.details.enginePath) {
-        agentSession.converterPath = result.details.enginePath;
-      }
-    } else if (result.success) {
-      agentSession.lastConversionError = "";
-      agentSession.lastConversionMessage = "No pending conversions.";
-    } else {
-      agentSession.lastConversionError = result.message || "Conversion failed.";
-      agentSession.lastConversionMessage = agentSession.lastConversionError;
-      if (result.details && result.details.enginePath) {
-        agentSession.converterPath = result.details.enginePath;
-      }
-    }
-  } catch (error) {
-    agentSession.lastConversionError = error.message || "Conversion error.";
-    agentSession.lastConversionMessage = agentSession.lastConversionError;
-  } finally {
-    isConverting = false;
-    emitAgentSession();
-  }
-}
-
 function startConversionLoop(reason = "manual-start") {
   const pairingError = requirePairedAgent();
   if (pairingError) return pairingError;
-
-  if (conversionTimer) return { success: true, message: "Conversion loop is already running." };
-
+  if (conversionTimer) return {
+    success: true,
+    message: "Conversion loop is already running."
+  };
   conversionTimer = setInterval(() => {
     runConversionNow("conversion-loop").catch(() => {});
   }, 4000);
   conversionTimer.unref?.();
-
   runConversionNow(reason).catch(() => {});
-
-  return { success: true, message: "Conversion loop started." };
+  return {
+    success: true,
+    message: "Conversion loop started."
+  };
 }
-
 function startJobPollLoop(reason = "manual-start", payload = {}) {
   const pairingError = requirePairedAgent();
   if (pairingError) return pairingError;
-
   if (jobPollTimer) {
-    console.log("[DESKTOP AGENT BACKGROUND] already running job polling", { reason });
+    console.log("[DESKTOP AGENT BACKGROUND] already running job polling", {
+      reason
+    });
     return {
       success: true,
       message: "Job polling is already running.",
-      session: sanitizeAgentSession(),
+      session: sanitizeAgentSession()
     };
   }
-
   const intervalMs = Math.max(3000, Number(payload.intervalMs) || JOB_POLL_INTERVAL_MS);
   jobPollTimer = setInterval(() => {
-    pollJobsNow("job-poll-loop").catch((error) => {
+    pollJobsNow("job-poll-loop").catch(error => {
       agentSession.lastJobPollError = error.message || "Job poll failed.";
       emitAgentSession();
       console.warn("[DESKTOP AGENT BACKGROUND] job poll fail", agentSession.lastJobPollError);
     });
   }, intervalMs);
   jobPollTimer.unref?.();
-
-  pollJobsNow(reason, payload).catch((error) => {
+  pollJobsNow(reason, payload).catch(error => {
     agentSession.lastJobPollError = error.message || "Initial job poll failed.";
     emitAgentSession();
   });
-
   console.log("[DESKTOP AGENT BACKGROUND] job polling started", {
     reason,
     intervalMs,
-    selectedPrinterName: payload.printerName || resolveLocalPrinterName() || null,
+    selectedPrinterName: payload.printerName || resolveLocalPrinterName() || null
   });
   emitAgentSession();
   return {
     success: true,
     message: "Job polling started.",
     intervalMs,
-    session: sanitizeAgentSession(),
+    session: sanitizeAgentSession()
   };
 }
-
-async function startAgentRuntime(reason) {
-  console.log("[DESKTOP AGENT BACKGROUND]", reason, {
-    paired: isAgentPaired(),
-    selectedPrinterName: agentSession.selectedPrinterName || null,
-  });
-  const heartbeat = await sendAgentHeartbeat();
-  const printerResult = await refreshLocalPrinterResult(reason + ":printer-sync");
-  const loop = startHeartbeatLoop();
-  const printerLoop = startPrinterSyncLoop();
-  const jobLoop = startJobPollLoop(reason + ":job-poll");
-  const predownloadLoop = startPredownloadLoop(reason + ":predownload");
-  const conversionLoop = startConversionLoop(reason + ":conversion");
-
-  return {
-    success: Boolean(heartbeat.success && loop.success && printerLoop.success && jobLoop.success && predownloadLoop.success && conversionLoop.success),
-    heartbeat,
-    printerResult,
-    loop,
-    printerLoop,
-    jobLoop,
-    predownloadLoop,
-    conversionLoop,
-    session: sanitizeAgentSession(),
-  };
-}
-
-async function syncAgentPrinters() {
-  const pairingError = requirePairedAgent();
-  if (pairingError) return pairingError;
-
-  const printerResult = await refreshLocalPrinterResult("agent:manual-printer-sync");
-  if (!printerResult.success) return {
-    ...printerResult,
-    session: sanitizeAgentSession(),
-  };
-
-  const heartbeat = await sendAgentHeartbeat();
-  const printerSync = printerResult.cloudSync || await syncPrintersToCloud(printerResult, "agent:manual-printer-sync");
-  const runtime = startJobPollLoop("manual-printer-sync");
-
-  return {
-    success: Boolean(heartbeat.success && printerSync.success && runtime.success),
-    heartbeat,
-    printerSync,
-    runtime,
-    localPrinters: printerResult.printers,
-    session: sanitizeAgentSession(),
-  };
-}
-
-async function pollAgentOnce(_event, payload = {}) {
-  return pollJobsNow("manual-poll", payload);
-}
-
-function startAgentPolling(_event, payload = {}) {
-  return startJobPollLoop("manual-start", payload);
-}
-
-function stopAgentPolling() {
-  if (jobPollTimer) {
-    clearInterval(jobPollTimer);
-    jobPollTimer = null;
-    console.log("[DESKTOP AGENT BACKGROUND] job polling stopped manual-stop");
-  }
-
-  if (predownloadTimer) {
-    clearInterval(predownloadTimer);
-    predownloadTimer = null;
-    agentSession.predownloadLoopRunning = false;
-    console.log("[DESKTOP AGENT BACKGROUND] predownload stopped manual-stop");
-  }
-
-  if (conversionTimer) {
-    clearInterval(conversionTimer);
-    conversionTimer = null;
-    isConverting = false;
-    console.log("[DESKTOP AGENT BACKGROUND] conversion stopped manual-stop");
-  }
-
-  emitAgentSession();
-  return {
-    success: true,
-    message: "Job polling stopped.",
-    session: sanitizeAgentSession(),
-  };
-}
-
-function registerIpcHandlers() {
-  if (ipcHandlersRegistered) return;
-  ipcHandlersRegistered = true;
-
-  secureHandle("desktop:status", async () => {
-    const printerResult = latestPrinterResult || await refreshLocalPrinterResult("desktop:status");
-
-    return {
-      success: true,
-      isDesktop: true,
-      platform: process.platform,
-      backendUrl: getBackendUrl({ packaged: app.isPackaged }),
-      apiBaseUrl: getApiBaseUrl({ packaged: app.isPackaged }),
-      version: VERSION,
-      documentCache: {
-        directory: getDocumentCacheDirectory(),
-        maxAgeDays: getDocumentCacheMaxAgeDays(),
-        maxSizeBytes: getDocumentCacheMaxSizeBytes(),
-      },
-      printerResult,
-    };
-  }, app.isPackaged);
-
-  secureHandle("backend:health", () => checkBackendHealth(), app.isPackaged);
-  secureHandle("desktop:open-external-url", async (_event, url) => {
-    if (!url || typeof url !== "string") {
-      return { success: false, message: "URL is required." };
-    }
-
-    try {
-      const parsedUrl = new URL(url);
-      if (parsedUrl.protocol !== "https:") {
-        return { success: false, message: "Only HTTPS links can be opened externally." };
-      }
-
-      await shell.openExternal(parsedUrl.toString());
-      return { success: true };
-    } catch (error) {
-      return { success: false, message: error?.message || "Could not open link." };
-    }
-  }, app.isPackaged);
-  secureHandle("desktop:download-url", async (_event, payload = {}) => {
-    const url = typeof payload === "string" ? payload : payload.url;
-
-    if (!url || typeof url !== "string") {
-      return { success: false, message: "Download URL is required." };
-    }
-
-    try {
-      const parsedUrl = new URL(url);
-      if (parsedUrl.protocol !== "https:") {
-        return { success: false, message: "Only HTTPS files can be downloaded." };
-      }
-
-      if (!mainWindow || mainWindow.isDestroyed()) {
-        return { success: false, message: "Desktop window is not ready for download." };
-      }
-
-      mainWindow.webContents.downloadURL(parsedUrl.toString());
-      return { success: true };
-    } catch (error) {
-      return { success: false, message: error?.message || "Could not start download." };
-    }
-  }, app.isPackaged);
-  secureHandle("desktop:get-cached-document-url", async (_event, documentId) => {
-    const id = String(documentId || "").trim();
-    if (!id) {
-      return { success: false, message: "Document ID is required." };
-    }
-
-    const cachedDocumentPath = await findCachedDocument(id);
-    if (!cachedDocumentPath) {
-      return {
-        success: false,
-        message: "Document is not cached on this desktop yet.",
-      };
-    }
-
-    return {
-      success: true,
-      url: `${DESKTOP_PROTOCOL_ORIGIN}/cache/${encodeURIComponent(id)}`,
-    };
-  }, app.isPackaged);
-  secureHandle("desktop:print-html", async (_event, payload = {}) => {
-    const html = typeof payload.html === "string" ? payload.html : "";
-    const title = typeof payload.title === "string" ? payload.title.slice(0, 120) : "PrintEase";
-
-    if (!html || html.length > 250000) {
-      return { success: false, message: "Printable HTML is missing or too large." };
-    }
-
-    const printWindow = new BrowserWindow({
-      width: 900,
-      height: 1100,
-      show: false,
-      title,
-      parent: mainWindow || undefined,
-      webPreferences: {
-        contextIsolation: true,
-        nodeIntegration: false,
-        sandbox: true,
-      },
-    });
-
-    try {
-      await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
-      await new Promise((resolve, reject) => {
-        printWindow.webContents.print({ silent: false, printBackground: true }, (success, failureReason) => {
-          if (success) resolve();
-          else reject(new Error(failureReason || "Print was cancelled or failed."));
-        });
-      });
-      return { success: true };
-    } catch (error) {
-      return { success: false, message: error?.message || "Could not print QR." };
-    } finally {
-      if (!printWindow.isDestroyed()) {
-        printWindow.close();
-      }
-    }
-  }, app.isPackaged);
-  secureHandle("printers:list", () => refreshLocalPrinterResult("printers:list"), app.isPackaged);
-  secureHandle("printers:select", selectDesktopPrinter, app.isPackaged);
-  secureHandle("printers:diagnose", async () => {
-    const result = await diagnosePrinters();
-    console.log("[DESKTOP PRINTER DIAGNOSTICS]", JSON.stringify(result, null, 2));
-    await reportPrinterDiagnostic("printers:diagnose", result);
-    return result;
-  }, app.isPackaged);
-
-  secureHandle("printers:test-print", (_event, payload = {}) => {
-    const printerName = (typeof payload === "string" ? payload : payload?.printerName) || agentSession.selectedPrinterName;
-    return testPrint(printerName);
-  }, app.isPackaged);
-
-  secureHandle("printing:stop", () => stopPrinting(), app.isPackaged);
-  secureHandle("printer:diagnoseWindowsHelper", () => diagnoseWindowsPrintHelperSafe(), app.isPackaged);
-  secureHandle("conversion:diagnoseLibreOffice", () => diagnoseLibreOfficeSafe(), app.isPackaged);
-  secureHandle("agent:status", () => sanitizeAgentSession(), app.isPackaged);
-  secureHandle("agent:start-pairing", startAgentPairing, app.isPackaged);
-  secureHandle("agent:open-approval-url", async (_event, url) => {
-    if (!url || typeof url !== "string") {
-      return { success: false, message: "Approval URL is required." };
-    }
-
-    let approvalUrl;
-    try {
-      approvalUrl = new URL(url);
-      const allowedOrigin = new URL(getBackendUrl({ packaged: app.isPackaged })).origin;
-      if (approvalUrl.protocol !== "https:" || approvalUrl.origin !== allowedOrigin) {
-        return { success: false, message: "Approval URL is not trusted." };
-      }
-    } catch {
-      return { success: false, message: "Approval URL is invalid." };
-    }
-
-    try {
-      await shell.openExternal(approvalUrl.toString());
-      return { success: true, message: "Approval URL opened in browser." };
-    } catch (error) {
-      return { success: false, message: error?.message || "Could not open approval URL." };
-    }
-  }, app.isPackaged);
-  secureHandle("agent:confirm-pairing", confirmAgentPairing, app.isPackaged);
-  secureHandle("agent:heartbeat", async () => {
-    const result = await sendAgentHeartbeat();
-    if (result.success) startHeartbeatLoop();
-    return result;
-  }, app.isPackaged);
-  secureHandle("agent:sync-printers", syncAgentPrinters, app.isPackaged);
-  secureHandle("agent:predownload-now", () => runPredownloadNow("manual-conversion-check"), app.isPackaged);
-  secureHandle("agent:poll-once", pollAgentOnce, app.isPackaged);
-  secureHandle("agent:start-polling", startAgentPolling, app.isPackaged);
-  secureHandle("agent:stop-polling", stopAgentPolling, app.isPackaged);
-  secureHandle("updater:check", () => checkForUpdates(), app.isPackaged);
-  secureHandle("updater:status", () => getUpdateStatus(), app.isPackaged);
-  secureHandle("updater:install", () => installUpdateNow(), app.isPackaged);
-  secureHandle("desktopAuth:get", () => getStoredDesktopAuth(), app.isPackaged);
-  secureHandle("desktopAuth:set", setStoredDesktopAuth, app.isPackaged);
-  secureHandle("desktopAuth:clear", () => clearStoredDesktopAuth(), app.isPackaged);
-  secureHandle("desktopAgent:get", () => getStoredDesktopAgent(), app.isPackaged);
-  secureHandle("desktopAgent:set", setStoredDesktopAgent, app.isPackaged);
-  secureHandle("desktopAgent:clear", () => clearStoredDesktopAgent(), app.isPackaged);
-  secureHandle("desktopAgent:device-identity", async () => {
-    await ensureDeviceIdentity();
-    return {
-      success: true,
-      deviceId: agentSession.deviceId,
-      deviceName: agentSession.deviceName,
-    };
-  }, app.isPackaged);
-}
-
 function isAllowedNavigation(url) {
   if (url.startsWith("data:text/html")) return true;
   if (url.startsWith(DESKTOP_PROTOCOL_ORIGIN)) return true;
-
   if (app.isPackaged) {
     return false;
   }
-
   if (url.startsWith("file://")) return true;
-
   if (!USE_DEV_FRONTEND) {
     return false;
   }
-
   try {
     return new URL(url).origin === new URL(DEV_FRONTEND_URL).origin;
   } catch {
     return false;
   }
 }
-
 function createMainWindow() {
   console.log("[DESKTOP WINDOW]", {
     frontendUrl: DEV_FRONTEND_URL,
-    preload: PRELOAD_PATH,
+    preload: PRELOAD_PATH
   });
-
   mainWindow = new BrowserWindow({
     width: 1300,
     height: 850,
@@ -1857,23 +555,23 @@ function createMainWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      plugins: true,
-    },
+      plugins: true
+    }
   });
-
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
     callback(false);
   });
-
-  mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  mainWindow.webContents.setWindowOpenHandler(() => ({
+    action: "deny"
+  }));
   mainWindow.webContents.on("preload-error", (_event, preloadPath, error) => {
     writeStartupLog("preload-error", {
       preloadPath,
-      error: serializeStartupError(error),
+      error: serializeStartupError(error)
     });
     console.error("[DESKTOP PRELOAD ERROR]", {
       preloadPath,
-      error: error?.stack || error?.message || String(error),
+      error: error?.stack || error?.message || String(error)
     });
   });
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
@@ -1882,23 +580,24 @@ function createMainWindow() {
   });
   mainWindow.webContents.on("did-start-loading", () => {
     writeStartupLog("did-start-loading", {
-      url: mainWindow?.webContents.getURL(),
+      url: mainWindow?.webContents.getURL()
     });
     console.log("[DESKTOP LOAD START]", mainWindow?.webContents.getURL());
   });
   mainWindow.webContents.on("dom-ready", () => {
     writeStartupLog("dom-ready", {
-      url: mainWindow?.webContents.getURL(),
+      url: mainWindow?.webContents.getURL()
     });
     console.log("[DESKTOP DOM READY]", mainWindow?.webContents.getURL());
-
     if (process.env.PE_DEBUG_RENDERER === "1") {
-      mainWindow?.webContents.openDevTools({ mode: "detach" });
+      mainWindow?.webContents.openDevTools({
+        mode: "detach"
+      });
     }
   });
   mainWindow.webContents.on("did-stop-loading", () => {
     writeStartupLog("did-stop-loading", {
-      url: mainWindow?.webContents.getURL(),
+      url: mainWindow?.webContents.getURL()
     });
     console.log("[DESKTOP LOAD STOP]", mainWindow?.webContents.getURL());
   });
@@ -1915,7 +614,7 @@ function createMainWindow() {
       level,
       message: String(message),
       line,
-      sourceId,
+      sourceId
     };
     writeStartupLog("renderer-console-message", payload);
     const prefix = level >= 2 ? "[DESKTOP RENDERER CONSOLE ERROR]" : "[DESKTOP RENDERER CONSOLE]";
@@ -1926,21 +625,18 @@ function createMainWindow() {
       event.preventDefault();
     }
   });
-
   mainWindow.webContents.on("did-fail-load", async (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
     if (!isMainFrame) return;
-
     console.warn("[DESKTOP LOAD FAILED]", {
       errorCode,
       errorDescription,
-      url: validatedURL,
+      url: validatedURL
     });
     writeStartupLog("did-fail-load", {
       errorCode,
       errorDescription,
-      url: validatedURL,
+      url: validatedURL
     });
-
     if (validatedURL.startsWith("file://") || validatedURL.startsWith(DESKTOP_PROTOCOL_ORIGIN)) {
       const localIndex = getProductionIndexPath();
       if (fs.existsSync(localIndex)) {
@@ -1951,70 +647,55 @@ function createMainWindow() {
           await mainWindow?.loadFile(localIndex);
         }
         if (failedHash && failedHash !== "#") {
-          await mainWindow?.webContents.executeJavaScript(
-            `window.location.hash = ${JSON.stringify(failedHash.slice(1))};`
-          );
+          await mainWindow?.webContents.executeJavaScript(`window.location.hash = ${JSON.stringify(failedHash.slice(1))};`);
         }
       }
       return;
     }
-
     if (!app.isPackaged && validatedURL.startsWith(DEV_FRONTEND_URL)) {
       await mainWindow?.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(getDevServerErrorHtml())}`);
     }
   });
   mainWindow.webContents.on("did-finish-load", () => {
     writeStartupLog("did-finish-load", {
-      url: mainWindow.webContents.getURL(),
+      url: mainWindow.webContents.getURL()
     });
-    mainWindow.webContents
-      .executeJavaScript(`({
+    mainWindow.webContents.executeJavaScript(`({
         hasBridge: Boolean(window.printeaseDesktop),
         isDesktop: Boolean(window.printeaseDesktop?.isDesktop),
         bridgeVersion: window.printeaseDesktop?.bridgeVersion || null,
         bridgeKeys: window.printeaseDesktop ? Object.keys(window.printeaseDesktop) : []
-      })`)
-      .then((bridgeState) => {
-        console.log("[DESKTOP RENDERER]", {
-          url: mainWindow.webContents.getURL(),
-          ...bridgeState,
-        });
-      })
-      .catch((error) => {
-        console.warn("[DESKTOP RENDERER CHECK FAILED]", error.message || error);
+      })`).then(bridgeState => {
+      console.log("[DESKTOP RENDERER]", {
+        url: mainWindow.webContents.getURL(),
+        ...bridgeState
       });
-
+    }).catch(error => {
+      console.warn("[DESKTOP RENDERER CHECK FAILED]", error.message || error);
+    });
     if (latestPrinterResult) emitPrinterResult(latestPrinterResult);
   });
-
-  loadFrontend(mainWindow).catch(async (error) => {
-    writeStartupLog("load-frontend:failed", { error: serializeStartupError(error) });
+  loadFrontend(mainWindow).catch(async error => {
+    writeStartupLog("load-frontend:failed", {
+      error: serializeStartupError(error)
+    });
     console.error("[DESKTOP LOAD FRONTEND FAILED]", error);
     try {
       await mainWindow?.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(getDevServerErrorHtml())}`);
     } catch (fallbackError) {
-      writeStartupLog("load-frontend-fallback:failed", { error: serializeStartupError(fallbackError) });
+      writeStartupLog("load-frontend-fallback:failed", {
+        error: serializeStartupError(fallbackError)
+      });
     }
   });
 }
-
 app.whenReady().then(async () => {
   writeStartupLog("app-ready");
-  
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {
         ...details.responseHeaders,
-        "Content-Security-Policy": [
-          "default-src 'self' app: file:; " +
-          "script-src 'self' app: file: 'unsafe-inline' 'unsafe-eval'; " +
-          "style-src 'self' app: file: 'unsafe-inline'; " +
-          "img-src 'self' app: file: data: blob: https:; " +
-          "connect-src 'self' app: file: https: wss:; " +
-          "font-src 'self' app: file: data:; " +
-          "frame-src 'self' app: file: blob:; " +
-          "object-src 'self' app: file: blob:;"
-        ]
+        "Content-Security-Policy": ["default-src 'self' app: file:; " + "script-src 'self' app: file: 'unsafe-inline' 'unsafe-eval'; " + "style-src 'self' app: file: 'unsafe-inline'; " + "img-src 'self' app: file: data: blob: https:; " + "connect-src 'self' app: file: https: wss:; " + "font-src 'self' app: file: data:; " + "frame-src 'self' app: file: blob:; " + "object-src 'self' app: file: blob:;"]
       }
     });
   });
@@ -2025,15 +706,16 @@ app.whenReady().then(async () => {
   runStartupStep("cleanup-document-cache", () => cleanupDocumentCache());
   await runStartupStep("register-ipc-handlers", () => registerIpcHandlers());
   await runStartupStep("create-main-window", () => createMainWindow());
-
   runStartupStep("ensure-device-identity", () => ensureDeviceIdentity()).then(() => emitAgentSession());
-  runStartupStep("restore-stored-agent", () => restoreStoredDesktopAgent()).then((restoredAgent) => {
+  runStartupStep("restore-stored-agent", () => restoreStoredDesktopAgent()).then(restoredAgent => {
     if (restoredAgent?.restored) {
       // Delay starting agent background services by 7 seconds to let startup load lightly.
       setTimeout(() => {
-        startAgentRuntime("startup-stored-agent").catch((error) => {
+        startAgentRuntime("startup-stored-agent").catch(error => {
           agentSession.lastJobPollError = error.message || "Could not start background desktop agent.";
-          writeStartupLog("startup-stored-agent:failed", { error: serializeStartupError(error) });
+          writeStartupLog("startup-stored-agent:failed", {
+            error: serializeStartupError(error)
+          });
           emitAgentSession();
           console.warn("[DESKTOP AGENT BACKGROUND] startup failed", agentSession.lastJobPollError);
         });
@@ -2041,25 +723,23 @@ app.whenReady().then(async () => {
     }
   });
   runStartupStep("migrate-file-local-storage-auth", () => migrateFileLocalStorageAuth());
-  runStartupStep("initialize-updater", () => initializeUpdater({ mainWindow }));
-
+  runStartupStep("initialize-updater", () => initializeUpdater({
+    mainWindow
+  }));
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createMainWindow();
     }
   });
-}).catch((error) => {
-  writeStartupLog("app-ready:fatal", { error: serializeStartupError(error) });
-  dialog.showErrorBox(
-    "PrintEase Desktop failed to start",
-    `PrintEase could not open.\n\n${error?.message || String(error)}\n\nLog file: ${getStartupLogPath()}`
-  );
+}).catch(error => {
+  writeStartupLog("app-ready:fatal", {
+    error: serializeStartupError(error)
+  });
+  dialog.showErrorBox("PrintEase Desktop failed to start", `PrintEase could not open.\n\n${error?.message || String(error)}\n\nLog file: ${getStartupLogPath()}`);
 });
-
 app.on("before-quit", () => {
   stopAgentRuntime("app-before-quit");
 });
-
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();

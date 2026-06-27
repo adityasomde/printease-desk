@@ -1,3 +1,6 @@
+const PRINTER_SYNC_INTERVAL_MS = 30000;
+const JOB_POLL_INTERVAL_MS = 5000;
+const PREDOWNLOAD_INTERVAL_MS = 90000;
 import fs from "node:fs";
 import path from "node:path";
 import electron from "electron"; const { net } = electron;

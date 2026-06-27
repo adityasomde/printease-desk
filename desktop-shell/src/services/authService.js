@@ -1,3 +1,6 @@
+const DESKTOP_AUTH_FILE = "desktop-auth.json";
+const HEARTBEAT_INTERVAL_MS = 25000;
+const DESKTOP_AGENT_FILE = "desktop-agent.json";
 import fs from "node:fs";
 import path from "node:path";
 import electron from "electron"; const { app, net, safeStorage } = electron;

@@ -37,6 +37,8 @@ export const appState = {
     lastPredownloadChecked: 0,
     lastPredownloadCached: 0,
     lastPredownloadFailures: 0,
+    conversionRunning: false,
+    conversionLoopRunning: false,
     lastConversionMessage: "",
     lastConversionError: "",
     lastConversionAt: "",

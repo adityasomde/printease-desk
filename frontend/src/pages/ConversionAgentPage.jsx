@@ -47,11 +47,11 @@ export default function ConversionAgentPage() {
   }
 
   const isPaired = Boolean(agentSession?.agentId);
-  const conversionLoopRunning = Boolean(agentSession?.predownloadLoopRunning);
-  const conversionRunning = Boolean(agentSession?.predownloadRunning);
+  const conversionLoopRunning = Boolean(agentSession?.conversionLoopRunning);
+  const conversionRunning = Boolean(agentSession?.conversionRunning);
   
   const libreOfficeFound = libreOfficeDiagnostics?.found === true || libreOfficeDiagnostics?.success === true;
-  const conversionHasError = Boolean(agentSession?.lastPredownloadError || agentSession?.lastConversionError || (libreOfficeDiagnostics && !libreOfficeFound));
+  const conversionHasError = Boolean(agentSession?.lastConversionError || (libreOfficeDiagnostics && !libreOfficeFound));
   
   const conversionStatusText = conversionRunning
     ? "Conversion in progress"
@@ -99,11 +99,10 @@ export default function ConversionAgentPage() {
                 </div>
               </div>
 
-              {(agentSession?.lastPredownloadMessage || agentSession?.lastConversionMessage) && (
+              {agentSession?.lastConversionMessage && (
                 <div className="p-4 bg-blue-50 text-blue-800 rounded-lg border border-blue-100 text-sm">
                   <p className="font-semibold mb-1">Latest Activity:</p>
-                  {agentSession.lastPredownloadMessage && <p>• {agentSession.lastPredownloadMessage}</p>}
-                  {agentSession.lastConversionMessage && <p>• {agentSession.lastConversionMessage}</p>}
+                  <p>• {agentSession.lastConversionMessage}</p>
                 </div>
               )}
 
@@ -113,9 +112,6 @@ export default function ConversionAgentPage() {
                     <TriangleAlert size={18} />
                     <span className="font-bold">Conversion Failures / Warnings</span>
                   </div>
-                  {agentSession?.lastPredownloadError && (
-                    <p className="text-sm mt-1">• {agentSession.lastPredownloadError}</p>
-                  )}
                   {agentSession?.lastConversionError && (
                     <p className="text-sm mt-1">• {agentSession.lastConversionError}</p>
                   )}

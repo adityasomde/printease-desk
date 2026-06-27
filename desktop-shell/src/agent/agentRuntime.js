@@ -229,6 +229,7 @@ export async function runConversionNow(reason = "loop") {
   if (pairingError) return pairingError;
   if (appState.isConverting) return { success: true, skipped: true };
   appState.isConverting = true;
+  appState.agentSession.conversionRunning = true;
   appState.agentSession.lastConversionMessage = "Running conversion loop...";
   emitAgentSession();
   try {
@@ -251,6 +252,7 @@ export async function runConversionNow(reason = "loop") {
     appState.agentSession.lastConversionMessage = appState.agentSession.lastConversionError;
   } finally {
     appState.isConverting = false;
+    appState.agentSession.conversionRunning = false;
     emitAgentSession();
   }
 }
@@ -263,6 +265,8 @@ export function startConversionLoop(reason = "manual-start") {
     runConversionNow("conversion-loop").catch(() => {});
   }, 4000);
   appState.conversionTimer.unref?.();
+  appState.agentSession.conversionLoopRunning = true;
+  emitAgentSession();
   runConversionNow(reason).catch(() => {});
   return { success: true, message: "Conversion loop started." };
 }
@@ -300,6 +304,8 @@ export function stopAgentRuntime(reason) {
   appState.predownloadTimer = null;
   appState.conversionTimer = null;
   appState.agentSession.predownloadLoopRunning = false;
+  appState.agentSession.conversionLoopRunning = false;
+  appState.agentSession.conversionRunning = false;
   appState.isConverting = false;
 }
 
@@ -317,6 +323,8 @@ export function stopAgentPolling() {
     clearInterval(appState.conversionTimer);
     appState.conversionTimer = null;
     appState.isConverting = false;
+    appState.agentSession.conversionLoopRunning = false;
+    appState.agentSession.conversionRunning = false;
   }
   emitAgentSession();
   return { success: true, message: "Job polling stopped.", session: sanitizeAgentSession() };

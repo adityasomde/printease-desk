@@ -47,7 +47,31 @@ export const appState = {
 };
 
 export function sanitizeAgentSession() {
-  return { ...appState.agentSession };
+  const paired = Boolean(
+    appState.agentSession.agentId &&
+    appState.agentSession.hubId &&
+    appState.agentSession.accessToken
+  );
+
+  return {
+    ...appState.agentSession,
+    success: true,
+    accessToken: undefined,
+    paired,
+    heartbeatRunning: Boolean(appState.heartbeatTimer),
+    printerSyncRunning: Boolean(appState.printerSyncTimer),
+    polling: Boolean(appState.jobPollTimer),
+    predownloadRunning: Boolean(appState.isPredownloading),
+    predownloadLoopRunning: Boolean(appState.predownloadTimer),
+    conversionRunning: Boolean(appState.isConverting),
+    conversionLoopRunning: Boolean(appState.conversionTimer),
+    autoPrintRunning: Boolean(
+      paired &&
+      appState.heartbeatTimer &&
+      appState.printerSyncTimer &&
+      appState.jobPollTimer
+    ),
+  };
 }
 
 export function emitAgentSession() {

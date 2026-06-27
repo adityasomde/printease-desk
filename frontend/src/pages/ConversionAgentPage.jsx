@@ -3,6 +3,13 @@ import { FileDown, FileText, Settings, TriangleAlert } from "lucide-react";
 import Card from "../components/Card";
 import { onAgentUpdated, getDesktopStatus, getAgentStatus, diagnoseLibreOffice, checkBackendHealth } from "../utils/desktopBridge";
 
+function getDesktopAgentSession(payload) {
+  if (!payload || payload.success === false) return null;
+  if (payload.session) return payload.session;
+  if (payload.agentId || payload.deviceId || payload.paired || payload.pairingSessionId) return payload;
+  return null;
+}
+
 export default function ConversionAgentPage() {
   const [agentSession, setAgentSession] = useState(null);
   const [status, setStatus] = useState(null);
@@ -24,15 +31,13 @@ export default function ConversionAgentPage() {
 
     getAgentStatus().then((session) => {
       if (!active) return;
-      if (session?.success) {
-        setAgentSession(session);
-      }
+      const nextSession = getDesktopAgentSession(session);
+      if (nextSession) setAgentSession(nextSession);
     });
 
     const unsubscribeAgent = onAgentUpdated((result) => {
-      if (result?.success) {
-        setAgentSession(result);
-      }
+      const nextSession = getDesktopAgentSession(result);
+      if (nextSession) setAgentSession(nextSession);
     });
 
     return () => {
@@ -53,7 +58,7 @@ export default function ConversionAgentPage() {
     }
   }
 
-  const isPaired = Boolean(agentSession?.agentId);
+  const isPaired = Boolean(agentSession?.paired || agentSession?.agentId);
   const conversionLoopRunning = Boolean(agentSession?.conversionLoopRunning);
   const conversionRunning = Boolean(agentSession?.conversionRunning);
   

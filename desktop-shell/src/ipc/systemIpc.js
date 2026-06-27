@@ -3,7 +3,7 @@ import { app, shell, BrowserWindow } from "electron";
 import { getBackendUrl, getApiBaseUrl } from "../../config/backend.js";
 import { getDocumentCacheDirectory, getDocumentCacheMaxAgeDays, getDocumentCacheMaxSizeBytes, findCachedDocument } from "../../agent/documentCache.js";
 import { checkForUpdates, getUpdateStatus, installUpdateNow } from "../../updater.js";
-import { appState } from "../state/appState.js";
+import { appState, sanitizeAgentSession } from "../state/appState.js";
 import { isAllowedNavigation } from "../frontendLoader.js";
 
 const VERSION = "0.1.94";
@@ -35,7 +35,7 @@ export function registerSystemIpc() {
         maxAgeDays: getDocumentCacheMaxAgeDays(),
         maxSizeBytes: getDocumentCacheMaxSizeBytes(),
       },
-      agentSession: { ...appState.agentSession },
+      agentSession: sanitizeAgentSession(),
       printerResult: appState.latestPrinterResult,
     };
   }, app.isPackaged);

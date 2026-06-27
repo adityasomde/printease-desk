@@ -532,10 +532,26 @@ export async function processNextJob({ agentToken, printerName } = {}) {
 
 export function createJobPoller(options = {}) {
   let timer = null;
-  let isProcessing = false;
+  let isPredownloading = false;
+  let isProcessingJob = false;
 
   async function runPollCycle(overrides = {}) {
-    if (isProcessing) {
+    const pollOptions = { ...options, ...overrides };
+
+    // Kick off predownload without blocking if not already running
+    if (pollOptions.runPredownload !== false && pollOptions.agentToken && !isPredownloading) {
+      isPredownloading = true;
+      predownloadPendingDocuments({
+        agentToken: pollOptions.agentToken,
+        limit: pollOptions.predownloadLimit,
+      })
+        .catch(() => null)
+        .finally(() => {
+          isPredownloading = false;
+        });
+    }
+
+    if (isProcessingJob) {
       return {
         success: true,
         skipped: true,
@@ -543,20 +559,11 @@ export function createJobPoller(options = {}) {
       };
     }
 
-    isProcessing = true;
+    isProcessingJob = true;
     try {
-      const pollOptions = { ...options, ...overrides };
-
-      if (pollOptions.runPredownload !== false && pollOptions.agentToken) {
-        await predownloadPendingDocuments({
-          agentToken: pollOptions.agentToken,
-          limit: pollOptions.predownloadLimit,
-        }).catch(() => null);
-      }
-
       return await processNextJob(pollOptions);
     } finally {
-      isProcessing = false;
+      isProcessingJob = false;
     }
   }
 

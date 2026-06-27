@@ -10,6 +10,8 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { findLibreOfficeExecutable } from './conversionEngine.js';
 
+let conversionLock = Promise.resolve();
+
 function waitForProcess(command, args, { timeoutMs = 2 * 60 * 1000, cwd } = {}) {
   return new Promise((resolve) => {
     const child = spawn(command, args, { cwd, windowsHide: true });
@@ -50,7 +52,15 @@ export async function convertOfficeToPdf({ inputPath, outputDir, timeoutMs = 2 *
   if (!inputPath) throw new Error('convertOfficeToPdf requires inputPath');
   if (!outputDir) throw new Error('convertOfficeToPdf requires outputDir');
 
-  await fs.mkdir(outputDir, { recursive: true });
+  const releaseLock = await new Promise(resolve => {
+    const previousLock = conversionLock;
+    let unlockNext;
+    conversionLock = new Promise(r => { unlockNext = r; });
+    previousLock.then(() => resolve(unlockNext));
+  });
+
+  try {
+    await fs.mkdir(outputDir, { recursive: true });
 
   const engine = libreOfficePath
     ? { found: true, executable: libreOfficePath }
@@ -98,11 +108,14 @@ export async function convertOfficeToPdf({ inputPath, outputDir, timeoutMs = 2 *
     };
   }
 
-  return {
-    success: true,
-    outputPath,
-    outputFileType: 'application/pdf',
-    conversionSource: 'desktop-libreoffice-headless',
-    enginePath: engine.executable,
-  };
+    return {
+      success: true,
+      outputPath,
+      outputFileType: 'application/pdf',
+      conversionSource: 'desktop-libreoffice-headless',
+      enginePath: engine.executable,
+    };
+  } finally {
+    releaseLock();
+  }
 }

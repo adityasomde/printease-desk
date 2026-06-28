@@ -110,9 +110,14 @@ export default function PaymentPage({
   const isMultiFileOrder = Array.isArray(effectivePrice?.files) && effectivePrice.files.length > 1;
   const isCancelled = normalizeStatus(effectiveOrder?.rawStatus || effectiveOrder?.status) === "cancelled";
   const cancellationReason = effectiveOrder?.priceSnapshot?.message || effectiveOrder?.price_snapshot?.message || null;
-  const failedDocument = effectiveOrder?.documents?.find(d => d.preparation_status === 'failed');
+  const failedDocument = effectiveOrder?.documents?.find((document) => (
+    document?.preparationStatus === "failed" || document?.preparation_status === "failed"
+  ));
   const conversionFailed = Boolean(failedDocument);
-  const conversionFailedMessage = failedDocument?.preparation_error_message || "Document conversion failed. Please save as PDF and try again or do it from mobile app.";
+  const conversionFailedMessage =
+    failedDocument?.preparationErrorMessage ||
+    failedDocument?.preparation_error_message ||
+    "Document conversion failed. Please save as PDF and try again or do it from mobile app.";
   const displayValue = (value) => (isPricingPending ? "Pending" : (value || value === 0 ? value : "Pending"));
   const displayMoney = (value) => (isPricingPending ? "Pending" : formatCurrency(value));
 

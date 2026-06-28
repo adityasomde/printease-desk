@@ -258,12 +258,20 @@ async function reportDesktopPreparationResult({ agentToken, file, cachedFilePath
     );
   }
 
-  const backendResponse = await backendRequest({
-    endpoint: "/agent/preparation-result",
-    method: "POST",
-    agentToken,
-    body: formData
-  });
+  let backendResponse;
+  try {
+    backendResponse = await backendRequest({
+      endpoint: "/agent/preparation-result",
+      method: "POST",
+      agentToken,
+      body: formData
+    });
+  } catch (error) {
+    if (error.status === 409) {
+      error.retryWithoutFailureReport = true;
+    }
+    throw error;
+  }
 
   return {
     ...backendResponse,
@@ -333,6 +341,15 @@ export async function processNextConversionJob({ agentToken } = {}) {
     return { success: true, processed: true, message: "Conversion completed", documentId: job.documentId };
   } catch (error) {
     console.error("[Conversion] Conversion failed:", error);
+    if (error.retryWithoutFailureReport) {
+      return {
+        success: false,
+        retryable: true,
+        message: error.message || "Backend could not refresh the bill yet; conversion will be retried.",
+        documentId: job.documentId
+      };
+    }
+
     // Send failure status back
     const formData = new FormData();
     formData.append("documentId", job.documentId);

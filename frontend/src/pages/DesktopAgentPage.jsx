@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link2, Printer, RefreshCw, Send, Wifi, X, ShieldCheck, Loader2 } from "lucide-react";
 import Card from "../components/Card";
+import DesktopUpdateCard from "../components/DesktopUpdateCard";
 import HubLocationCard from "../components/HubLocationCard";
 import { registerDesktopAgent } from "../services/api";
 import {
@@ -692,6 +693,8 @@ export default function DesktopAgentPage({ currentUser = null }) {
           </div>
         </div>
       </Card>
+
+      <DesktopUpdateCard />
 
       <Card>
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">

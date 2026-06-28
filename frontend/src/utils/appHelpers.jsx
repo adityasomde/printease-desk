@@ -9,6 +9,7 @@ const ROUTES = {
   hubDashboard: "/hub/dashboard",
   hubPricing: "/hub/pricing",
   hubPrinters: "/hub/printers",
+  conversion: "/hub/conversion",
   approveAgent: "/hub/printers/approve-agent",
   desktopAgent: "/desktop-agent",
   profile: "/profile",

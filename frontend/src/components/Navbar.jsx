@@ -1,11 +1,11 @@
-import { User, QrCode, History, Home, Building2, Printer, LogOut, Menu, X, Settings, Plus, Store, Upload } from "lucide-react";
+import { User, QrCode, History, Home, Building2, Printer, LogOut, Menu, X, Settings, Plus, Store, Upload, FileCog, Rocket } from "lucide-react";
 import logo from '../assets/logo.png';
 
 function NavButton({ children, icon, active, onClick }) {
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition ${active ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
+      className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 ${active ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
         }`}
     >
       {icon}
@@ -18,7 +18,7 @@ function MenuItem({ children, icon, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-100"
+      className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
     >
       {icon}
       {children}
@@ -30,7 +30,7 @@ function MobileNavButton({ label, icon, active, onClick }) {
   return (
     <button
       onClick={onClick}
-      className={`flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl sm:rounded-2xl px-1 sm:px-2 py-1.5 sm:py-2 text-[10px] sm:text-[11px] font-semibold ${active ? "bg-slate-900 text-white" : "text-slate-600"
+      className={`flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl sm:rounded-2xl px-1 sm:px-2 py-1.5 sm:py-2 text-[10px] sm:text-[11px] font-semibold focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 ${active ? "bg-slate-900 text-white" : "text-slate-600"
         }`}
     >
       {icon}
@@ -55,7 +55,7 @@ export default function Navbar({
     <>
       <header className="sticky top-0 z-50 border-b bg-white/90 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-2">
-          <button onClick={() => navigate("home")} className="flex items-center ml-[-8px] mr-8">
+          <button onClick={() => navigate("home")} aria-label="Go to PrintEase home" className="flex items-center ml-[-8px] mr-8 focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2">
             <img src={logo} alt="PrintEase" className="h-[51px] w-auto object-contain" />
           </button>
 
@@ -82,8 +82,11 @@ export default function Navbar({
 
           <div className="relative">
             <button
+              type="button"
+              aria-label={profileOpen ? "Close profile menu" : "Open profile menu"}
+              aria-expanded={profileOpen}
               onClick={() => setProfileOpen(!profileOpen)}
-              className="flex items-center gap-2 rounded-full border bg-white px-3 py-2 shadow-sm hover:bg-slate-50"
+              className="flex items-center gap-2 rounded-full border bg-white px-3 py-2 shadow-sm hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
             >
               <User size={18} />
               <span className="hidden text-sm font-medium sm:inline">{currentUser ? currentUser.name : "Profile"}</span>
@@ -91,7 +94,7 @@ export default function Navbar({
             </button>
 
             {profileOpen && (
-              <div className="absolute right-0 mt-3 w-64 rounded-2xl border bg-white p-2 shadow-xl">
+              <div className="absolute right-0 z-[70] mt-3 w-64 rounded-2xl border bg-white p-2 shadow-xl">
                 {!currentUser ? (
                   <>
                     <MenuItem icon={<User size={16} />} onClick={() => startLogin("user")}>Login as User</MenuItem>
@@ -114,6 +117,10 @@ export default function Navbar({
                       </>
                     )}
                     <MenuItem icon={<User size={16} />} onClick={openProfile}>Profile</MenuItem>
+                    {desktopAvailable && <MenuItem icon={<Rocket size={16} />} onClick={() => navigate("desktopAgent")}>Desktop Updates</MenuItem>}
+                    {currentUser.role === "hub" && desktopAvailable && (
+                      <MenuItem icon={<FileCog size={16} />} onClick={() => navigate("conversion")}>Conversion Diagnostics</MenuItem>
+                    )}
                     {desktopAvailable && <MenuItem icon={<Printer size={16} />} onClick={() => navigate("desktopAgent")}>Desktop Agent</MenuItem>}
                     {currentUser.role === "user" && <MenuItem icon={<History size={16} />} onClick={() => navigate("history")}>Print History</MenuItem>}
                     <MenuItem icon={<LogOut size={16} />} onClick={logout}>Logout</MenuItem>

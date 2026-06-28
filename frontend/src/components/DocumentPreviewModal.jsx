@@ -39,6 +39,7 @@ export default function DocumentPreviewModal({
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
+  const isPdfPreview = previewKind === "pdf" && blobUrl && !loading && !error;
 
   // Format file size
   const formatSize = (bytes) => {
@@ -72,7 +73,12 @@ export default function DocumentPreviewModal({
       />
 
       {/* Modal Container */}
-      <div className="relative z-10 flex max-h-[96dvh] w-full max-w-4xl flex-col rounded-3xl border border-slate-200/80 bg-white shadow-2xl transition-all duration-300 dark:border-slate-800/80 dark:bg-slate-900 sm:max-h-[90vh]">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="document-preview-title"
+        className="relative z-10 flex max-h-[calc(100dvh-1rem)] w-full max-w-4xl flex-col rounded-3xl border border-slate-200/80 bg-white shadow-2xl transition-all duration-300 dark:border-slate-800/80 dark:bg-slate-900"
+      >
         
         {/* Header */}
         <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-slate-800 sm:px-6 sm:py-4">
@@ -85,7 +91,7 @@ export default function DocumentPreviewModal({
               )}
             </div>
             <div className="truncate">
-              <h3 className="truncate text-base font-semibold text-slate-800 dark:text-slate-100">
+              <h3 id="document-preview-title" className="truncate text-base font-semibold text-slate-800 dark:text-slate-100">
                 {fileName}
               </h3>
               <p className="text-xs text-slate-400">
@@ -96,6 +102,8 @@ export default function DocumentPreviewModal({
           </div>
           
           <button
+            type="button"
+            aria-label="Close preview"
             onClick={onClose}
             className="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
           >
@@ -104,7 +112,7 @@ export default function DocumentPreviewModal({
         </div>
 
         {/* Content Body */}
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-slate-50/50 p-3 dark:bg-slate-950/20 sm:p-6" style={{ WebkitOverflowScrolling: "touch" }}>
+        <div className={`min-h-0 flex-1 overscroll-contain bg-slate-50/50 p-3 dark:bg-slate-950/20 sm:p-6 ${isPdfPreview ? "overflow-hidden" : "overflow-y-auto"}`} style={{ WebkitOverflowScrolling: "touch" }}>
           {loading ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 py-12">
               <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />
@@ -134,9 +142,9 @@ export default function DocumentPreviewModal({
               </button>
             </div>
           ) : (
-            <div className="flex min-h-[45vh] items-center justify-center">
+            <div className={`flex min-h-[45vh] items-center justify-center ${isPdfPreview ? "h-full min-h-0 w-full" : ""}`}>
               {previewKind === "pdf" && blobUrl && (
-                <InlineDocumentFrame url={blobUrl} title="PDF Document Preview" className="h-[62vh] min-h-[420px] w-full shadow-inner dark:border-slate-800" />
+                <InlineDocumentFrame url={blobUrl} title="PDF Document Preview" className="h-full min-h-[360px] w-full shadow-inner dark:border-slate-800" />
               )}
 
               {previewKind === "image" && blobUrl && (
@@ -184,6 +192,7 @@ export default function DocumentPreviewModal({
         {/* Footer */}
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 border-t border-slate-100 px-4 py-3 dark:border-slate-800 sm:px-6 sm:py-4">
           <button
+            type="button"
             onClick={onClose}
             className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
           >
@@ -191,6 +200,7 @@ export default function DocumentPreviewModal({
           </button>
           {!loading && !error && (
             <button
+              type="button"
               onClick={onDownload}
               className="flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-slate-200"
             >

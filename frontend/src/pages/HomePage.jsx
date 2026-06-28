@@ -11,6 +11,7 @@ import HubActiveOrdersManager from "../components/HubActiveOrdersManager";
 import QRScanner from "../components/QRScanner";
 
 const SCANNER_MODE_KEY = "printease_scanner_mode";
+const LATEST_DESKTOP_RELEASE_URL = "https://github.com/adityasomde/printease-desk/releases/latest";
 const SCANNER_MODES = new Set(["ready", "transparent", "classic"]);
 
 function getSavedScannerMode() {
@@ -116,9 +117,6 @@ export default function HomePage({
   const handleDownloadApp = async () => {
     const ua = navigator.userAgent || navigator.vendor || window.opera;
     const isAndroid = /android/i.test(ua);
-    const isWindows = /Win/i.test(ua);
-    const isLinux = /Linux/i.test(ua) && !isAndroid;
-
     if (isAndroid) {
       if (deferredPrompt) {
         deferredPrompt.prompt();
@@ -130,22 +128,7 @@ export default function HomePage({
         alert("To install the app, please use the 'Add to Home Screen' option in your browser menu.");
       }
     } else {
-      let downloadUrl = "";
-      if (isWindows) {
-        downloadUrl = "https://github.com/adityasomde/printease-desk/releases/download/desktop-v0.1.30/PrintEase-Desktop-Setup-0.1.30.exe";
-      } else if (isLinux) {
-        downloadUrl = "https://github.com/adityasomde/printease-desk/releases/download/desktop-v0.1.30/PrintEase-Desktop-0.1.30-x86_64.AppImage";
-      } else {
-        const choice = window.prompt("Which OS are you using? Type 'win' for Windows or 'linux' for Linux:", "win");
-        if (choice?.toLowerCase().includes("win")) {
-          downloadUrl = "https://github.com/adityasomde/printease-desk/releases/download/desktop-v0.1.30/PrintEase-Desktop-Setup-0.1.30.exe";
-        } else if (choice?.toLowerCase().includes("linux")) {
-          downloadUrl = "https://github.com/adityasomde/printease-desk/releases/download/desktop-v0.1.30/PrintEase-Desktop-0.1.30-x86_64.AppImage";
-        }
-      }
-      if (downloadUrl) {
-        window.location.href = downloadUrl;
-      }
+      window.location.href = LATEST_DESKTOP_RELEASE_URL;
     }
   };
 

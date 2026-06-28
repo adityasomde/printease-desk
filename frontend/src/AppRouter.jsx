@@ -9,6 +9,7 @@ const HubDashboard = React.lazy(() => import("./pages/HubDashboard"));
 const ProfilePage = React.lazy(() => import("./pages/ProfilePage"));
 const HubPricingPage = React.lazy(() => import("./pages/HubPricingPage"));
 const HubPrinterAgentPage = React.lazy(() => import("./pages/HubPrinterAgentPage"));
+const ConversionPage = React.lazy(() => import("./pages/ConversionPage"));
 const ApproveAgentPage = React.lazy(() => import("./pages/ApproveAgentPage"));
 const DesktopAgentPage = React.lazy(() => import("./pages/DesktopAgentPage"));
 const CentreCodePage = React.lazy(() => import("./pages/CentreCodePage"));
@@ -203,6 +204,16 @@ return (
                 <HubPrinterAgentPage navigate={navigate} />
               ) : (
                 <RouteNotice title="Print Hub Login Required" message="Please login as a print hub to manage printer agents." actionLabel="Login as Print Hub" onAction={() => startLogin("hub")} />
+              )
+            }
+          />
+          <Route
+            path={ROUTES.conversion}
+            element={
+              currentUser?.role === "hub" ? (
+                <ConversionPage navigate={navigate} />
+              ) : (
+                <RouteNotice title="Print Hub Login Required" message="Please login as a print hub to view conversion diagnostics." actionLabel="Login as Print Hub" onAction={() => startLogin("hub")} />
               )
             }
           />

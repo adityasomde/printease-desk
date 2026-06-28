@@ -578,7 +578,11 @@ export default function UploadPage({
       return;
     }
 
-    if (autoPreparation?.orderId && ["ready", "hub_converting"].includes(autoPreparation.status)) {
+    if (
+      autoPreparation?.orderId &&
+      autoPreparation.configurationKey === autoPreparationConfigKey &&
+      ["ready", "hub_converting"].includes(autoPreparation.status)
+    ) {
       navigate("payment");
       return;
     }

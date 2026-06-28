@@ -11,16 +11,17 @@ const INITIAL_AUTO_PREPARATION = {
   startedAt: "",
   updatedAt: "",
   hasPendingDesktopFiles: false,
+  configurationKey: "",
 };
 
 function fileSignature(file) {
   return `${file?.name || "file"}:${file?.size || 0}:${file?.lastModified || 0}`;
 }
 
-function buildAutoPrepareKey({ files, centre, configurationKey = "" }) {
+function buildAutoPrepareKey({ files, centre }) {
   const centreKey = centre?.id || centre?.code || "no-centre";
   const fileKey = files.map(fileSignature).join("|");
-  return `${centreKey}|${fileKey}|${configurationKey}`;
+  return `${centreKey}|${fileKey}`;
 }
 
 function getOrderId(result) {
@@ -97,7 +98,7 @@ export function useAutoUploadPreparation({
       return;
     }
 
-    const nextKey = buildAutoPrepareKey({ files: selectedFiles, centre, configurationKey });
+    const nextKey = buildAutoPrepareKey({ files: selectedFiles, centre });
     if (keyRef.current === nextKey) return;
 
     keyRef.current = nextKey;
@@ -112,6 +113,7 @@ export function useAutoUploadPreparation({
       message: "Uploading documents so the hub desktop can prepare them early.",
       startedAt,
       updatedAt: startedAt,
+      configurationKey,
     });
 
     let cancelled = false;
@@ -140,6 +142,7 @@ export function useAutoUploadPreparation({
           startedAt,
           updatedAt: new Date().toISOString(),
           hasPendingDesktopFiles,
+          configurationKey,
         });
       })
       .catch((error) => {
@@ -158,14 +161,14 @@ export function useAutoUploadPreparation({
           startedAt,
           updatedAt: new Date().toISOString(),
           hasPendingDesktopFiles: false,
+          configurationKey,
         });
       });
 
     return () => {
       cancelled = true;
     };
-  }, [centre, configurationKey, enabled, files, filesKey, filePreparationState, preparationKey, preparePayment]);
+  }, [centre, enabled, files, filesKey, filePreparationState, preparationKey, preparePayment]);
 
   return autoPreparation;
 }
-

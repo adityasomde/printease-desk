@@ -368,6 +368,33 @@ export async function processNextConversionJob({ agentToken } = {}) {
   }
 }
 
+export async function processConversionBatch({ agentToken, limit = 3 } = {}) {
+  const safeLimit = Math.max(1, Math.min(Number(limit) || 1, 5));
+  const results = [];
+
+  for (let index = 0; index < safeLimit; index += 1) {
+    const result = await processNextConversionJob({ agentToken });
+    results.push(result);
+
+    if (!result?.success || !result?.processed) {
+      break;
+    }
+  }
+
+  const processed = results.filter((item) => item?.processed).length;
+  const failed = results.find((item) => item?.success === false);
+
+  return {
+    success: !failed || Boolean(failed.retryable),
+    processed,
+    retryable: Boolean(failed?.retryable),
+    results,
+    message: processed
+      ? `Processed ${processed} conversion job${processed === 1 ? "" : "s"}.`
+      : failed?.message || "No pending conversions.",
+  };
+}
+
 export async function predownloadPendingDocuments({ agentToken, limit = 15 } = {}) {
   const candidates = await getPredownloadCandidates({ agentToken, limit });
   if (!candidates.success) return candidates;

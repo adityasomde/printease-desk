@@ -959,8 +959,17 @@ export default function App() {
     navigate("upload");
   }
 
-  async function preparePayment(preparedFilesByIndex = {}) {
+  async function preparePayment(preparedFilesByIndex = {}, options = {}) {
+    const {
+      endpoint = "/api/orders",
+      navigateToPayment = true,
+      clearSelectedFiles = navigateToPayment,
+      silent = false,
+    } = options || {};
+
     if (!selectedCentre) {
+      const missingCentreError = new Error("Please select a printing centre first.");
+      if (silent) throw missingCentreError;
       setPaymentError("Please select a printing centre first.");
       navigate("centre");
       return;
@@ -968,18 +977,22 @@ export default function App() {
 
     const filesToUpload = documentFiles.length ? documentFiles : documentFile ? [documentFile] : [];
     if (reprintDocumentExpired) {
+      const expiredError = new Error("One or more documents for this reprint have expired. Please upload the PDF files manually.");
+      if (silent) throw expiredError;
       setPaymentError("One or more documents for this reprint have expired. Please upload the PDF files manually.");
       navigate("upload");
       return;
     }
     if (!filesToUpload.length && !reprintSourceDocuments.length) {
+      const missingFileError = new Error("Please upload a supported document first.");
+      if (silent) throw missingFileError;
       setPaymentError("Please upload a supported document first.");
       navigate("upload");
       return;
     }
 
-    setPaymentLoading(true);
-    setPaymentError("");
+    if (!silent) setPaymentLoading(true);
+    if (!silent) setPaymentError("");
     setBackendPrice(null);
 
     try {
@@ -1107,7 +1120,7 @@ export default function App() {
         watermarkRotation,
       });
 
-      const orderData = await apiRequest("/api/orders", {
+      const orderData = await apiRequest(endpoint, {
         method: "POST",
         body: JSON.stringify({
           centreCode: selectedCentre.code,
@@ -1190,10 +1203,16 @@ export default function App() {
         setOrderAccessToken("");
         localStorage.removeItem("printease_order_access_token");
       }
-      setDocumentFile(null);
-      setDocumentFiles([]);
-      navigate("payment");
+      if (clearSelectedFiles) {
+        setDocumentFile(null);
+        setDocumentFiles([]);
+      }
+      if (navigateToPayment) {
+        navigate("payment");
+      }
+      return { success: true, order: nextOrder, price: orderData.price || null, uploadedDocuments, raw: orderData };
     } catch (error) {
+      if (silent) throw error;
       if (error.status === 403 && error.details?.code === 'LOGIN_REQUIRED_FOR_MORE_THAN_5_PAGES') {
         const confirmLogin = window.confirm("You can only print up to 5 pages as a guest. Please log in to print larger documents.");
         if (confirmLogin) {
@@ -1205,8 +1224,9 @@ export default function App() {
       } else {
         setPaymentError(error.message || "Could not upload document and calculate final price.");
       }
+      return { success: false, error };
     } finally {
-      setPaymentLoading(false);
+      if (!silent) setPaymentLoading(false);
     }
   }
 

@@ -13,6 +13,7 @@ import {
   revokePreparationPreview,
 } from "../utils/filePreparation/prepareUploadPreview";
 import FileSettingsPanel from "../components/upload/FileSettingsPanel";
+import { useAutoUploadPreparation } from "../hooks/useAutoUploadPreparation";
 
 export default function UploadPage({
   currentUser,
@@ -68,6 +69,60 @@ export default function UploadPage({
   const [showOfficeNotice, setShowOfficeNotice] = useState(false);
   const [filePreparationState, setFilePreparationState] = useState({});
   const [uploadNotice, setUploadNotice] = useState("");
+  const autoUploadFiles = useMemo(
+    () => (documentFiles.length ? documentFiles : documentFile ? [documentFile] : []),
+    [documentFile, documentFiles]
+  );
+  const autoPreparationConfigKey = useMemo(
+    () => JSON.stringify({
+      multiFileConfigs,
+      selectedPages,
+      copies,
+      colorType,
+      sideType,
+      paperSize,
+      pagesPerSheet,
+      orientation,
+      printDpi,
+      scaleMode,
+      marginMode,
+      watermark,
+      watermarkType,
+      watermarkText,
+      watermarkPosition,
+      watermarkOpacity,
+      watermarkFontSize,
+      watermarkRotation,
+    }),
+    [
+      multiFileConfigs,
+      selectedPages,
+      copies,
+      colorType,
+      sideType,
+      paperSize,
+      pagesPerSheet,
+      orientation,
+      printDpi,
+      scaleMode,
+      marginMode,
+      watermark,
+      watermarkType,
+      watermarkText,
+      watermarkPosition,
+      watermarkOpacity,
+      watermarkFontSize,
+      watermarkRotation,
+    ]
+  );
+  const autoPreparation = useAutoUploadPreparation({
+    files: autoUploadFiles,
+    centre: selectedCentre,
+    filePreparationState,
+    preparePayment,
+    configurationKey: autoPreparationConfigKey,
+    enabled: !reprintSourceDocuments?.length,
+  });
 
   function releasePreparationState(state = filePreparationState) {
     Object.values(state || {}).forEach(revokePreparationPreview);
@@ -517,6 +572,17 @@ export default function UploadPage({
       navigate("centre", { state: { autoStartScanner: true, fromUpload: true } });
       return;
     }
+
+    if (autoPreparation?.status === "uploading" || autoPreparation?.status === "local_preparing") {
+      window.alert(autoPreparation.message || "Please wait until the selected documents finish preparing.");
+      return;
+    }
+
+    if (autoPreparation?.orderId && ["ready", "hub_converting"].includes(autoPreparation.status)) {
+      navigate("payment");
+      return;
+    }
+
     preparePayment(filePreparationState);
   };
 
@@ -672,7 +738,7 @@ export default function UploadPage({
   );
 
   return (
-    <div className="grid gap-4 sm:gap-6 lg:grid-cols-3 pb-[calc(7rem+env(safe-area-inset-bottom))] md:pb-6">
+    <div className="grid gap-4 pb-6 sm:gap-6 lg:grid-cols-3 md:pb-0">
       <Card className="lg:col-span-2 p-3 sm:p-5">
         <h2 className="text-xl sm:text-2xl font-bold min-w-0">Upload Document</h2>
         <div className="mt-2 flex flex-wrap items-center gap-2 text-slate-600 text-sm sm:text-base">
@@ -739,6 +805,32 @@ export default function UploadPage({
             </div>
           )}
 
+          {autoPreparation?.status && autoPreparation.status !== "idle" && (
+            <div
+              role={autoPreparation.status === "failed" ? "alert" : "status"}
+              className={`mb-4 rounded-2xl border px-4 py-3 text-sm ${
+                autoPreparation.status === "failed"
+                  ? "border-rose-200 bg-rose-50 text-rose-800"
+                  : autoPreparation.status === "ready"
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                    : "border-sky-200 bg-sky-50 text-sky-800"
+              }`}
+            >
+              <p className="font-semibold">
+                {autoPreparation.status === "waiting_for_centre" && "Waiting for centre selection"}
+                {autoPreparation.status === "local_preparing" && "Preparing files"}
+                {autoPreparation.status === "uploading" && "Uploading documents to hub"}
+                {autoPreparation.status === "hub_converting" && "Hub desktop is converting documents"}
+                {autoPreparation.status === "ready" && "Documents are ready for billing"}
+                {autoPreparation.status === "failed" && "Automatic preparation failed"}
+              </p>
+              <p className="mt-1">{autoPreparation.error || autoPreparation.message}</p>
+              {autoPreparation.orderId && (
+                <p className="mt-1 text-xs opacity-80">Order: {autoPreparation.orderId}</p>
+              )}
+            </div>
+          )}
+
           {!isMulti && (
             <div className="mb-4">
               <label className="grid gap-2 text-sm font-semibold text-slate-600 col-span-2 md:col-span-2">
@@ -766,7 +858,7 @@ export default function UploadPage({
               <button
                 type="button"
                 onClick={() => handleLocalPreview(0)}
-                className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 shadow-sm transition"
+                className="flex min-h-11 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 shadow-sm transition"
               >
                 <Eye size={14} /> Preview
               </button>
@@ -824,12 +916,13 @@ export default function UploadPage({
                         <span className="bg-slate-200 px-2 py-0.5 rounded text-slate-700">{conf.copies} copy</span>
                         <button
                           type="button"
+                          aria-label={`Preview ${file.name}`}
                           onClick={(e) => { e.stopPropagation(); handleLocalPreview(index); }}
-                          className="p-1 text-slate-400 hover:text-slate-900"
+                          className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-900"
                         >
                           <Eye size={16} />
                         </button>
-                        <button onClick={(e) => { e.stopPropagation(); setModalFileIndex(index); }} className="ml-1 p-1 text-slate-400 hover:text-slate-900">
+                        <button type="button" aria-label={`Configure ${file.name}`} onClick={(e) => { e.stopPropagation(); setModalFileIndex(index); }} className="ml-1 inline-flex min-h-10 min-w-10 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-900">
                           <Settings2 size={16} />
                         </button>
                       </div>
@@ -867,7 +960,7 @@ export default function UploadPage({
       </Card>
       
       {/* Spacer to prevent form hiding under sticky footer on mobile */}
-      <div className="h-28 md:hidden"></div>
+      <div className="h-20 md:hidden" aria-hidden="true"></div>
 
       <div className="fixed bottom-[68px] left-0 right-0 z-40 border-t bg-white p-3 shadow-[0_-8px_15px_rgba(0,0,0,0.08)] md:static md:bottom-auto md:z-auto md:block md:border-t-0 md:bg-transparent md:p-0 md:shadow-none">
         <Card className="rounded-none border-0 p-0 shadow-none md:rounded-2xl md:border md:p-6 md:shadow-sm">

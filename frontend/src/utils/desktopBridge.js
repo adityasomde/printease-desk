@@ -259,3 +259,45 @@ export function getDeviceIdentity() {
 export function openExternalUrl(url) {
   return callDesktop("openExternalUrl", "Could not open external URL.", url);
 }
+
+export function predownloadNow() {
+  return callDesktop("predownloadNow", "Could not run predownload now.");
+}
+
+export function conversionNow() {
+  return callDesktop("conversionNow", "Could not run conversion now.");
+}
+
+export async function diagnoseLibreOffice() {
+  const bridge = getBridge();
+  const diagnose = bridge?.conversion?.diagnoseLibreOffice || bridge?.diagnoseLibreOffice;
+  if (!diagnose) return desktopFallback();
+
+  try {
+    return await diagnose();
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message || "Could not diagnose LibreOffice.",
+    };
+  }
+}
+
+export function checkForUpdates() {
+  return callDesktop("checkForUpdates", "Could not check for updates.");
+}
+
+export function getUpdateStatus() {
+  return callDesktop("getUpdateStatus", "Could not load update status.");
+}
+
+export function installUpdateNow() {
+  return callDesktop("installUpdateNow", "Could not install update.");
+}
+
+export function onUpdateStatus(callback) {
+  const bridge = getBridge();
+  if (!bridge?.onUpdateStatus) return () => {};
+
+  return bridge.onUpdateStatus(callback);
+}

@@ -1,5 +1,5 @@
 import { sendHeartbeat } from "../../agent/heartbeat.js";
-import { processNextJob, processNextConversionJob, predownloadPendingDocuments } from "../../agent/jobPoller.js";
+import { processNextJob, processConversionBatch, predownloadPendingDocuments } from "../../agent/jobPoller.js";
 import { syncPrinters } from "../../agent/statusReporter.js";
 import { appState, emitAgentSession, sanitizeAgentSession, emitPrinterResult } from "../state/appState.js";
 import { clearStoredDesktopAgent, isAgentPaired } from "./authStore.js";
@@ -238,7 +238,7 @@ export function startPredownloadLoop(reason = "manual-start", payload = {}) {
   const pairingError = requirePairedAgent();
   if (pairingError) return pairingError;
   if (appState.predownloadTimer) return { success: true, message: "Predownload loop is already running.", session: sanitizeAgentSession() };
-  const intervalMs = Math.max(60000, Number(payload.predownloadIntervalMs) || 90000);
+  const intervalMs = Math.max(15000, Number(payload.predownloadIntervalMs) || 20000);
   appState.predownloadTimer = setInterval(() => {
     runPredownloadNow("predownload-loop").catch(() => {});
   }, intervalMs);
@@ -251,28 +251,33 @@ export function startPredownloadLoop(reason = "manual-start", payload = {}) {
 export async function runConversionNow(reason = "loop") {
   const pairingError = requirePairedAgent();
   if (pairingError) return pairingError;
-  if (appState.isConverting) return { success: true, skipped: true };
+  if (appState.isConverting) return { success: true, skipped: true, message: "Conversion already running.", session: sanitizeAgentSession() };
   appState.isConverting = true;
   appState.agentSession.conversionRunning = true;
   appState.agentSession.lastConversionMessage = "Running conversion loop...";
   emitAgentSession();
   try {
-    const result = await processNextConversionJob({ agentToken: appState.agentSession.accessToken });
+    const result = await processConversionBatch({ agentToken: appState.agentSession.accessToken, limit: 3 });
     appState.agentSession.lastConversionAt = new Date().toISOString();
     if (result.success && result.processed) {
       appState.agentSession.lastConversionError = "";
-      appState.agentSession.lastConversionMessage = `Converted ${result.documentId}.`;
-      if (result.details?.enginePath) appState.agentSession.converterPath = result.details.enginePath;
+      appState.agentSession.lastConversionMessage = `Converted ${result.processed} document${result.processed === 1 ? "" : "s"}.`;
+      const enginePath = result.results?.find((item) => item?.details?.enginePath)?.details?.enginePath;
+      if (enginePath) appState.agentSession.converterPath = enginePath;
     } else if (result.success) {
-      appState.agentSession.lastConversionMessage = "No pending conversions.";
+      appState.agentSession.lastConversionError = result.retryable ? (result.message || "Conversion will retry.") : "";
+      appState.agentSession.lastConversionMessage = result.message || "No pending conversions.";
     } else {
       appState.agentSession.lastConversionError = result.message || "Conversion failed.";
       appState.agentSession.lastConversionMessage = appState.agentSession.lastConversionError;
-      if (result.details?.enginePath) appState.agentSession.converterPath = result.details.enginePath;
+      const enginePath = result.results?.find((item) => item?.details?.enginePath)?.details?.enginePath;
+      if (enginePath) appState.agentSession.converterPath = enginePath;
     }
+    return { ...result, session: sanitizeAgentSession() };
   } catch (error) {
     appState.agentSession.lastConversionError = error.message || "Conversion error.";
     appState.agentSession.lastConversionMessage = appState.agentSession.lastConversionError;
+    return { success: false, message: appState.agentSession.lastConversionError, session: sanitizeAgentSession() };
   } finally {
     appState.isConverting = false;
     appState.agentSession.conversionRunning = false;

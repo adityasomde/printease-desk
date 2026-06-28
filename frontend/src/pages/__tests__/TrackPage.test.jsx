@@ -8,6 +8,7 @@ test("displays pending manual payment details and UPI QR image", async () => {
     id: "ORD123",
     amount: 80,
     paymentStatus: "Pending",
+    status: "payment_requested",
     centre: "Test Centre",
     document: "File.pdf",
     pickupCode: "P123",

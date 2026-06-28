@@ -38,6 +38,7 @@ export default function HomePage({
   updateOrderStatus,
   refreshOrders,
   onOrderSaved,
+  orders,
 }) {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [centreSearch, setCentreSearch] = useState("");
@@ -293,15 +294,50 @@ export default function HomePage({
 
         {currentUser ? (
           <Card>
-            <h3 className="text-xl font-bold">Welcome back, {currentUser.name || "PrintEase user"}</h3>
-            <p className="mt-2 text-sm text-slate-600">
-              Download our app to get started.
-            </p>
-            <div className="mt-5 grid gap-3">
-              <button onClick={handleDownloadApp} className="flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-4 font-semibold text-white transition hover:bg-slate-800">
-                <Download size={20} />
-                {isAndroid ? "Install Android App" : "Download Desktop App"}
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-bold">Welcome back, {currentUser.name || "PrintEase user"}</h3>
+                <p className="mt-1 text-sm text-slate-600">Your recent activity</p>
+              </div>
+              <button onClick={() => navigate("history")} className="text-sm font-bold text-slate-900 hover:underline">
+                View All
               </button>
+            </div>
+
+            <div className="mt-5 flex gap-4 overflow-x-auto pb-4 pt-2 -mx-2 px-2 snap-x hide-scrollbar">
+              {(orders || []).length > 0 ? (
+                (orders || []).slice(0, 5).map((order) => (
+                  <button
+                    key={order.id}
+                    onClick={() => navigate("track")}
+                    className="flex-none snap-start w-[240px] md:w-[280px] rounded-2xl border border-slate-200 bg-white p-4 shadow-sm text-left hover:border-slate-300 transition"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-bold text-slate-900 truncate">{order.document}</p>
+                        <p className="mt-1 text-xs text-slate-500">{order.id} · {order.date}</p>
+                      </div>
+                      <span className={`inline-flex flex-none items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                        ["collected", "completed"].includes(String(order.status).toLowerCase())
+                          ? "bg-emerald-100 text-emerald-800"
+                          : ["cancelled", "failed"].includes(String(order.status).toLowerCase())
+                          ? "bg-rose-100 text-rose-800"
+                          : "bg-blue-100 text-blue-800"
+                      }`}>
+                        {(order.status || "Unknown").replace(/_/g, " ")}
+                      </span>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between text-sm">
+                      <span className="font-semibold text-slate-700">₹{order.amount}</span>
+                      <span className="text-slate-500">{order.pages} pages</span>
+                    </div>
+                  </button>
+                ))
+              ) : (
+                <div className="w-full rounded-2xl border border-dashed bg-slate-50 p-6 text-center text-sm text-slate-500">
+                  You don't have any recent print orders.
+                </div>
+              )}
             </div>
           </Card>
         ) : (

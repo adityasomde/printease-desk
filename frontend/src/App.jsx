@@ -1,29 +1,10 @@
+import AppRouter from "./AppRouter";
 import { Component, useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { emitOrderChanged } from "./utils/appEvents";
 import Navbar from "./components/Navbar";
 import BackendStatus from "./components/BackendStatus";
-import { RouteNotice } from "./components/RouteNotice";
-import { RouteErrorBoundary } from "./components/RouteErrorBoundary";
 import { hubActivityStore } from "./state/hubActivityStore";
-
-const HubHistoryPage = lazy(() => import("./pages/HubHistoryPage"));
-const HomePage = lazy(() => import("./pages/HomePage"));
-const AuthPage = lazy(() => import("./pages/AuthPage"));
-const UserDashboard = lazy(() => import("./pages/UserDashboard"));
-const HubDashboard = lazy(() => import("./pages/HubDashboard"));
-const ProfilePage = lazy(() => import("./pages/ProfilePage"));
-const HubPricingPage = lazy(() => import("./pages/HubPricingPage"));
-const HubPrinterAgentPage = lazy(() => import("./pages/HubPrinterAgentPage"));
-const ApproveAgentPage = lazy(() => import("./pages/ApproveAgentPage"));
-const DesktopAgentPage = lazy(() => import("./pages/DesktopAgentPage"));
-const ConversionAgentPage = lazy(() => import("./pages/ConversionAgentPage"));
-const CentreCodePage = lazy(() => import("./pages/CentreCodePage"));
-const UploadPage = lazy(() => import("./pages/UploadPage"));
-const PaymentPage = lazy(() => import("./pages/PaymentPage"));
-const TrackPage = lazy(() => import("./pages/TrackPage"));
-const HistoryPage = lazy(() => import("./pages/HistoryPage"));
-const PlatformStatsPage = lazy(() => import("./pages/PlatformStatsPage"));
 import { initialCentres, initialOrders } from "./data/demoData";
 import { calculateTotalAmount, countSelectedPages, getPricePerPage } from "./utils/price";
 import { countSelectedPagesPreview, estimatePricePreview } from "./utils/printEstimate";
@@ -40,370 +21,7 @@ import { handleDesktopAutoRegistration } from "./utils/desktopAutoRegistration";
 import { prepareBrowserPrintReadyFile } from "./utils/filePreparation/prepareBrowserPrintReadyFile";
 import { buildPaymentPriceFromOrder } from "./utils/paymentOrderPricing";
 
-const ROUTES = {
-  home: "/",
-  auth: "/auth",
-  userDashboard: "/user/dashboard",
-  hubDashboard: "/hub/dashboard",
-  hubPricing: "/hub/pricing",
-  hubPrinters: "/hub/printers",
-  approveAgent: "/hub/printers/approve-agent",
-  desktopAgent: "/desktop-agent",
-  conversionAgent: "/conversion-agent",
-  profile: "/profile",
-  centre: "/centre",
-  upload: "/upload",
-  payment: "/payment",
-  track: "/track",
-  history: "/history",
-  orderHistory: "/order-history",
-  usageHistory: "/usage-history",
-  platformStats: "/platform-metrics-dashboard",
-  hubHistory: "/hub/history",
-};
-
-function getPageFromPath(pathname) {
-  const normalizedPath = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
-  const foundRoute = Object.entries(ROUTES).find(([, path]) => path === normalizedPath);
-  return foundRoute?.[0] || "home";
-}
-
-
-function formatStatus(status) {
-  if (!status) return "Available";
-  return status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
-}
-
-function buildPrintOptions({
-  selectedPages,
-  copies,
-  colorType,
-  sideType,
-  paperSize,
-  pagesPerSheet,
-  orientation = "auto",
-  printDpi = 300,
-  scaleMode = "original",
-  marginMode = "default",
-  watermark,
-  watermarkType = "order_code",
-  watermarkText = "",
-  watermarkPosition = "bottom_right",
-  watermarkOpacity = 0.18,
-  watermarkFontSize = 18,
-  watermarkRotation = 0,
-}) {
-  const range = String(selectedPages || "").trim();
-  const hasCustomRange = range && range.toLowerCase() !== "all";
-
-  return {
-    destination: {
-      selectedHubId: null,
-      preferredAgentId: null,
-      preferredPrinterName: null,
-    },
-    pages: {
-      mode: hasCustomRange ? "custom" : "all",
-      range: hasCustomRange ? range : "",
-    },
-    copies: Number(copies) || 1,
-    orientation,
-    colorMode: colorType === "color" ? "color" : "black_white",
-    paperSize: paperSize || "A4",
-    sides: sideType === "double" ? "two_sided_long_edge" : "one_sided",
-    scale: {
-      mode: scaleMode || "original",
-      percent: null,
-    },
-    pagesPerSheet: Number(pagesPerSheet) || 1,
-    margins: {
-      mode: marginMode || "default",
-    },
-    quality: {
-      dpi: Number(printDpi) || 300,
-    },
-    format: "original",
-    headersFooters: false,
-    backgrounds: true,
-    watermark: {
-      enabled: Boolean(watermark),
-      type: watermarkType || "order_code",
-      text: watermarkText || "",
-      position: watermarkPosition || "bottom_right",
-      opacity: Number(watermarkOpacity) || 0.18,
-      fontSize: Number(watermarkFontSize) || 18,
-      rotation: Number(watermarkRotation) || 0,
-    },
-  };
-}
-
-function normalizeCentre(centre) {
-  const pricing = centre.pricing || {};
-
-  return {
-    id: centre.id,
-    ownerId: centre.ownerId,
-    code: centre.centreCode || centre.code,
-    name: centre.name || centre.hubName,
-    owner: centre.owner || "Hub Owner",
-    mobile: centre.mobile || "",
-    status: formatStatus(centre.status),
-    upiId: centre.upiId || "",
-    upiQrImageUrl: centre.upiQrImageUrl || centre.upi_qr_image_url || "",
-    bwSingle: pricing.bwSingle ?? centre.bwSingle ?? null,
-    bwDouble: pricing.bwDouble ?? centre.bwDouble ?? null,
-    colorSingle: pricing.colorSingle ?? centre.colorSingle ?? null,
-    colorDouble: pricing.colorDouble ?? centre.colorDouble ?? null,
-    watermarkCharge: pricing.watermarkCharge ?? centre.watermarkCharge ?? 0,
-    pricing: {
-      bwSingle: pricing.bwSingle ?? centre.bwSingle ?? null,
-      bwDouble: pricing.bwDouble ?? centre.bwDouble ?? null,
-      colorSingle: pricing.colorSingle ?? centre.colorSingle ?? null,
-      colorDouble: pricing.colorDouble ?? centre.colorDouble ?? null,
-      watermarkCharge: pricing.watermarkCharge ?? centre.watermarkCharge ?? 0,
-    },
-    printerOnline: centre.printerOnline ?? centre.isOnline ?? false,
-    // Location fields (safe to be undefined/null when not provided)
-    locationEnabled: centre.locationEnabled ?? false,
-    latitude: centre.latitude ?? null,
-    longitude: centre.longitude ?? null,
-    addressText: centre.addressText ?? null,
-    area: centre.area ?? null,
-    city: centre.city ?? null,
-    mapUpdatedAt: centre.mapUpdatedAt ?? null,
-    afterOrderSettings: centre.afterOrderSettings ?? centre.after_order_settings ?? {},
-  };
-}
-
-function normalizeReprintSourceDocument(document = {}) {
-  const printOptions = document.printOptions || document.print_options || {};
-  const rawPageCount = document.pageCount ?? document.page_count ?? document.originalPageCount ?? document.original_pages ?? document.pages ?? null;
-  const pageCount = Number(rawPageCount);
-  return {
-    ...document,
-    documentId: document.documentId || document.document_id || document.id || "",
-    fileName: document.fileName || document.file_name || document.name || "document.pdf",
-    pageCount: Number.isFinite(pageCount) && pageCount > 0 ? pageCount : null,
-    originalPageCount: Number.isFinite(pageCount) && pageCount > 0 ? pageCount : null,
-    copies: Number(document.copies || printOptions.copies || 1),
-    selectedPages: document.selectedPages || document.selected_pages || printOptions.pages?.range || "",
-    printOptions,
-  };
-}
-
-function upsertCentre(centreList, centre) {
-  if (!centre) return centreList;
-
-  const nextCentre = normalizeCentre(centre);
-  const existingIndex = centreList.findIndex((item) => item.id === nextCentre.id || item.code === nextCentre.code);
-
-  if (existingIndex === -1) return [...centreList, nextCentre];
-
-  return centreList.map((item, index) => (index === existingIndex ? nextCentre : item));
-}
-
-function toFrontendRole(role) {
-  return role;
-}
-
-function findCentreForUser(user, centreList, responseCentre) {
-  if (responseCentre) return normalizeCentre(responseCentre);
-
-  return centreList.find((centre) => centre.id === user.centreId || centre.ownerId === user.id);
-}
-
-function toCurrentUser(user, centre) {
-  const role = toFrontendRole(user.role);
-  const hubId = user.hubId || user.centreId || centre?.id || null;
-
-  return {
-    ...user,
-    ...(centre || {}),
-    id: user.id,
-    role,
-    name: user.name,
-    mobile: user.mobile,
-    centreId: hubId,
-    hubId,
-    hubName: user.hubName || centre?.name || null,
-    centreCode: user.centreCode || centre?.code || null,
-    hubCode: role === "hub" ? user.centreCode || centre?.code : undefined,
-  };
-}
-
-function toDisplayLabel(value) {
-  if (!value) return "";
-  return String(value)
-    .split(/\s+/)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(" ");
-}
-
-function normalizeUsername(value) {
-  return String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-}
-
-function getUsernameBaseCandidates(name, email) {
-  const nameParts = String(name || "")
-    .trim()
-    .split(/\s+/)
-    .map(normalizeUsername)
-    .filter(Boolean);
-
-  if (nameParts.length) {
-    const firstName = nameParts[0];
-    const withSurname = normalizeUsername(nameParts.join(""));
-    return [...new Set([firstName, withSurname].filter(Boolean))];
-  }
-
-  const emailName = String(email || "").split("@")[0];
-  const fromEmail = normalizeUsername(emailName);
-  if (fromEmail) return [fromEmail];
-
-  return ["user"];
-}
-
-function getSupabaseDisplayName(user) {
-  const metadata = user?.user_metadata || {};
-  return metadata.full_name || metadata.name || metadata.display_name || "";
-}
-
-function generateStrongPasswordValue() {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
-  const symbols = "!@#$%&*?";
-  const bytes = new Uint32Array(18);
-  window.crypto.getRandomValues(bytes);
-  const body = Array.from(bytes, (value) => alphabet[value % alphabet.length]).join("");
-  return `${body.slice(0, 6)}${symbols[bytes[0] % symbols.length]}${body.slice(6, 12)}${bytes[1] % 10}${body.slice(12)}`;
-}
-
-function formatOrderDate(value) {
-  if (!value || value === "Today") return value || "Today";
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-
-  return date.toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-function extractCustomerName(order) {
-  if (!order) return null;
-  // common direct fields
-  if (order.customerName) return order.customerName;
-  if (order.customer_name) return order.customer_name;
-  if (order.userName) return order.userName;
-  if (order.user_name) return order.user_name;
-  if (order.name) return order.name;
-
-  const customer = order.customer || {};
-  const user = order.user || {};
-
-  const candidates = [
-    customer.name,
-    customer.full_name,
-    customer.fullName,
-    customer.displayName,
-    customer.username,
-    user.name,
-    user.full_name,
-    user.fullName,
-    user.displayName,
-    user.username,
-  ];
-
-  // try first/last name combinations
-  if (customer.firstName && customer.lastName) candidates.unshift(`${customer.firstName} ${customer.lastName}`);
-  if (customer.first_name && customer.last_name) candidates.unshift(`${customer.first_name} ${customer.last_name}`);
-  if (user.firstName && user.lastName) candidates.unshift(`${user.firstName} ${user.lastName}`);
-  if (user.first_name && user.last_name) candidates.unshift(`${user.first_name} ${user.last_name}`);
-
-  return candidates.find((v) => v && String(v).trim()) || null;
-}
-
-function normalizeOrder(order, centreList = []) {
-  const centreId = order.centreId || order.centre_id;
-  const centreCodeFromOrder = order.centreCode || order.centre_code;
-  const centre = centreList.find((item) => item.id === centreId || item.code === centreCodeFromOrder);
-  const orderCode = order.orderCode || order.order_code || order.id;
-  const rawStatus = order.status || "";
-  const rawBillStatus = order.billStatus || order.bill_status || "";
-  const rawPages = order.pages ?? order.printablePageCount ?? order.printable_page_count ?? order.selectedPageCount ?? order.selected_page_count ?? null;
-  const normalizedPages = Number(rawPages);
-  const priceSnapshot = order.priceSnapshot || order.price_snapshot || null;
-  const rawStatusKey = String(rawStatus).toLowerCase();
-  const pricingPending = Boolean(
-    rawStatusKey !== "bill_confirmed" &&
-    (
-      order.pricingPending ||
-      order.pricing_pending ||
-      priceSnapshot?.pricingPending ||
-      rawStatusKey === "awaiting_hub_bill_confirmation" ||
-      String(rawBillStatus).toLowerCase() === "awaiting_hub_confirmation"
-    )
-  );
-
-  return {
-    id: orderCode,
-    backendId: order.backendId || order.id,
-    centreId: centreId || centre?.id,
-    centreCode: centreCodeFromOrder || centre?.code || "",
-    centre: order.centre || centre?.name || "Selected centre",
-    customerName: extractCustomerName(order) || "Customer",
-    customerMobile: order.customerMobile || order.customer_mobile || order.userMobile || order.user_mobile || order.customer?.mobile || order.user?.mobile || order.mobile || "",
-    document: order.documentName || order.document_name || order.document || "Uploaded Document",
-    pages: Number.isFinite(normalizedPages) && normalizedPages > 0 ? normalizedPages : null,
-    copies: Number(order.copies || 1),
-    amount: Number(order.amount ?? (order.totalAmountPaise || order.total_amount_paise ? Number(order.totalAmountPaise || order.total_amount_paise) / 100 : 0)),
-    rawStatus,
-    status: toDisplayLabel(rawStatus || "Payment Pending"),
-    billStatus: rawBillStatus,
-    pricingPending,
-    date: formatOrderDate(order.createdAt || order.created_at || order.date),
-    paymentStatus: toDisplayLabel(order.paymentStatus || order.payment_status || "Pending"),
-    pickupCode: order.pickupCode || order.pickup_code || "",
-    configVersion: order.configVersion || order.config_version || null,
-    latestConfiguredByRole: order.latestConfiguredByRole || order.latest_configured_by_role || null,
-    latestConfiguredAt: order.latestConfiguredAt || order.latest_configured_at || null,
-    latestConfigSource: order.latestConfigSource || order.latest_config_source || null,
-    priceSnapshot,
-    printConfigSnapshot: order.printConfigSnapshot || order.print_config_snapshot || order.printOptions || order.print_options || null,
-  };
-}
-
-function upsertOrder(orderList, nextOrder) {
-  const existingIndex = orderList.findIndex((item) => item.id === nextOrder.id || item.backendId === nextOrder.backendId);
-
-  if (existingIndex === -1) return [nextOrder, ...orderList];
-
-  return orderList.map((item, index) => (index === existingIndex ? nextOrder : item));
-}
-
-async function persistAuthSession(token, user, authMeta = {}) {
-  localStorage.setItem("printease_token", token);
-  localStorage.setItem("printease_user", JSON.stringify(user));
-  if (authMeta.refreshToken) localStorage.setItem("printease_supabase_refresh_token", authMeta.refreshToken);
-
-  const result = await saveStoredAuth({ token, user, refreshToken: authMeta.refreshToken || null });
-  if (result?.success === false && isDesktop()) {
-    console.warn("[PrintEase desktop auth save failed]", result.error || result.message);
-  }
-}
-
-function clearAuthSession() {
-  localStorage.removeItem("printease_token");
-  localStorage.removeItem("printease_user");
-  localStorage.removeItem("printease_supabase_refresh_token");
-
-  clearStoredAuth().then((result) => {
-    if (result?.success === false && isDesktop()) {
-      console.warn("[PrintEase desktop auth clear failed]", result.error || result.message);
-    }
-  });
-}
+import { persistAuthSession, getPageFromPath, RouteNotice, formatStatus, buildPrintOptions, normalizeCentre, normalizeReprintSourceDocument, upsertCentre, toFrontendRole, findCentreForUser, toCurrentUser, toDisplayLabel, normalizeUsername, getUsernameBaseCandidates, getSupabaseDisplayName, generateStrongPasswordValue, formatOrderDate, extractCustomerName, normalizeOrder, upsertOrder, clearAuthSession, ROUTES } from "./utils/appHelpers.jsx";
 
 export default function App() {
   const routerNavigate = useNavigate();
@@ -638,29 +256,10 @@ export default function App() {
           return;
         }
 
-        // Only clear auth on definitive auth failures (401/403 = token is invalid).
-        // For transient errors (5xx, network down, cold-start), keep the stored
-        // token and fall back to the locally-cached user so the app stays usable.
-        const isAuthFailure = error.status === 401 || error.status === 403;
+        console.error("Session restore failed:", error?.message || error);
 
-        if (isAuthFailure) {
-          console.warn("Session restore: token rejected by server, clearing auth.", error?.message || error);
-          clearAuthSession();
-          setCurrentUser(null);
-        } else {
-          console.warn("Session restore: transient error, keeping stored auth.", error?.message || error);
-
-          // Fall back to locally-cached user so the UI is not blank
-          const cachedUserJson = localStorage.getItem("printease_user");
-          if (cachedUserJson) {
-            try {
-              const cachedUser = JSON.parse(cachedUserJson);
-              setCurrentUser(cachedUser);
-            } catch {
-              // corrupt cache — still don't clear auth, let user retry
-            }
-          }
-        }
+        clearAuthSession();
+        setCurrentUser(null);
       }
     }
 
@@ -1311,8 +910,45 @@ export default function App() {
     selectCentreByCode(trimmedCode, { replace: true });
   }, [location.pathname, location.search, centres]);
 
+  useEffect(() => {
+    async function restoreActiveOrder() {
+      const params = new URLSearchParams(location.search);
+      const urlOrderId = params.get("order") || params.get("orderId") || params.get("order_id");
+      
+      const isPaymentOrTrackPage = ["payment", "track"].includes(page);
+      const activeOrderId = urlOrderId || (isPaymentOrTrackPage ? localStorage.getItem("printease_active_order_id") : null);
+
+      if (!activeOrderId) return;
+
+      try {
+        const data = await getOrderStatus(activeOrderId, { orderAccessToken });
+        if (data && data.order) {
+          const refreshedOrder = normalizeOrder(data.order, centres);
+          const refreshedPrice = buildPaymentPriceFromOrder(data.order, backendPrice);
+
+          setOrder(refreshedOrder);
+          setBackendPrice(refreshedPrice);
+          
+          const centre = centres.find((c) => c.id === refreshedOrder.centreId || c.code === refreshedOrder.centreCode);
+          if (centre) {
+            setSelectedCentre(centre);
+          }
+          
+          localStorage.setItem("printease_active_order_id", activeOrderId);
+        }
+      } catch (err) {
+        console.error("Failed to restore active order:", err);
+      }
+    }
+
+    restoreActiveOrder();
+  }, [location.search, centres, page]);
+
   function startDirectUpload() {
     setSelectedCentre(null);
+    setOrder(null);
+    setBackendPrice(null);
+    localStorage.removeItem("printease_active_order_id");
     setPaymentError("");
     navigate("upload");
   }
@@ -1413,6 +1049,10 @@ export default function App() {
              if (printReadyFile) {
                formData.append("printReadyFileType", "application/pdf");
              }
+          }
+          
+          if (selectedCentre) {
+            formData.append("hubId", selectedCentre.id || selectedCentre.code);
           }
 
           const uploadData = await apiRequest("/api/uploads", {
@@ -1539,6 +1179,7 @@ export default function App() {
       setOrder(nextOrder);
       setBackendPrice(orderData.price || null);
       
+      localStorage.setItem("printease_active_order_id", nextOrder.backendId || nextOrder.id);
       saveOrderToLocalHistory(nextOrder, defaultPrintOptions, orderData.price, uploadedDocuments);
       invalidateUserHistory(currentUser?.id || "me");
 
@@ -2251,199 +1892,32 @@ export default function App() {
     );
   }
 
-  return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <Navbar
-        page={page}
-        navigate={navigate}
-        profileOpen={profileOpen}
-        setProfileOpen={setProfileOpen}
-        currentUser={currentUser}
-        desktopAvailable={desktopAvailable}
-        startLogin={startLogin}
-        startRegister={startRegister}
-        logout={logout}
-        openProfile={openProfile}
-      />
 
-      <main className="mx-auto max-w-6xl px-4 pb-28 pt-8 md:pb-8">
-        <BackendStatus />
-        <RouteErrorBoundary>
-          <Suspense fallback={
-            <div className="flex h-full min-h-[50vh] w-full items-center justify-center">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-slate-900"></div>
-            </div>
-          }>
-            <Routes>
-              <Route
-                path={ROUTES.home}
-                element={<HomePage currentUser={currentUser} navigate={navigate} startLogin={startLogin} handleSignOut={logout} centres={prioritizedCentres} selectCentreByCode={selectCentreByCode} selectCentreAndUpload={selectCentreAndUpload} currentHub={currentHub} hubOrders={orders} updateOrderStatus={updateOrderStatus} refreshOrders={() => loadOrdersForSession()} onOrderSaved={() => loadOrdersForSession()} />}
-              />
-              <Route path={ROUTES.auth} element={<AuthPage 
-                authRole={authRole}
-                setAuthRole={setAuthRole}
-                authMode={authMode} 
-                setAuthMode={setAuthMode} 
-                email={email}
-                setEmail={setEmail}
-                password={password}
-                setPassword={setPassword}
-                showPassword={showPassword}
-                setShowPassword={setShowPassword}
-                username={username}
-                setUsername={setUsernameState}
-                usernameStatus={usernameStatus}
-                name={name}
-                setName={setName}
-                mobile={mobile}
-                setMobile={setMobile}
-                hubName={hubName}
-                setHubName={setHubName}
-                hubCode={hubCode}
-                setHubCode={setHubCode}
-                generateStrongPassword={generateStrongPassword}
-                handleAuthSubmit={handleAuthSubmit}
-                handleGoogleLogin={handleGoogleLogin}
-                authError={authError}
-                authLoading={authLoading}
-              />} />
-              <Route
-                path={ROUTES.userDashboard}
-                element={
-                  currentUser?.role === "user" ? (
-                    <UserDashboard currentUser={currentUser} recentOrders={orders} onSignOut={logout} navigate={navigate} startLogin={startLogin} prioritizedCentres={prioritizedCentres} selectCentreByCode={selectCentreByCode} selectCentreAndUpload={selectCentreAndUpload} />
-                  ) : (
-                    <RouteNotice title="User Login Required" message="Please login as a user to view your dashboard." actionLabel="Login as User" onAction={() => startLogin("user")} />
-                  )
-                }
-              />
-              <Route
-                path={ROUTES.hubDashboard}
-                element={
-                  currentUser?.role === "hub" ? (
-                    <HubDashboard 
-                      currentHub={currentHub} 
-                      hubOrders={orders} 
-                      updateOrderStatus={updateOrderStatus} 
-                      refreshOrders={() => loadOrdersForSession(currentUser, centres)} 
-                      onOrderSaved={applySavedOrderUpdate} 
-                      onAfterOrderSettingsUpdate={updateCentreAfterOrderSettings} 
-                      navigate={navigate} 
-                    />
-                  ) : (
-                    <RouteNotice title="Print Hub Login Required" message="Please login as a print hub to access the hub dashboard." actionLabel="Login as Print Hub" onAction={() => startLogin("hub")} />
-                  )
-                }
-              />
-              <Route
-                path={ROUTES.profile}
-                element={
-                  currentUser ? (
-                    <ProfilePage currentUser={currentUser} updateProfile={updateProfile} navigate={navigate} />
-                  ) : (
-                    <RouteNotice title="Login Required" message="Please login to view your profile." actionLabel="Login" onAction={() => startLogin("user")} />
-                  )
-                }
-              />
-              <Route
-                path={ROUTES.platformStats}
-                element={
-                  currentUser?.role === "admin" ? (
-                    <PlatformStatsPage currentUser={currentUser} />
-                  ) : (
-                    <RouteNotice title="Admin Access Required" message="You do not have permission to view platform metrics." actionLabel="Return Home" onAction={() => navigate("/")} />
-                  )
-                }
-              />
-              <Route
-                path={ROUTES.hubHistory}
-                element={
-                  currentUser?.role === "hub" ? (
-                    <HubHistoryPage
-                      currentHub={currentHub}
-                      orders={orders}
-                      updateOrderStatus={updateOrderStatus}
-                      refreshOrders={() => loadOrdersForSession(currentUser, centres)}
-                      onOrderSaved={applySavedOrderUpdate}
-                      navigate={navigate}
-                    />
-                  ) : (
-                    <RouteNotice title="Print Hub Login Required" message="Please login as a print hub to view history." actionLabel="Login as Print Hub" onAction={() => startLogin("hub")} />
-                  )
-                }
-              />
-              <Route
-                path={ROUTES.hubPricing}
-                element={
-                  currentUser?.role === "hub" ? (
-                    <HubPricingPage currentHub={currentHub} updateCentrePrice={updateCentrePrice} updateCentrePayment={updateCentrePayment} onAfterOrderSettingsUpdate={updateCentreAfterOrderSettings} />
-                  ) : (
-                    <RouteNotice title="Print Hub Login Required" message="Please login as a print hub to manage pricing and payment details." actionLabel="Login as Print Hub" onAction={() => startLogin("hub")} />
-                  )
-                }
-              />
-              <Route
-                path={ROUTES.hubPrinters}
-                element={
-                  currentUser?.role === "hub" ? (
-                    <HubPrinterAgentPage navigate={navigate} />
-                  ) : (
-                    <RouteNotice title="Print Hub Login Required" message="Please login as a print hub to manage printer agents." actionLabel="Login as Print Hub" onAction={() => startLogin("hub")} />
-                  )
-                }
-              />
-              <Route
-                path={ROUTES.approveAgent}
-                element={
-                  currentUser?.role === "hub" ? (
-                    <ApproveAgentPage currentUser={currentUser} navigate={navigate} />
-                  ) : currentUser ? (
-                    <RouteNotice title="Only Hub Accounts" message="Only hub accounts can approve desktop agents." />
-                  ) : (
-                    <RouteNotice title="Print Hub Login Required" message="Please login as a print hub to approve desktop devices." actionLabel="Login as Print Hub" onAction={() => startLogin("hub", approvalReturnPath)} />
-                  )
-                }
-              />
-              <Route path={ROUTES.desktopAgent} element={<DesktopAgentPage currentUser={currentUser} />} />
-              <Route path={ROUTES.conversionAgent} element={<ConversionAgentPage />} />
-              <Route path={ROUTES.centre} element={<CentreCodePage centreCode={centreCode} setCentreCode={setCentreCode} handleCentreCode={handleCentreCode} selectCentreByCode={selectCentreByCode} centres={prioritizedCentres} selectCentreAndUpload={selectCentreAndUpload} lookupLoading={centreLookupLoading} lookupError={centreLookupError} autoStartScanner={Boolean(location.state?.autoStartScanner)} />} />
-              <Route path={ROUTES.upload} element={<UploadPage currentUser={currentUser} startLogin={startLogin} selectedCentre={selectedCentre} documentFile={documentFile} setDocumentFile={setDocumentFile} documentFiles={documentFiles} setDocumentFiles={setDocumentFiles} reprintSourceDocuments={reprintSourceDocuments} setReprintSourceDocuments={setReprintSourceDocuments} reprintDocumentExpired={reprintDocumentExpired} setReprintDocumentExpired={setReprintDocumentExpired} multiFileConfigs={multiFileConfigs} setMultiFileConfigs={setMultiFileConfigs} documentName={documentName} setDocumentName={setDocumentName} pages={pages} setPages={setPages} selectedPages={selectedPages} setSelectedPages={setSelectedPages} copies={copies} setCopies={setCopies} colorType={colorType} setColorType={setColorType} sideType={sideType} setSideType={setSideType} paperSize={paperSize} setPaperSize={setPaperSize} pagesPerSheet={pagesPerSheet} setPagesPerSheet={setPagesPerSheet} orientation={orientation} setOrientation={setOrientation} printDpi={printDpi} setPrintDpi={setPrintDpi} scaleMode={scaleMode} setScaleMode={setScaleMode} marginMode={marginMode} setMarginMode={setMarginMode} watermark={watermark} setWatermark={setWatermark} watermarkType={watermarkType} setWatermarkType={setWatermarkType} watermarkText={watermarkText} setWatermarkText={setWatermarkText} watermarkPosition={watermarkPosition} setWatermarkPosition={setWatermarkPosition} watermarkOpacity={watermarkOpacity} setWatermarkOpacity={setWatermarkOpacity} watermarkFontSize={watermarkFontSize} setWatermarkFontSize={watermarkFontSize} watermarkRotation={watermarkRotation} setWatermarkRotation={setWatermarkRotation} pricePerPage={pricePerPage} estimatedSelectedPageCount={estimatedSelectedPageCount} totalAmount={totalAmount} backendPrice={backendPrice} setBackendPrice={setBackendPrice} preparePayment={preparePayment} paymentLoading={paymentLoading} paymentError={paymentError} navigate={navigate} />} />
-              <Route
-                path={ROUTES.payment}
-                element={
-                  selectedCentre && order ? (
-                    <PaymentPage currentUser={currentUser} startLogin={startLogin} selectedCentre={selectedCentre} documentName={documentName} pages={pages} copies={copies} backendPrice={backendPrice} order={order} refreshActivePaymentOrder={refreshActivePaymentOrder} paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod} handlePayment={handlePayment} paymentLoading={paymentLoading} paymentError={paymentError} />
-                  ) : (
-                    <RouteNotice title="Payment Not Ready" message="Please select a centre and upload a document first." actionLabel="Select Centre" onAction={() => navigate("centre")} />
-                  )
-                }
-              />
-              <Route
-                path={ROUTES.track}
-                element={
-                  <TrackPage
-                    order={order}
-                    lastUpdatedAt={lastOrdersUpdatedAt}
-                    pendingPayment={pendingPayment}
-                    upiQr={upiQr}
-                    centreUpiId={selectedCentre?.upiId}
-                    centreUpiQrImageUrl={selectedCentre?.upiQrImageUrl}
-                    onPayOnline={startRazorpayForExistingOrder}
-                    onCreateUpiQr={createUpiQrForExistingOrder}
-                    onSimulateVerifiedPayment={demoPaymentEnabled ? handleVerifyDemoPayment : null}
-                    paymentLoading={paymentLoading}
-                    paymentError={paymentError}
-                  />
-                }
-              />
-              <Route path={ROUTES.history} element={<HistoryPage orders={orders} currentUser={currentUser} lastUpdatedAt={lastOrdersUpdatedAt} onOpenPayment={openPaymentRequest} onReprintOrder={reprintWithSameSettings} onReprintWithSettings={reprintWithSettings} isReprinting={paymentLoading} />} />
-              <Route path={ROUTES.orderHistory} element={<Navigate to={ROUTES.history} replace />} />
-              <Route path={ROUTES.usageHistory} element={<Navigate to={ROUTES.history} replace />} />
-              <Route path="*" element={<Navigate to={ROUTES.home} replace />} />
-            </Routes>
-          </Suspense>
-        </RouteErrorBoundary>
-      </main>
-    </div>
+  return (
+    <AppRouter {...{
+      page, navigate, profileOpen, setProfileOpen, currentUser, desktopAvailable,
+      logout, openProfile, authMode, authRole, changeAuthMode, changeAuthRole,
+      authError, authLoading, handleAuthSubmit, handleGoogleLogin, email, updateEmail,
+      password, setPassword, name, updateName, mobile, setMobile, confirmPassword, setConfirmPassword,
+      showPassword, setShowPassword, username, updateUsername, usernameEdited, usernameStatus,
+      hubName, setHubName, hubCode, setHubCode, startLogin, startRegister,
+      centreCode, setCentreCode, handleCentreCode, centreLookupError, centreLookupLoading,
+      selectedCentre, documentFiles, setDocumentFiles, multiFileConfigs, setMultiFileConfigs,
+      documentName, setDocumentName, pages, setPages, selectedPages, setSelectedPages,
+      copies, setCopies, colorType, setColorType, sideType, setSideType, paperSize, setPaperSize,
+      pagesPerSheet, setPagesPerSheet, orientation, setOrientation, printDpi, setPrintDpi,
+      scaleMode, setScaleMode, marginMode, setMarginMode, watermark, setWatermark,
+      watermarkType, setWatermarkType, watermarkText, setWatermarkText, watermarkPosition, setWatermarkPosition,
+      watermarkOpacity, setWatermarkOpacity, watermarkFontSize, setWatermarkFontSize, watermarkRotation, setWatermarkRotation,
+      preparePayment, paymentLoading, paymentError, reprintSourceDocuments, setReprintSourceDocuments, reprintDocumentExpired,
+      pendingPayment, paymentMethod, setPaymentMethod, upiQr, handlePayment, handleVerifyDemoPayment,
+      demoPaymentEnabled, order, updateOrderStatus,
+      hubOrders, currentHub, updateCentrePrice, updateCentrePayment, updateCentreAfterOrderSettings, updateProfile,
+      startDirectUpload, orders, centres, startRazorpayForExistingOrder, createUpiQrForExistingOrder, openPaymentRequest,
+      reprintWithSettings, reprintWithSameSettings,
+      prioritizedCentres, selectCentreAndUpload, selectCentreByCode, loadOrdersForSession, applySavedOrderUpdate,
+      generateStrongPassword, approvalReturnPath, documentFile, setDocumentFile, setReprintDocumentExpired,
+      pricePerPage, estimatedSelectedPageCount, totalAmount, backendPrice, setBackendPrice, refreshActivePaymentOrder, lastOrdersUpdatedAt
+    }} />
   );
 }

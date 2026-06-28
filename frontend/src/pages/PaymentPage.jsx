@@ -137,7 +137,7 @@ export default function PaymentPage({
     }
 
     refreshBill();
-    const interval = window.setInterval(refreshBill, 3500);
+    const interval = window.setInterval(refreshBill, 5000);
     return () => {
       cancelled = true;
       window.clearInterval(interval);

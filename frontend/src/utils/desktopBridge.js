@@ -95,28 +95,6 @@ export async function diagnoseWindowsPrintHelper() {
   }
 }
 
-export async function diagnoseLibreOffice() {
-  const bridge = getBridge();
-  const diagnoseHelper = bridge?.conversion?.diagnoseLibreOffice || bridge?.diagnoseLibreOffice;
-  if (!diagnoseHelper) {
-    return {
-      success: false,
-      found: false,
-      message: "Desktop LibreOffice diagnostic bridge is not available.",
-    };
-  }
-
-  try {
-    return await diagnoseHelper();
-  } catch (error) {
-    return {
-      success: false,
-      found: false,
-      error: error.message || "Could not inspect LibreOffice.",
-    };
-  }
-}
-
 export async function testPrint(payload = {}) {
   const bridge = getBridge();
   if (!bridge?.testPrint) return desktopFallback();
@@ -234,14 +212,6 @@ export function syncPrinters() {
   return callDesktop("syncPrinters", "Could not sync printers.");
 }
 
-export function predownloadNow() {
-  return callDesktop("predownloadNow", "Could not run predownload cache warmup.");
-}
-
-export function conversionNow() {
-  return callDesktop("conversionNow", "Could not check pending conversions.");
-}
-
 export function pollPrintJobs(payload = {}) {
   return callDesktop("pollPrintJobs", "Could not poll print jobs.", payload);
 }
@@ -250,31 +220,8 @@ export function startJobPolling(payload = {}) {
   return callDesktop("startJobPolling", "Could not start print job polling.", payload);
 }
 
-export function checkForUpdates() {
-  return callDesktop("checkForUpdates", "Could not check for desktop updates.");
-}
-
-export function getUpdateStatus() {
-  return callDesktop("getUpdateStatus", "Could not read desktop update status.");
-}
-
-export function installUpdateNow() {
-  return callDesktop("installUpdateNow", "Could not install downloaded update.");
-}
-
-export function onUpdateStatus(callback) {
-  const bridge = getBridge();
-  if (!bridge?.onUpdateStatus) return () => {};
-
-  return bridge.onUpdateStatus(callback);
-}
-
 export function stopJobPolling() {
   return callDesktop("stopJobPolling", "Could not stop print job polling.");
-}
-
-export function startAgentRuntime() {
-  return callDesktop("startAgentRuntime", "Could not restart desktop agent runtime.");
 }
 
 export function getStoredAuth() {

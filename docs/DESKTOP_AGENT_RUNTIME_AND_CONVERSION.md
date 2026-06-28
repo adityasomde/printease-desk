@@ -63,6 +63,24 @@ non-existent folder from the split controller directory.
 
 ## Common Failure Modes
 
+- Windows conversion reports LibreOffice missing:
+  check `desktop-shell/agent/printPreparation/conversionEngine.js`. Packaged
+  Windows builds must probe both
+  `resources/vendor/libreoffice/win/program/soffice.com` and
+  `resources/vendor/libreoffice/win/program/soffice.exe`, then local installs
+  under `C:\Program Files\LibreOffice`. Do not rely on only one executable
+  name.
+
+- Windows conversion starts but LibreOffice exits immediately:
+  check the `-env:UserInstallation=...` argument. Windows profile paths must
+  be valid file URLs such as `file:///C:/Users/...`, not `file://C:/Users/...`.
+  Use `libreOfficeProfile.js` instead of hand-building the URL.
+
+- LibreOffice diagnostic smoke conversion fails:
+  this should be reported as diagnostic detail, not treated as proof that the
+  converter is missing. A real Office document conversion should still be
+  attempted when `soffice --version` proves LibreOffice exists.
+
 - Conversion page says offline although desktop is paired:
   the page is probably ignoring a plain sanitized session event. The bridge
   emits session objects, not always `{ success: true, session }`.

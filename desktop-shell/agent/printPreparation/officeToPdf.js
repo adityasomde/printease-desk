@@ -10,12 +10,16 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { findLibreOfficeExecutable } from './conversionEngine.js';
+import {
+  makeLibreOfficeUserInstallationArg,
+  prepareLibreOfficeProfileEnvironment,
+} from './libreOfficeProfile.js';
 
 let conversionLock = Promise.resolve();
 
-function waitForProcess(command, args, { timeoutMs = 2 * 60 * 1000, cwd } = {}) {
+function waitForProcess(command, args, { timeoutMs = 2 * 60 * 1000, cwd, env } = {}) {
   return new Promise((resolve) => {
-    const child = spawn(command, args, { cwd, windowsHide: true });
+    const child = spawn(command, args, { cwd, windowsHide: true, env: env || process.env });
     let stdout = '';
     let stderr = '';
     const timer = setTimeout(() => {
@@ -92,8 +96,9 @@ export async function convertOfficeToPdf({ inputPath, outputDir, timeoutMs = 2 *
 
     const profileDir = path.join(os.tmpdir(), `printease-libreoffice-profile-${process.pid}-${Date.now()}`);
     try {
+      const conversionEnv = await prepareLibreOfficeProfileEnvironment(profileDir);
       const args = [
-        `-env:UserInstallation=file://${profileDir.replace(/\\/g, '/')}`,
+        makeLibreOfficeUserInstallationArg(profileDir),
         '--headless',
         '--nologo',
         '--nofirststartwizard',
@@ -104,7 +109,7 @@ export async function convertOfficeToPdf({ inputPath, outputDir, timeoutMs = 2 *
         inputPath,
       ];
 
-      const result = await waitForProcess(engine.executable, args, { timeoutMs: dynamicTimeoutMs });
+      const result = await waitForProcess(engine.executable, args, { timeoutMs: dynamicTimeoutMs, env: conversionEnv });
       if (!result.success) {
         return {
           success: false,

@@ -1,6 +1,6 @@
 import { getApiBaseUrl } from "../config/backend.js";
 
-const VERSION = "0.1.94";
+const VERSION = "0.1.100";
 
 function createHeaders(agentToken) {
   const headers = {

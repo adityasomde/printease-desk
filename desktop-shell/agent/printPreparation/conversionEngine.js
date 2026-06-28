@@ -17,16 +17,23 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import {
+  makeLibreOfficeUserInstallationArg,
+  prepareLibreOfficeProfileEnvironment,
+} from './libreOfficeProfile.js';
 
 export const LIBREOFFICE_MANUAL_DOWNLOAD_URL = 'https://download.documentfoundation.org/libreoffice/stable/';
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
+const DESKTOP_SHELL_DIR = path.resolve(MODULE_DIR, '..', '..');
 
 function exists(filePath) {
   return fs.access(filePath).then(() => true).catch(() => false);
 }
 
-function runCommand(command, args = [], { timeoutMs = 8000 } = {}) {
+function runCommand(command, args = [], { timeoutMs = 8000, env } = {}) {
   return new Promise((resolve) => {
-    const child = spawn(command, args, { windowsHide: true });
+    const child = spawn(command, args, { windowsHide: true, env: env || process.env });
     let stdout = '';
     let stderr = '';
     const timer = setTimeout(() => {
@@ -50,18 +57,26 @@ function runCommand(command, args = [], { timeoutMs = 8000 } = {}) {
  * Returns the path to the bundled soffice binary inside the packaged Electron app.
  * Returns null if not found (e.g. during development or if not yet downloaded).
  */
-function getBundledSofficePath(platform) {
+function getBundledSofficePaths(platform) {
   // In a packaged Electron app, process.resourcesPath points to the resources/ dir
   const resourcesPath = typeof process !== 'undefined' && process.resourcesPath
     ? process.resourcesPath
     : null;
 
-  if (!resourcesPath) return null;
+  if (!resourcesPath) return [];
 
   if (platform === 'win32') {
-    return path.join(resourcesPath, 'vendor', 'libreoffice', 'win', 'program', 'soffice.com');
+    const programDir = path.join(resourcesPath, 'vendor', 'libreoffice', 'win', 'program');
+    return [
+      path.join(programDir, 'soffice.com'),
+      path.join(programDir, 'soffice.exe'),
+    ];
   }
-  return path.join(resourcesPath, 'vendor', 'libreoffice', 'linux', 'program', 'soffice');
+  return [path.join(resourcesPath, 'vendor', 'libreoffice', 'linux', 'program', 'soffice')];
+}
+
+function hasPathSeparator(candidate) {
+  return candidate.includes('/') || candidate.includes('\\');
 }
 
 export async function findLibreOfficeExecutable({ platform = process.platform, extraPaths = [] } = {}) {
@@ -69,22 +84,18 @@ export async function findLibreOfficeExecutable({ platform = process.platform, e
   const checkedPaths = [];
 
   // 1. Bundled copy inside the packaged app (highest priority)
-  const bundledPath = getBundledSofficePath(platform);
-  if (bundledPath) {
-    candidates.push(bundledPath);
-  }
+  const bundledPaths = getBundledSofficePaths(platform);
+  candidates.push(...bundledPaths);
 
   // 2. Also check relative vendor/ dir (for dev mode when running from source)
-  const devVendorPath = platform === 'win32'
-    ? path.resolve('vendor', 'libreoffice', 'win', 'program', 'soffice.com')
-    : path.resolve('vendor', 'libreoffice', 'linux', 'program', 'soffice');
+  const devVendorPaths = platform === 'win32'
+    ? [
+        path.join(DESKTOP_SHELL_DIR, 'vendor', 'libreoffice', 'win', 'program', 'soffice.com'),
+        path.join(DESKTOP_SHELL_DIR, 'vendor', 'libreoffice', 'win', 'program', 'soffice.exe'),
+      ]
+    : [path.join(DESKTOP_SHELL_DIR, 'vendor', 'libreoffice', 'linux', 'program', 'soffice')];
   
-  if (platform === 'win32') {
-    candidates.push(devVendorPath);
-    candidates.push(devVendorPath.replace(/\.com$/, '.exe'));
-  } else {
-    candidates.push(devVendorPath);
-  }
+  candidates.push(...devVendorPaths);
 
   // 3. Any extra paths provided by caller
   for (const item of extraPaths) {
@@ -105,56 +116,77 @@ export async function findLibreOfficeExecutable({ platform = process.platform, e
     candidates.push('/usr/bin/libreoffice', '/usr/bin/soffice', '/snap/bin/libreoffice');
   }
 
-  // 5. PATH fallback. spawn can resolve these names.
-  if (platform === 'win32') {
-    candidates.push('soffice.com');
+  // 5. PATH fallback. Only use it for the current OS so cross-platform
+  // diagnostics do not accidentally pick up Linux soffice for a Windows check.
+  if (platform === process.platform) {
+    if (platform === 'win32') {
+      candidates.push('soffice.com', 'soffice.exe');
+    }
+    candidates.push('soffice', 'libreoffice');
   }
-  candidates.push('soffice', 'libreoffice');
 
   for (const candidate of candidates) {
     checkedPaths.push(candidate);
-    if (candidate.includes(path.sep) || candidate.endsWith('.exe')) {
+    if (hasPathSeparator(candidate) || candidate.endsWith('.exe')) {
       if (!(await exists(candidate))) continue;
     }
 
     const result = await runCommand(candidate, ['--version'], { timeoutMs: 8000 });
-    if (result.success || result.stdout || result.stderr) {
-      // Smoke test: verify the candidate can actually perform a conversion.
-      // Some vendor/portable copies respond to --version but crash on real work.
+    const versionText = `${result.stdout || ''}${result.stderr || ''}`.trim();
+    const versionLooksValid = Boolean(result.success || /LibreOffice|OpenOffice/i.test(versionText));
+    if (versionLooksValid) {
+      let smokeTest = {
+        attempted: false,
+        success: false,
+        message: '',
+      };
+
+      // Smoke test gives diagnostics, but it must not hide a real installed
+      // converter. Some LibreOffice builds can open Office files while refusing
+      // a tiny synthetic text smoke file in restricted desktop environments.
       const os = await import('node:os');
       const smokeDir = path.join(os.default.tmpdir(), `printease-lo-smoketest-${Date.now()}`);
       const smokeInput = path.join(smokeDir, 'smoke.txt');
       try {
+        smokeTest.attempted = true;
         await fs.mkdir(smokeDir, { recursive: true });
         await fs.writeFile(smokeInput, 'printease smoke test', 'utf8');
         const smokeProfile = path.join(os.default.tmpdir(), `printease-lo-smokeprofile-${Date.now()}`);
+        const smokeEnv = await prepareLibreOfficeProfileEnvironment(smokeProfile);
         const smokeResult = await runCommand(candidate, [
-          `-env:UserInstallation=file://${smokeProfile.replace(/\\/g, '/')}`,
+          makeLibreOfficeUserInstallationArg(smokeProfile),
           '--headless', '--nologo', '--nofirststartwizard', '--nodefault', '--nolockcheck',
           '--convert-to', 'pdf', '--outdir', smokeDir, smokeInput,
-        ], { timeoutMs: 30000 });
+        ], { timeoutMs: 30000, env: smokeEnv });
         await fs.rm(smokeProfile, { recursive: true, force: true }).catch(() => {});
         const smokeOutput = path.join(smokeDir, 'smoke.pdf');
         const smokeWorked = smokeResult.success && await exists(smokeOutput);
         await fs.rm(smokeDir, { recursive: true, force: true }).catch(() => {});
-        if (!smokeWorked) {
-          console.warn(`[CONVERSION ENGINE] candidate "${candidate}" failed smoke test, skipping.`, smokeResult.stderr || smokeResult.stdout || '');
-          continue;
-        }
+        smokeTest = {
+          attempted: true,
+          success: Boolean(smokeWorked),
+          message: smokeWorked ? 'Smoke conversion passed.' : (smokeResult.stderr || smokeResult.stdout || 'Smoke conversion did not create a PDF.'),
+        };
+        if (!smokeWorked) console.warn(`[CONVERSION ENGINE] candidate "${candidate}" failed smoke test. Real conversion will still be attempted.`, smokeTest.message);
       } catch (smokeError) {
         await fs.rm(smokeDir, { recursive: true, force: true }).catch(() => {});
-        console.warn(`[CONVERSION ENGINE] candidate "${candidate}" smoke test error, skipping.`, smokeError?.message || '');
-        continue;
+        smokeTest = {
+          attempted: true,
+          success: false,
+          message: smokeError?.message || 'Smoke conversion errored.',
+        };
+        console.warn(`[CONVERSION ENGINE] candidate "${candidate}" smoke test error. Real conversion will still be attempted.`, smokeTest.message);
       }
 
       return {
         found: true,
         executable: candidate,
-        bundled: candidate === bundledPath,
-        source: candidate === bundledPath ? 'bundled' : candidate === devVendorPath ? 'dev-vendor' : 'system',
+        bundled: bundledPaths.includes(candidate),
+        source: bundledPaths.includes(candidate) ? 'bundled' : devVendorPaths.includes(candidate) ? 'dev-vendor' : 'system',
         manualDownloadUrl: LIBREOFFICE_MANUAL_DOWNLOAD_URL,
         checkedPaths,
-        versionText: `${result.stdout || ''}${result.stderr || ''}`.trim(),
+        versionText,
+        smokeTest,
       };
     }
   }

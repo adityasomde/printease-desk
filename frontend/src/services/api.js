@@ -274,6 +274,12 @@ export function getOrderDocuments(orderId) {
   return apiRequest(`/api/orders/${encodeURIComponent(orderId)}/documents`);
 }
 
+export function getOrderStatus(orderId, { orderAccessToken } = {}) {
+  return apiRequest(`/api/orders/${encodeURIComponent(orderId)}`, {
+    headers: orderAccessToken ? { "x-order-access-token": orderAccessToken } : {},
+  });
+}
+
 
 export function reprintOrder(orderId, options = {}) {
   return apiRequest(`/api/orders/${encodeURIComponent(orderId)}/reprint`, {

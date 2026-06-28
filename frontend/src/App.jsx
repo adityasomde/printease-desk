@@ -1,4 +1,4 @@
-import { Component, useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
+import { Component, useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { emitOrderChanged } from "./utils/appEvents";
 import Navbar from "./components/Navbar";
@@ -28,7 +28,7 @@ import { initialCentres, initialOrders } from "./data/demoData";
 import { calculateTotalAmount, countSelectedPages, getPricePerPage } from "./utils/price";
 import { countSelectedPagesPreview, estimatePricePreview } from "./utils/printEstimate";
 import { clearStoredAuth, getStoredAuth, isDesktop, onPrintersUpdated, saveStoredAuth } from "./utils/desktopBridge";
-import { apiRequest, invalidateUserHistory, createDocumentSignedDownload, getOrderDetail, reprintOrder } from "./services/api";
+import { apiRequest, invalidateUserHistory, createDocumentSignedDownload, getOrderDetail, getOrderStatus, reprintOrder } from "./services/api";
 import { loadRazorpayCheckout } from "./utils/razorpay";
 import { saveOrderToLocalHistory } from "./utils/localHistory";
 import {
@@ -38,6 +38,7 @@ import {
 } from "./utils/supabaseAuth";
 import { handleDesktopAutoRegistration } from "./utils/desktopAutoRegistration";
 import { prepareBrowserPrintReadyFile } from "./utils/filePreparation/prepareBrowserPrintReadyFile";
+import { buildPaymentPriceFromOrder } from "./utils/paymentOrderPricing";
 
 const ROUTES = {
   home: "/",
@@ -333,12 +334,16 @@ function normalizeOrder(order, centreList = []) {
   const rawPages = order.pages ?? order.printablePageCount ?? order.printable_page_count ?? order.selectedPageCount ?? order.selected_page_count ?? null;
   const normalizedPages = Number(rawPages);
   const priceSnapshot = order.priceSnapshot || order.price_snapshot || null;
+  const rawStatusKey = String(rawStatus).toLowerCase();
   const pricingPending = Boolean(
-    order.pricingPending ||
-    order.pricing_pending ||
-    priceSnapshot?.pricingPending ||
-    String(rawStatus).toLowerCase() === "awaiting_hub_bill_confirmation" ||
-    String(rawBillStatus).toLowerCase() === "awaiting_hub_confirmation"
+    rawStatusKey !== "bill_confirmed" &&
+    (
+      order.pricingPending ||
+      order.pricing_pending ||
+      priceSnapshot?.pricingPending ||
+      rawStatusKey === "awaiting_hub_bill_confirmation" ||
+      String(rawBillStatus).toLowerCase() === "awaiting_hub_confirmation"
+    )
   );
 
   return {
@@ -2157,6 +2162,26 @@ export default function App() {
     return savedOrder;
   }
 
+  const refreshActivePaymentOrder = useCallback(async (orderId = order?.backendId || order?.id) => {
+    if (!orderId) return null;
+
+    const data = await getOrderStatus(orderId, { orderAccessToken });
+    const rawOrder = data.order;
+    if (!rawOrder) return null;
+
+    const refreshedOrder = normalizeOrder(rawOrder, centres);
+    const refreshedPrice = buildPaymentPriceFromOrder(rawOrder, backendPrice);
+
+    setOrder(refreshedOrder);
+    setBackendPrice(refreshedPrice);
+    setOrders((prev) => upsertOrder(prev, refreshedOrder));
+    setLastOrdersUpdatedAt(new Date().toISOString());
+    emitOrderChanged();
+    invalidateUserHistory(currentUser?.id || "me");
+
+    return { order: refreshedOrder, price: refreshedPrice, rawOrder };
+  }, [backendPrice, centres, currentUser?.id, order?.backendId, order?.id, orderAccessToken]);
+
   useEffect(() => {
     if (!currentUser) return;
 
@@ -2387,7 +2412,7 @@ export default function App() {
                 path={ROUTES.payment}
                 element={
                   selectedCentre && order ? (
-                    <PaymentPage currentUser={currentUser} startLogin={startLogin} selectedCentre={selectedCentre} documentName={documentName} pages={pages} copies={copies} backendPrice={backendPrice} order={order} paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod} handlePayment={handlePayment} paymentLoading={paymentLoading} paymentError={paymentError} />
+                    <PaymentPage currentUser={currentUser} startLogin={startLogin} selectedCentre={selectedCentre} documentName={documentName} pages={pages} copies={copies} backendPrice={backendPrice} order={order} refreshActivePaymentOrder={refreshActivePaymentOrder} paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod} handlePayment={handlePayment} paymentLoading={paymentLoading} paymentError={paymentError} />
                   ) : (
                     <RouteNotice title="Payment Not Ready" message="Please select a centre and upload a document first." actionLabel="Select Centre" onAction={() => navigate("centre")} />
                   )

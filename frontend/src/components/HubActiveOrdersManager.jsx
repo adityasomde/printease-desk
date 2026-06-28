@@ -40,7 +40,8 @@ function displayStatus(status) {
   const normalized = normalizeStatus(status);
   const labels = {
     draft_uploaded: "Draft Uploaded",
-    awaiting_hub_bill_confirmation: "Hub Bill Pending",
+    awaiting_hub_bill_confirmation: "Preparing Bill",
+    bill_confirmed: "Bill Ready",
     payment_requested: "Payment Requested",
     payment_collected: "Payment Collected",
     payment_pending: "Payment Pending",
@@ -83,6 +84,7 @@ function isBillPending(order) {
   const status = normalizeStatus(order?.rawStatus || order?.status);
   const billStatus = normalizeStatus(order?.billStatus || order?.bill_status);
   const snapshot = order?.priceSnapshot || order?.price_snapshot || {};
+  if (status === "bill_confirmed") return false;
   return Boolean(
     order?.pricingPending ||
     snapshot?.pricingPending ||
@@ -156,7 +158,7 @@ function OrderBadges({ order, job }) {
     <div className="flex flex-wrap gap-1.5">
       <StatusBadge color={paymentVerified ? "green" : "amber"}>{label(order.paymentStatus)}</StatusBadge>
       <StatusBadge>{displayStatus(order.status)}</StatusBadge>
-      {billPending && <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700">Hub conversion pending</span>}
+      {billPending && <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700">Preparing bill</span>}
       {paymentPending && <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700">Pending</span>}
       {paymentVerified && <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">Paid</span>}
       {job && <span className="rounded-full bg-sky-50 px-2.5 py-1 text-[11px] font-bold text-sky-700">{displayStatus(job.status)}</span>}
@@ -500,7 +502,7 @@ export default function HubActiveOrdersManager({
 
         {billPending && (
           <p className="rounded-xl border border-blue-200 bg-blue-50 px-2 py-2 text-xs font-semibold text-blue-700">
-            Hub desktop is converting/verifying this order before the final bill.
+            Desktop is preparing the verified bill before payment collection.
           </p>
         )}
         {paymentPending && !billPending && (
@@ -704,7 +706,7 @@ export default function HubActiveOrdersManager({
                       <p className="mt-1 text-xs font-semibold text-rose-600">Cancelled before payment.</p>
                     )}
                     {billPending && (
-                      <p className="mt-1 text-xs font-semibold text-blue-700">Hub conversion and bill verification pending.</p>
+                      <p className="mt-1 text-xs font-semibold text-blue-700">Verified bill is being prepared.</p>
                     )}
                     {paymentPending && !billPending && (
                       <p className="mt-1 text-xs text-slate-500">Awaiting payment.</p>
@@ -750,7 +752,7 @@ export default function HubActiveOrdersManager({
                       )}
                       {billPending && (
                         <p className="rounded-xl border border-blue-200 bg-blue-50 px-2 py-2 text-xs font-semibold text-blue-700">
-                          Conversion/bill pending. Cash collection unlocks after the verified bill is ready.
+                          Bill pending. Cash collection unlocks after the verified amount is ready.
                         </p>
                       )}
                       {paymentPending && !billPending && (

@@ -3,8 +3,8 @@ import Card from "../components/Card";
 import Row from "../components/Row";
 
 const orderStatuses = [
-  "Awaiting Hub Bill Confirmation",
-  "Bill Confirmed",
+  "Preparing Bill",
+  "Bill Ready",
   "Payment Requested",
   "Payment Collected",
   "Queued for Printing",
@@ -14,6 +14,8 @@ const orderStatuses = [
 
 const statusMap = {
   draft_uploaded: "Draft Uploaded",
+  awaiting_hub_bill_confirmation: "Preparing Bill",
+  bill_confirmed: "Bill Ready",
   payment_requested: "Payment Requested",
   payment_collected: "Payment Collected",
   queued_for_print: "Queued for Printing",
@@ -32,7 +34,7 @@ function normalizeStatus(status) {
 
 function isPaymentPending(order) {
   const value = String(order?.status || "").toLowerCase();
-  return ["payment_requested"].includes(value);
+  return ["payment_requested", "bill_confirmed"].includes(value);
 }
 
 
@@ -82,7 +84,7 @@ export default function TrackPage({
             <XCircle className="mt-0.5 text-rose-600" size={20} />
             <div>
               <p className="font-semibold text-rose-700">Order Cancelled</p>
-              <p className="mt-1">This order was cancelled. Please check with the printing centre for details or register a new print job.</p>
+              <p className="mt-1">{order?.priceSnapshot?.message || order?.price_snapshot?.message || "This order was cancelled. Please check with the printing centre for details or register a new print job."}</p>
             </div>
           </div>
         </div>

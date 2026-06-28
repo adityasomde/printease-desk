@@ -20,7 +20,7 @@ try {
 
   const bridge = {
     isDesktop: true,
-    bridgeVersion: "0.1.46-cjs",
+    bridgeVersion: "0.1.97-cjs",
     agent: agentBridge,
     printer: printerBridge,
     conversion: conversionBridge,

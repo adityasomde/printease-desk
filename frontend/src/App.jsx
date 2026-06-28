@@ -22,6 +22,7 @@ import { prepareBrowserPrintReadyFile } from "./utils/filePreparation/prepareBro
 import { buildPaymentPriceFromOrder } from "./utils/paymentOrderPricing";
 
 import { persistAuthSession, getPageFromPath, RouteNotice, formatStatus, buildPrintOptions, normalizeCentre, normalizeReprintSourceDocument, upsertCentre, toFrontendRole, findCentreForUser, toCurrentUser, toDisplayLabel, normalizeUsername, getUsernameBaseCandidates, getSupabaseDisplayName, generateStrongPasswordValue, formatOrderDate, extractCustomerName, normalizeOrder, upsertOrder, clearAuthSession, ROUTES } from "./utils/appHelpers.jsx";
+import { localDbGet, localDbSet } from "./utils/localDb";
 
 export default function App() {
   const routerNavigate = useNavigate();
@@ -134,11 +135,20 @@ export default function App() {
 
   useEffect(() => {
     let ignore = false;
+    
+    // Optimistically load centres from local DB first
+    localDbGet("centres").then((cachedCentres) => {
+      if (!ignore && Array.isArray(cachedCentres) && cachedCentres.length > 0) {
+        setCentres(cachedCentres);
+      }
+    });
 
     apiRequest("/api/centres")
       .then((data) => {
         if (!ignore && Array.isArray(data.centres)) {
-          setCentres(data.centres.map(normalizeCentre));
+          const freshCentres = data.centres.map(normalizeCentre);
+          setCentres(freshCentres);
+          localDbSet("centres", freshCentres);
         }
       })
       .catch(() => {
@@ -258,8 +268,12 @@ export default function App() {
 
         console.error("Session restore failed:", error?.message || error);
 
-        clearAuthSession();
-        setCurrentUser(null);
+        // Only explicitly clear session if the server explicitly rejected the token
+        // This prevents the user from being logged out on network drops or 503 errors
+        if (error.status === 401 || error.status === 403) {
+          clearAuthSession();
+          setCurrentUser(null);
+        }
       }
     }
 
@@ -584,12 +598,21 @@ export default function App() {
   async function loadOrdersForSession(user = currentUser, centreList = centres) {
     if (!user) return [];
 
+    // Optimistically load orders from local DB
+    localDbGet(`orders_${user.id}`).then((cachedOrders) => {
+      if (Array.isArray(cachedOrders) && cachedOrders.length > 0) {
+        setOrders(cachedOrders);
+        emitOrderChanged();
+      }
+    });
+
     try {
       const data = await apiRequest(user.role === "hub" ? "/api/orders/centre/mine" : "/api/orders/mine");
       const nextOrders = Array.isArray(data.orders) ? data.orders.map((item) => normalizeOrder(item, centreList)) : [];
       setOrders(nextOrders);
       setLastOrdersUpdatedAt(new Date().toISOString());
       emitOrderChanged();
+      localDbSet(`orders_${user.id}`, nextOrders);
       return nextOrders;
     } catch (error) {
       return [];
@@ -1403,7 +1426,10 @@ export default function App() {
     });
     setUpiQr(nextCentre?.upiQrImageUrl ? { imageUrl: nextCentre.upiQrImageUrl } : null);
     setPaymentError("");
-    navigate("track");
+
+    const activeOrderId = paymentOrder.backendId || paymentOrder.id;
+    localStorage.setItem("printease_active_order_id", activeOrderId);
+    navigate(`track?order=${activeOrderId}`);
   }
 
   async function reprintWithSettings(historyOrder) {
@@ -1629,11 +1655,14 @@ export default function App() {
       setSelectedCentre(nextCentre);
       setPendingPayment(null);
       setUpiQr(null);
+
+      const activeOrderId = createdOrder.backendId || createdOrder.id;
+      localStorage.setItem("printease_active_order_id", activeOrderId);
       
       if (response.nextAction === "payment_required") {
-        navigate("payment");
+        navigate(`payment?order=${activeOrderId}`);
       } else {
-        navigate("track");
+        navigate(`track?order=${activeOrderId}`);
       }
     } catch (err) {
       alert(err.message || "Could not reprint order. You may need to upload the file again.");

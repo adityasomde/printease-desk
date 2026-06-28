@@ -1,13 +1,5 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
-
-function encodeWindowsFileUrl(filePath) {
-  const normalized = String(filePath).replace(/\\/g, '/');
-  const [drive, ...parts] = normalized.split('/');
-  const encodedTail = parts.map((part) => encodeURIComponent(part)).join('/');
-  return `file:///${drive}${encodedTail ? `/${encodedTail}` : ''}`;
-}
 
 /**
  * LibreOffice expects file URLs for per-run user profiles.
@@ -17,9 +9,14 @@ function encodeWindowsFileUrl(filePath) {
 export function makeLibreOfficeUserInstallationArg(profileDir) {
   if (!profileDir) throw new Error('LibreOffice profile directory is required');
   const profilePath = String(profileDir);
+  
+  // Do NOT use encodeURIComponent or pathToFileURL for Windows paths.
+  // LibreOffice's internal URL parser fails to decode %20 correctly for UserInstallation,
+  // causing "User installation could not be completed" errors when temp paths have spaces.
   const profileUrl = /^[a-zA-Z]:[\\/]/.test(profilePath)
-    ? encodeWindowsFileUrl(profilePath)
-    : pathToFileURL(profilePath).href;
+    ? `file:///${profilePath.replace(/\\/g, '/')}`
+    : `file://${profilePath}`;
+    
   return `-env:UserInstallation=${profileUrl}`;
 }
 

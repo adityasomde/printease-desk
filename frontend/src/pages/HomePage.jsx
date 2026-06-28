@@ -287,13 +287,13 @@ export default function HomePage({
               </button>
             </div>
 
-            <div className="mt-5 flex gap-4 overflow-x-auto pb-4 pt-2 -mx-2 px-2 snap-x hide-scrollbar">
+            <div className="mt-5 flex gap-4 overflow-x-auto pb-4 pt-2 snap-x hide-scrollbar">
               {(orders || []).length > 0 ? (
                 (orders || []).slice(0, 5).map((order) => (
                   <button
                     key={order.id}
                     onClick={() => navigate("track")}
-                    className="flex-none snap-start w-[240px] md:w-[280px] rounded-2xl border border-slate-200 bg-white p-4 shadow-sm text-left hover:border-slate-300 transition"
+                    className="flex-none snap-start w-[85vw] max-w-[280px] rounded-2xl border border-slate-200 bg-white p-4 shadow-sm text-left hover:border-slate-300 transition"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">

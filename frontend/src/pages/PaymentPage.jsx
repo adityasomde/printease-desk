@@ -178,7 +178,7 @@ export default function PaymentPage({
 
   if (isCancelled) {
     return (
-      <div className="mx-auto max-w-2xl pb-[calc(7rem+env(safe-area-inset-bottom))] md:pb-6">
+      <div className="mx-auto max-w-2xl pb-6 sm:pb-8">
         <Card className="p-6 border-red-200 bg-red-50 text-center">
           <div className="mx-auto w-12 h-12 flex items-center justify-center rounded-full bg-red-100 text-red-600 mb-4">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>
@@ -193,7 +193,7 @@ export default function PaymentPage({
   }
 
   return (
-    <div className="mx-auto max-w-2xl pb-[calc(7rem+env(safe-area-inset-bottom))] md:pb-6">
+    <div className="mx-auto max-w-2xl pb-6 sm:pb-8">
       <Card className="p-3 sm:p-5">
         <h2 className="text-xl sm:text-2xl font-bold min-w-0">Payment</h2>
         <p className="mt-2 text-slate-600">

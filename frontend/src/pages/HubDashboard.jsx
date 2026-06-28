@@ -163,8 +163,10 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
     if (currentHub?.id) {
       refreshAgentStatus();
       const interval = setInterval(() => {
-        refreshAgentStatus();
-      }, 3000);
+        if (document.visibilityState !== "hidden") {
+          refreshAgentStatus();
+        }
+      }, 15000);
       const refreshOnFocus = () => {
         if (document.visibilityState === "visible") {
           refreshAgentStatus();
@@ -349,7 +351,7 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
         </button>
       </div>
 
-      <div className="grid gap-4 grid-cols-1 min-[380px]:grid-cols-2 md:grid-cols-4">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-4">
         <Metric title="Total Orders" value={ordersForHub.length} icon={<FileText />} />
         <Metric title="Active Orders" value={pendingOrders} icon={<Printer />} />
         <Metric title="Pages Printed" value={totalPages} icon={<BarChart3 />} />
@@ -374,7 +376,7 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
               <button
                 type="button"
                 onClick={copyCentreUploadLink}
-                className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+                className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white min-h-[44px]"
               >
                 <Copy size={16} />
                 {centreLinkCopied ? "Copied" : "Copy Link"}
@@ -382,7 +384,7 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
               <button
                 type="button"
                 onClick={() => openExternalUrl(centreUploadUrl).catch(() => setAgentError("Could not open upload page."))}
-                className="inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold"
+                className="inline-flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold min-h-[44px]"
               >
                 <Link2 size={16} />
                 Open Upload Page
@@ -390,7 +392,7 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
               <button
                 type="button"
                 onClick={() => downloadQrImage(largeCentreQrUrl, `PrintEase-${currentHub.code || "centre"}-upload-qr.png`).catch(() => setAgentError("Could not download QR code."))}
-                className="inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold"
+                className="inline-flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold min-h-[44px]"
               >
                 <Download size={16} />
                 Download QR
@@ -398,7 +400,7 @@ export default function HubDashboard({ currentHub, hubOrders, updateOrderStatus,
               <button
                 type="button"
                 onClick={printCentreQr}
-                className="inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold"
+                className="inline-flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold min-h-[44px]"
               >
                 <Printer size={16} />
                 Print QR

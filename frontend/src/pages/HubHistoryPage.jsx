@@ -91,44 +91,28 @@ export default function HubHistoryPage({ currentHub, hubOrders }) {
     };
   }, [ordersForHub]);
 
-  // Combined search, status filtering, and sorting
   const filteredOrders = useMemo(() => {
     let list = [...ordersForHub];
 
-    // 1. Search Query
     const query = orderSearch.trim().toLowerCase();
     if (query) {
       list = list.filter((item) => {
-        const searchable = [
-          item.id,
-          item.backendId,
-          item.customerName,
-          item.customerMobile,
-          item.document,
-          item.paymentStatus,
-          item.status,
-          item.pickupCode,
-          item.amount,
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-
-        return searchable.includes(query);
+        const idMatch = String(item.id || "").toLowerCase().includes(query);
+        const codeMatch = String(item.code || "").toLowerCase().includes(query);
+        const nameMatch = (item.customerName || "").toLowerCase().includes(query);
+        const docMatch = String(item.document || "").toLowerCase().includes(query);
+        return idMatch || codeMatch || nameMatch || docMatch;
       });
     }
 
-    // 2. Status Filter
     if (statusFilter !== "all") {
       list = list.filter((item) => String(item.status).toLowerCase() === statusFilter.toLowerCase());
     }
 
-    // 3. Payment Filter
     if (paymentFilter !== "all") {
       list = list.filter((item) => String(item.paymentStatus).toLowerCase() === paymentFilter.toLowerCase());
     }
 
-    // 4. Sort
     list.sort((a, b) => {
       const timeA = new Date(a.date || a.createdAt || 0).getTime();
       const timeB = new Date(b.date || b.createdAt || 0).getTime();

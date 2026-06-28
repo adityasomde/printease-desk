@@ -62,8 +62,8 @@ export default function TrackPage({
   const centreQrImageUrl = centreUpiQrImageUrl || (upiQr?.source === "centre" ? upiQr?.imageUrl || upiQr?.image_url : "");
 
   return (
-    <Card className="mx-auto max-w-2xl">
-      <h2 className="text-2xl font-bold">Order Tracking</h2>
+    <Card className="mx-auto max-w-2xl p-4 sm:p-6">
+      <h2 className="text-2xl font-bold min-w-0">Order Tracking</h2>
       {lastUpdatedAt && <p className="mt-1 text-xs text-slate-500">Last updated: {new Date(lastUpdatedAt).toLocaleTimeString()}</p>}
       <div className="mt-4 rounded-2xl bg-slate-50 p-4">
         <Row label="Order ID" value={order.id} />
@@ -162,9 +162,9 @@ export default function TrackPage({
         </p>
       )}
 
-      <div className="mt-6 space-y-3">
+      <div className="mt-6 space-y-4">
         {orderStatuses.map((status, index) => (
-          <div key={status} className="flex items-center gap-3 rounded-2xl border p-4">
+          <div key={status} className="flex items-center gap-4 rounded-2xl border p-4 sm:p-5 shadow-sm transition-shadow hover:shadow-md">
             <CheckCircle className={activeIndex >= 0 && index <= activeIndex ? "text-green-600" : "text-slate-300"} />
             <span className={activeIndex >= 0 && index <= activeIndex ? "font-bold text-green-700" : "text-slate-500"}>{status}</span>
           </div>

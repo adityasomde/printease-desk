@@ -232,12 +232,11 @@ export default function UploadPage({
     return () => {
       releasePreparationState(filePreparationStateRef.current);
     };
-  }, []); // eslint-disable-line
+  }, []);
 
   useEffect(() => {
     filePreparationStateRef.current = filePreparationState;
     
-    // Check if any office file was prepared in the browser
     const hasBrowserOfficePreview = Object.values(filePreparationState).some(
       (item) => item?.status === PREPARATION_STATUS.READY && item?.fileKind === "office" && item?.previewKind === "pdf"
     );
@@ -387,9 +386,9 @@ export default function UploadPage({
     setBackendPrice?.(null);
     if (setReprintSourceDocuments) setReprintSourceDocuments([]);
     if (setReprintDocumentExpired) setReprintDocumentExpired(false);
+    setUploadState({ progress: 0, message: `Uploading ${displayFiles.length} file(s)...`, active: true });
     const files = Array.from(event.target.files || []);
     
-    // Check for large office files (>100MB)
     const largeOfficeFiles = files.filter(f => detectUploadFileKind(f) === "office" && f.size > 100 * 1024 * 1024);
     if (largeOfficeFiles.length > 0) {
       alert("One or more Office documents exceed 100MB. Please convert them to PDF yourself and upload the PDF.");
@@ -532,10 +531,10 @@ export default function UploadPage({
 
   const handlePaymentClick = () => {
     const blockingPreparation = Object.values(filePreparationState).find((item) =>
-      [PREPARATION_STATUS.PREPARING, PREPARATION_STATUS.FAILED].includes(item?.status)
+      [PREPARATION_STATUS.FAILED].includes(item?.status)
     );
     if (blockingPreparation) {
-      window.alert(blockingPreparation.errorMessage || blockingPreparation.message || "Please wait until document pricing is ready.");
+      window.alert(blockingPreparation.errorMessage || blockingPreparation.message || "Please resolve document errors before continuing.");
       return;
     }
 
@@ -574,8 +573,8 @@ export default function UploadPage({
     }
 
     if (autoPreparation?.status === "uploading" || autoPreparation?.status === "local_preparing") {
-      window.alert(autoPreparation.message || "Please wait until the selected documents finish preparing.");
-      return;
+      // Background auto-upload is in progress, but the user clicked Continue to Payment explicitly.
+      // We will allow preparePayment to run concurrently and handle the sync/routing.
     }
 
     if (

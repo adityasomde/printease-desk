@@ -26,7 +26,8 @@ function normalizeDesktopAuthPayload(payload = {}) {
   const token = typeof payload.token === "string" ? payload.token : "";
   const user = payload.user && typeof payload.user === "object" ? payload.user : null;
   if (!token || !user) return null;
-  return { token, user, savedAt: new Date().toISOString() };
+  const refreshToken = typeof payload.refreshToken === "string" ? payload.refreshToken : "";
+  return { token, user, refreshToken, savedAt: new Date().toISOString() };
 }
 
 function encodeDesktopAuth(payload) {

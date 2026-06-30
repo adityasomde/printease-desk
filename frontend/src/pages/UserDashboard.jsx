@@ -1,10 +1,11 @@
-import { FileText, IndianRupee, Phone, QrCode, Upload, History } from "lucide-react";
+import { FileText, IndianRupee, User, QrCode, Upload, History } from "lucide-react";
 import Card from "../components/Card";
 import Metric from "../components/Metric";
 import ActionButton from "../components/ActionButton";
 
 export default function UserDashboard({ currentUser, navigate, orders }) {
   const totalSpent = orders.reduce((sum, item) => sum + item.amount, 0);
+  const printEaseId = currentUser?.username || currentUser?.displayHandle || currentUser?.id?.slice(0, 8) || "-";
 
   return (
     <div className="space-y-6">
@@ -21,7 +22,7 @@ export default function UserDashboard({ currentUser, navigate, orders }) {
       <div className="grid gap-4 md:grid-cols-3">
         <Metric title="Total Orders" value={orders.length} icon={<FileText />} />
         <Metric title="Total Spent" value={`₹${totalSpent}`} icon={<IndianRupee />} />
-        <Metric title="Mobile" value={currentUser?.mobile || "-"} icon={<Phone />} />
+        <Metric title="PrintEase ID" value={printEaseId} icon={<User />} />
       </div>
 
       <Card>

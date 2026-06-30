@@ -81,7 +81,7 @@ export async function convertOfficeToPdf({ inputPath, outputDir, timeoutMs = 2 *
 
     const engine = libreOfficePath
       ? { found: true, executable: libreOfficePath }
-      : await findLibreOfficeExecutable();
+      : await findLibreOfficeExecutable({ allowDownload: true });
 
     if (!engine.found) {
       return {

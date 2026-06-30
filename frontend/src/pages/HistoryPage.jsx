@@ -172,7 +172,7 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
   }, [currentUser?.id]);
 
   const historyOrders = Array.isArray(historyData?.orders) ? historyData.orders : [];
-  const localOrders = getLocalHistory().map((order) => ({
+  const localOrders = getLocalHistory(currentUser?.id || null).map((order) => ({
     id: order.id,
     order_code: order.orderCode || order.id,
     created_at: order.createdAt,
@@ -508,7 +508,7 @@ export default function HistoryPage({ orders = [], currentUser, lastUpdatedAt, o
       <div className="rounded-md bg-blue-50 p-4 border border-blue-100 flex items-start gap-3">
         <Info className="h-5 w-5 text-blue-500 mt-0.5 flex-shrink-0" />
         <p className="text-sm text-blue-700">
-          <strong>Privacy Notice:</strong> For your security, all uploaded documents and server records are permanently deleted after 15 days. Your print history will remain visible here in your browser's local storage until you clear it.
+          <strong>Privacy Notice:</strong> For your security, all uploaded documents and server records are permanently deleted after 15 days. Local fallback history is stored only for this browser profile and current PrintEase account or guest session.
         </p>
       </div>
 

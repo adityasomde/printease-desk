@@ -4,6 +4,7 @@ import Card from "../components/Card";
 import Metric from "../components/Metric";
 import StatusBadge from "../components/StatusBadge";
 import {
+  apiRequest,
   checkBackendHealth,
   getHubAgentSummary,
   pairAgent,
@@ -76,13 +77,10 @@ export default function HubPrinterAgentPage({ navigate }) {
   const [wizardPrinter, setWizardPrinter] = useState(null);
 
   const handleSaveProfile = async (platform, printerName, profile) => {
-    const token = localStorage.getItem("token");
-    const res = await fetch(`/api/printers/profiles`, {
+    const data = await apiRequest("/api/printers/profiles", {
       method: "PUT",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-      body: JSON.stringify({ platform, printerName, profile })
+      body: JSON.stringify({ platform, printerName, profile }),
     });
-    const data = await res.json();
     if (!data.success) throw new Error(data.message || "Failed to save profile.");
     setMessage(`Correction profile saved for ${printerName}.`);
   };

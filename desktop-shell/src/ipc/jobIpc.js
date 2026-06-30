@@ -28,7 +28,7 @@ export function registerJobIpc() {
   secureHandle("conversion:diagnoseLibreOffice", async () => {
     const { findLibreOfficeExecutable, LIBREOFFICE_MANUAL_DOWNLOAD_URL } = await import("../../agent/printPreparation/conversionEngine.js");
     try {
-      const result = await findLibreOfficeExecutable();
+      const result = await findLibreOfficeExecutable({ allowDownload: true });
       return {
         success: result.found,
         ...result,

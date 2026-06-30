@@ -254,7 +254,7 @@ export function getDeviceIdentity() {
 
 /**
  * Open a URL in the system's default external browser via Electron shell.openExternal.
- * Safe URLs only (https:// or http://).
+ * Safe URLs only (https://).
  */
 export function openExternalUrl(url) {
   return callDesktop("openExternalUrl", "Could not open external URL.", url);

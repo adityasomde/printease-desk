@@ -1,0 +1,18 @@
+{
+  "platforms": {
+    "win32": {
+      "url": "https://example.com/printease/libreoffice-windows-portable.zip",
+      "sha256": "replace-with-real-sha256",
+      "archiveType": "zip",
+      "executableRelativePath": "program/soffice.com",
+      "version": "replace-with-version"
+    },
+    "linux": {
+      "url": "https://example.com/printease/libreoffice-linux-portable.tar.gz",
+      "sha256": "replace-with-real-sha256",
+      "archiveType": "tar.gz",
+      "executableRelativePath": "program/soffice",
+      "version": "replace-with-version"
+    }
+  }
+}

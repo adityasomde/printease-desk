@@ -1,7 +1,29 @@
 import { useEffect, useState } from "react";
 import { Loader2, FileCog, ShieldAlert, CheckCircle2, RotateCw } from "lucide-react";
 import Card from "../components/Card";
-import { getAgentStatus, diagnoseLibreOffice, conversionNow, isDesktop } from "../utils/desktopBridge";
+import { getAgentStatus, diagnoseLibreOffice, conversionNow, isDesktop, onAgentUpdated } from "../utils/desktopBridge";
+
+function normalizeAgentPayload(payload) {
+  if (!payload) return null;
+  return payload.session && typeof payload.session === "object" ? payload.session : payload;
+}
+
+function formatDateTime(value) {
+  if (!value) return "Never";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
+function StatusLine({ label, active, detail }) {
+  return (
+    <div className="flex min-w-0 items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 text-sm">
+      <span className="min-w-0 font-medium text-slate-700">{label}</span>
+      <span className={`shrink-0 text-right ${active ? "font-semibold text-emerald-700" : "font-semibold text-slate-500"}`}>
+        {detail || (active ? "On" : "Off")}
+      </span>
+    </div>
+  );
+}
 
 export default function ConversionPage({ currentUser }) {
   const [desktopAvailable, setDesktopAvailable] = useState(() => isDesktop());
@@ -17,13 +39,28 @@ export default function ConversionPage({ currentUser }) {
     if (!isDesktop()) return;
 
     let active = true;
-    getAgentStatus().then((status) => {
-      if (active && status?.success) {
-        setAgentSession(status);
+    const applySession = (payload) => {
+      const nextSession = normalizeAgentPayload(payload);
+      if (active && nextSession?.success) {
+        setAgentSession(nextSession);
       }
-    });
-    return () => { active = false; };
+    };
+
+    getAgentStatus().then(applySession).catch(() => {});
+    const unsubscribe = onAgentUpdated(applySession);
+
+    return () => {
+      active = false;
+      unsubscribe?.();
+    };
   }, []);
+
+  async function refreshAgentSession() {
+    const status = await getAgentStatus();
+    const nextSession = normalizeAgentPayload(status);
+    if (nextSession?.success) setAgentSession(nextSession);
+    return nextSession;
+  }
 
   async function runLibreOfficeCheck() {
     if (!desktopAvailable) return;
@@ -39,6 +76,7 @@ export default function ConversionPage({ currentUser }) {
       } else {
         setMessage(result?.message || "LibreOffice looks good.");
       }
+      await refreshAgentSession().catch(() => {});
     } catch (e) {
       setError(e.message || "Failed to run LibreOffice diagnostics.");
     } finally {
@@ -58,6 +96,12 @@ export default function ConversionPage({ currentUser }) {
         setError(result.error || result.message || "Forced conversion failed.");
       } else {
         setMessage(result?.message || "Forced conversion completed.");
+      }
+      const nextSession = normalizeAgentPayload(result);
+      if (nextSession?.success) {
+        setAgentSession(nextSession);
+      } else {
+        await refreshAgentSession().catch(() => {});
       }
     } catch (e) {
       setError(e.message || "Failed to trigger forced conversion.");
@@ -80,10 +124,14 @@ export default function ConversionPage({ currentUser }) {
     );
   }
 
+  const paired = Boolean(agentSession?.paired || agentSession?.hubId);
+  const converterReady = agentSession?.converterStatus === "ready" || Boolean(agentSession?.converterPath);
+  const moduleReady = Boolean(paired && agentSession?.conversionLoopRunning && converterReady);
+
   return (
     <div className="space-y-6">
       <Card>
-        <div className="flex items-start justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-center gap-3">
             <div className="rounded-full bg-slate-100 p-3">
               <FileCog size={24} className="text-slate-700" />
@@ -94,6 +142,9 @@ export default function ConversionPage({ currentUser }) {
                 Monitor local file conversions and LibreOffice engine status.
               </p>
             </div>
+          </div>
+          <div className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${moduleReady ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
+            {moduleReady ? "Conversion loop active" : paired ? "Agent paired" : "Agent not paired"}
           </div>
         </div>
       </Card>
@@ -120,7 +171,7 @@ export default function ConversionPage({ currentUser }) {
           </div>
           
           {libreOfficeDiagnostics && (
-            <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-700 border whitespace-pre-wrap font-mono">
+            <div className="max-h-80 overflow-auto rounded-xl border bg-slate-50 p-3 font-mono text-xs text-slate-700 whitespace-pre-wrap break-words">
               {JSON.stringify(libreOfficeDiagnostics, null, 2)}
             </div>
           )}
@@ -142,15 +193,42 @@ export default function ConversionPage({ currentUser }) {
           <div>
             <h3 className="text-lg font-bold">Agent Status & Force Conversion</h3>
             <p className="text-sm text-slate-600 mt-1">
-              Trigger the conversion queue immediately.
+              Watch the desktop agent loops and trigger the conversion queue immediately.
             </p>
           </div>
           
-          <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700 border">
-            <p><span className="font-semibold">Paired Hub:</span> {agentSession?.hubId ? "Yes" : "No"}</p>
-            <p><span className="font-semibold">Last Poll:</span> {agentSession?.lastJobPollAt ? new Date(agentSession.lastJobPollAt).toLocaleString() : "Never"}</p>
-            {agentSession?.lastJobPollError && (
-              <p className="text-red-600"><span className="font-semibold">Last Error:</span> {agentSession.lastJobPollError}</p>
+          <div className="space-y-2 rounded-xl bg-slate-50 p-3 text-sm text-slate-700 border">
+            <StatusLine label="Paired Hub" active={paired} detail={paired ? "Ready" : "Pair desktop first"} />
+            <StatusLine label="Heartbeat" active={agentSession?.heartbeatRunning} />
+            <StatusLine label="Printer Sync" active={agentSession?.printerSyncRunning} />
+            <StatusLine label="Print Polling" active={agentSession?.polling} />
+            <StatusLine label="Predownload Loop" active={agentSession?.predownloadLoopRunning} />
+            <StatusLine label="Conversion Loop" active={agentSession?.conversionLoopRunning} />
+            <StatusLine
+              label="LibreOffice"
+              active={converterReady}
+              detail={agentSession?.converterStatus ? agentSession.converterStatus.replace(/_/g, " ") : (converterReady ? "ready" : "unknown")}
+            />
+            <div className="pt-2 text-xs text-slate-600">
+              <p><span className="font-semibold">Last job poll:</span> {formatDateTime(agentSession?.lastJobPollAt)}</p>
+              <p><span className="font-semibold">Last conversion:</span> {formatDateTime(agentSession?.lastConversionAt)}</p>
+              {agentSession?.converterPath && (
+                <p className="break-all"><span className="font-semibold">Converter:</span> {agentSession.converterPath}</p>
+              )}
+              {agentSession?.lastConversionMessage && (
+                <p className="break-words"><span className="font-semibold">Conversion:</span> {agentSession.lastConversionMessage}</p>
+              )}
+              {agentSession?.converterMessage && (
+                <p className="break-words"><span className="font-semibold">Converter status:</span> {agentSession.converterMessage}</p>
+              )}
+              {(agentSession?.lastJobPollError || agentSession?.lastConversionError) && (
+                <p className="break-words text-red-600"><span className="font-semibold">Last Error:</span> {agentSession.lastConversionError || agentSession.lastJobPollError}</p>
+              )}
+            </div>
+            {!paired && (
+              <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                Pair the desktop from the Desktop Agent page before running conversion diagnostics.
+              </p>
             )}
           </div>
 

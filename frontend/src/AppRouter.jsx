@@ -28,7 +28,7 @@ export default function AppRouter(props) {
     page, navigate, profileOpen, setProfileOpen, currentUser, desktopAvailable,
     logout, openProfile, authMode, authRole, changeAuthMode, changeAuthRole,
     authError, authLoading, handleAuthSubmit, handleGoogleLogin, email, updateEmail,
-    password, setPassword, name, updateName, mobile, setMobile, confirmPassword, setConfirmPassword,
+    password, setPassword, name, updateName, mobile, setMobile,
     showPassword, setShowPassword, username, updateUsername, usernameEdited, usernameStatus,
     hubName, setHubName, hubCode, setHubCode, startLogin, startRegister,
     centreCode, setCentreCode, handleCentreCode, centreLookupError, centreLookupLoading,

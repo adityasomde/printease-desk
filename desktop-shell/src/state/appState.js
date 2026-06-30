@@ -42,6 +42,9 @@ export const appState = {
     lastConversionMessage: "",
     lastConversionError: "",
     lastConversionAt: "",
+    converterStatus: "unknown",
+    converterSource: "",
+    converterMessage: "",
     converterPath: "",
   }
 };

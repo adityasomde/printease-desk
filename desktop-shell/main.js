@@ -20,9 +20,9 @@ async function diagnoseWindowsPrintHelperSafe() {
   return module.diagnoseWindowsPrintHelper();
 }
 
-async function diagnoseLibreOfficeSafe() {
+async function diagnoseLibreOfficeSafe(options = {}) {
   try {
-    const result = await findLibreOfficeExecutable();
+    const result = await findLibreOfficeExecutable({ allowDownload: true, onStatus: options.onStatus });
     return {
       success: result.found,
       ...result,
@@ -89,47 +89,6 @@ const __dirname = path.dirname(__filename);
 const PRELOAD_PATH = path.join(__dirname, "preload.cjs");
 
 let mainWindow = null;
-let ipcHandlersRegistered = false;
-let latestPrinterResult = null;
-let heartbeatTimer = null;
-let printerSyncTimer = null;
-let jobPollTimer = null;
-let predownloadTimer = null;
-let conversionTimer = null;
-let isPollingJobs = false;
-let isPredownloading = false;
-let isConverting = false;
-let agentSession = {
-  deviceId: "",
-  deviceName: "",
-  pairingCode: "",
-  pairingSessionId: "",
-  expiresAt: "",
-  agentId: "",
-  hubId: "",
-  accessToken: "",
-  pairedAt: "",
-  lastHeartbeatAt: "",
-  lastHeartbeatError: "",
-  selectedPrinterName: "",
-  lastPrinterSyncAt: "",
-  lastPrinterSyncError: "",
-  lastJobPollAt: "",
-  lastJobPollError: "",
-  lastJobPollMessage: "",
-  predownloadRunning: false,
-  predownloadLoopRunning: false,
-  lastPredownloadAt: "",
-  lastPredownloadError: "",
-  lastPredownloadMessage: "",
-  lastPredownloadChecked: 0,
-  lastPredownloadCached: 0,
-  lastPredownloadFailures: 0,
-  lastConversionMessage: "",
-  lastConversionError: "",
-  lastConversionAt: "",
-  converterPath: "",
-};
 
 function serializeStartupError(error) {
   if (!error) return "";
@@ -212,6 +171,25 @@ function registerIpcHandlers() {
   registerPrinterIpc();
   registerSystemIpc();
   registerJobIpc();
+}
+
+async function checkConverterAtStartup() {
+  const result = await diagnoseLibreOfficeSafe({
+    onStatus: (status) => {
+      appState.agentSession.converterStatus = status.setupStatus || "checking";
+      appState.agentSession.converterMessage = status.message || "";
+      emitAgentSession();
+    },
+  });
+  appState.agentSession.converterStatus = result.found ? "ready" : (result.setupStatus || "missing");
+  appState.agentSession.converterSource = result.source || "";
+  appState.agentSession.converterPath = result.executable || "";
+  appState.agentSession.converterMessage = result.message || "";
+  if (!result.found) {
+    appState.agentSession.lastConversionError = result.message || "LibreOffice converter is not ready.";
+  }
+  emitAgentSession();
+  return result;
 }
 
 
@@ -360,7 +338,7 @@ function createMainWindow() {
         console.warn("[DESKTOP RENDERER CHECK FAILED]", error.message || error);
       });
 
-    if (latestPrinterResult) emitPrinterResult(latestPrinterResult);
+    if (appState.latestPrinterResult) emitPrinterResult(appState.latestPrinterResult);
   });
 
   loadFrontend(mainWindow, __dirname, writeStartupLog).catch(async (error) => {
@@ -401,6 +379,7 @@ app.whenReady().then(async () => {
   runStartupStep("cleanup-document-cache", () => cleanupDocumentCache());
   await runStartupStep("register-ipc-handlers", () => registerIpcHandlers());
   await runStartupStep("create-main-window", () => createMainWindow());
+  runStartupStep("check-converter", () => checkConverterAtStartup());
 
   runStartupStep("ensure-device-identity", () => ensureDeviceIdentity()).then(() => emitAgentSession());
   runStartupStep("restore-stored-agent", () => restoreStoredDesktopAgent()).then((restoredAgent) => {
@@ -408,10 +387,10 @@ app.whenReady().then(async () => {
       // Delay starting agent background services by 7 seconds to let startup load lightly.
       setTimeout(() => {
         startAgentRuntime("startup-stored-agent").catch((error) => {
-          agentSession.lastJobPollError = error.message || "Could not start background desktop agent.";
+          appState.agentSession.lastJobPollError = error.message || "Could not start background desktop agent.";
           writeStartupLog("startup-stored-agent:failed", { error: serializeStartupError(error) });
           emitAgentSession();
-          console.warn("[DESKTOP AGENT BACKGROUND] startup failed", agentSession.lastJobPollError);
+          console.warn("[DESKTOP AGENT BACKGROUND] startup failed", appState.agentSession.lastJobPollError);
         });
       }, 7000);
     }

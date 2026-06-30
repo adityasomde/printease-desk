@@ -1,14 +1,12 @@
 import AppRouter from "./AppRouter";
-import { Component, useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
-import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { emitOrderChanged } from "./utils/appEvents";
-import Navbar from "./components/Navbar";
-import BackendStatus from "./components/BackendStatus";
 import { hubActivityStore } from "./state/hubActivityStore";
 import { initialCentres, initialOrders } from "./data/demoData";
-import { calculateTotalAmount, countSelectedPages, getPricePerPage } from "./utils/price";
+import { getPricePerPage } from "./utils/price";
 import { countSelectedPagesPreview, estimatePricePreview } from "./utils/printEstimate";
-import { clearStoredAuth, getStoredAuth, isDesktop, onPrintersUpdated, saveStoredAuth } from "./utils/desktopBridge";
+import { getStoredAuth, isDesktop, onPrintersUpdated } from "./utils/desktopBridge";
 import { apiRequest, invalidateUserHistory, createDocumentSignedDownload, getOrderDetail, getOrderStatus, reprintOrder } from "./services/api";
 import { loadRazorpayCheckout } from "./utils/razorpay";
 import { saveOrderToLocalHistory } from "./utils/localHistory";
@@ -21,8 +19,22 @@ import { handleDesktopAutoRegistration } from "./utils/desktopAutoRegistration";
 import { prepareBrowserPrintReadyFile } from "./utils/filePreparation/prepareBrowserPrintReadyFile";
 import { buildPaymentPriceFromOrder } from "./utils/paymentOrderPricing";
 
-import { persistAuthSession, getPageFromPath, RouteNotice, formatStatus, buildPrintOptions, normalizeCentre, normalizeReprintSourceDocument, upsertCentre, toFrontendRole, findCentreForUser, toCurrentUser, toDisplayLabel, normalizeUsername, getUsernameBaseCandidates, getSupabaseDisplayName, generateStrongPasswordValue, formatOrderDate, extractCustomerName, normalizeOrder, upsertOrder, clearAuthSession, ROUTES } from "./utils/appHelpers.jsx";
-import { localDbGet, localDbSet } from "./utils/localDb";
+import { persistAuthSession, getPageFromPath, buildPrintOptions, normalizeCentre, normalizeReprintSourceDocument, upsertCentre, toFrontendRole, findCentreForUser, toCurrentUser, normalizeUsername, getUsernameBaseCandidates, getSupabaseDisplayName, generateStrongPasswordValue, normalizeOrder, upsertOrder, clearAuthSession, ROUTES } from "./utils/appHelpers.jsx";
+import { localDbDelete, localDbDeletePrefix, localDbGet, localDbSet } from "./utils/localDb";
+
+function getOrderCacheKey(user) {
+  if (!user?.id) return "";
+  return `orders_${user.role || "user"}_${user.id}`;
+}
+
+function clearCachedOrdersForUser(user) {
+  const userId = user?.id;
+  if (!userId) return;
+
+  localDbDeletePrefix(`orders_user_${userId}`);
+  localDbDeletePrefix(`orders_hub_${userId}`);
+  localDbDelete(`orders_${userId}`);
+}
 
 export default function App() {
   const routerNavigate = useNavigate();
@@ -49,7 +61,6 @@ export default function App() {
   const [email, setEmail] = useState("");
   const [mobile, setMobile] = useState("");
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [name, setName] = useState("");
   const [username, setUsernameState] = useState("");
@@ -58,6 +69,7 @@ export default function App() {
   const usernameCache = useRef({});
   const usernameAbortController = useRef(null);
   const usernameSuggestionRequest = useRef(0);
+  const ordersLoadRequestRef = useRef(0);
   const [hubName, setHubName] = useState("");
   const [hubCode, setHubCode] = useState("");
   const [authError, setAuthError] = useState("");
@@ -198,6 +210,9 @@ export default function App() {
           token = storedAuth.token;
           localStorage.setItem("printease_token", storedAuth.token);
           localStorage.setItem("printease_user", JSON.stringify(storedAuth.user));
+          if (storedAuth.refreshToken) {
+            localStorage.setItem("printease_supabase_refresh_token", storedAuth.refreshToken);
+          }
           setCurrentUser(storedAuth.user);
         }
       }
@@ -231,8 +246,10 @@ export default function App() {
 
         if (restoredUser?.role === "hub" && !signedInCentre) {
           // If a hub user isn't linked to a centre, invalidate session
+          clearCachedOrdersForUser(restoredUser || currentUser);
           clearAuthSession();
           setCurrentUser(null);
+          setOrders([]);
           return;
         }
 
@@ -271,8 +288,10 @@ export default function App() {
         // Only explicitly clear session if the server explicitly rejected the token
         // This prevents the user from being logged out on network drops or 503 errors
         if (error.status === 401 || error.status === 403) {
+          clearCachedOrdersForUser(currentUser);
           clearAuthSession();
           setCurrentUser(null);
+          setOrders([]);
         }
       }
     }
@@ -581,8 +600,13 @@ export default function App() {
     });
 
     const nextUser = { ...currentUser, ...data.user, centre: data.centre || currentUser?.centre };
+    const token = localStorage.getItem("printease_token");
     setCurrentUser(nextUser);
-    localStorage.setItem("printease_user", JSON.stringify(nextUser));
+    if (token) {
+      await persistAuthSession(token, nextUser);
+    } else {
+      localStorage.setItem("printease_user", JSON.stringify(nextUser));
+    }
     
     await refreshCentres();
     return nextUser;
@@ -596,23 +620,32 @@ export default function App() {
   }
 
   async function loadOrdersForSession(user = currentUser, centreList = centres) {
+    const requestId = ++ordersLoadRequestRef.current;
     if (!user) return [];
+    const cacheKey = getOrderCacheKey(user);
 
     // Optimistically load orders from local DB
-    localDbGet(`orders_${user.id}`).then((cachedOrders) => {
-      if (Array.isArray(cachedOrders) && cachedOrders.length > 0) {
-        setOrders(cachedOrders);
-        emitOrderChanged();
-      }
-    });
+    if (cacheKey) {
+      localDbGet(cacheKey).then((cachedOrders) => {
+        if (requestId !== ordersLoadRequestRef.current) return;
+        if (Array.isArray(cachedOrders) && cachedOrders.length > 0) {
+          setOrders(cachedOrders);
+          emitOrderChanged();
+        }
+      });
+    }
 
     try {
       const data = await apiRequest(user.role === "hub" ? "/api/orders/centre/mine" : "/api/orders/mine");
       const nextOrders = Array.isArray(data.orders) ? data.orders.map((item) => normalizeOrder(item, centreList)) : [];
+      if (requestId !== ordersLoadRequestRef.current) return nextOrders;
       setOrders(nextOrders);
       setLastOrdersUpdatedAt(new Date().toISOString());
       emitOrderChanged();
-      localDbSet(`orders_${user.id}`, nextOrders);
+      if (cacheKey) {
+        localDbSet(cacheKey, nextOrders);
+        localDbDelete(`orders_${user.id}`);
+      }
       return nextOrders;
     } catch (error) {
       return [];
@@ -640,7 +673,6 @@ export default function App() {
         if (!usernameEdited) suggestUniqueUsername(nextName, nextEmail);
         setAuthMode("profile");
         setPassword("");
-        setConfirmPassword("");
         navigate("auth", { replace: true });
         return { profileRequired: true };
       }
@@ -656,13 +688,18 @@ export default function App() {
     }
 
     if (signedInRole === "hub" && !signedInCentre) {
+      clearCachedOrdersForUser(currentUser);
       clearAuthSession();
       setCurrentUser(null);
+      setOrders([]);
       throw new Error("No print hub is linked to this account. Complete hub setup first.");
     }
 
     const nextUser = toCurrentUser(data.user, signedInCentre);
     const nextCentres = signedInCentre ? upsertCentre(centres, signedInCentre) : centres;
+    if (currentUser?.id && currentUser.id !== nextUser.id) {
+      clearCachedOrdersForUser(currentUser);
+    }
     await persistAuthSession(session.access_token, nextUser, { refreshToken: session.refresh_token });
     if (signedInCentre) setCentres((prev) => upsertCentre(prev, signedInCentre));
     setCurrentUser(nextUser);
@@ -683,6 +720,9 @@ export default function App() {
     const signedInRole = toFrontendRole(data.user.role);
     const nextUser = toCurrentUser(data.user, centre);
     const nextCentres = centre ? upsertCentre(centres, centre) : centres;
+    if (currentUser?.id && currentUser.id !== nextUser.id) {
+      clearCachedOrdersForUser(currentUser);
+    }
 
     localStorage.setItem("printease_token", data.token);
     localStorage.setItem("printease_user", JSON.stringify(nextUser));
@@ -870,11 +910,21 @@ export default function App() {
   }
 
   function logout() {
+    const previousUser = currentUser;
+    ordersLoadRequestRef.current += 1;
     clearAuthSession();
     setCurrentUser(null);
     setPostAuthRedirect(null);
     setDocumentFile(null);
     setPendingPayment(null);
+    setOrder(null);
+    setBackendPrice(null);
+    setPaymentError("");
+    setOrderAccessToken("");
+    setOrders([]);
+    localStorage.removeItem("printease_active_order_id");
+    localStorage.removeItem("printease_order_access_token");
+    clearCachedOrdersForUser(previousUser);
     navigate("home");
   }
 
@@ -1216,7 +1266,9 @@ export default function App() {
       setBackendPrice(orderData.price || null);
       
       localStorage.setItem("printease_active_order_id", nextOrder.backendId || nextOrder.id);
-      saveOrderToLocalHistory(nextOrder, defaultPrintOptions, orderData.price, uploadedDocuments);
+      saveOrderToLocalHistory(nextOrder, defaultPrintOptions, orderData.price, uploadedDocuments, {
+        ownerId: currentUser?.id || null,
+      });
       invalidateUserHistory(currentUser?.id || "me");
 
       if (orderData.orderAccessToken) {
@@ -1947,7 +1999,7 @@ export default function App() {
       page, navigate, profileOpen, setProfileOpen, currentUser, desktopAvailable,
       logout, openProfile, authMode, authRole, changeAuthMode, changeAuthRole,
       authError, authLoading, handleAuthSubmit, handleGoogleLogin, email, updateEmail,
-      password, setPassword, name, updateName, mobile, setMobile, confirmPassword, setConfirmPassword,
+      password, setPassword, name, updateName, mobile, setMobile,
       showPassword, setShowPassword, username, updateUsername, usernameEdited, usernameStatus,
       hubName, setHubName, hubCode, setHubCode, startLogin, startRegister,
       centreCode, setCentreCode, handleCentreCode, centreLookupError, centreLookupLoading,

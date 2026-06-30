@@ -1,6 +1,6 @@
 # Frontend Sync Cautions
 
-Last updated: 2026-06-07
+Last updated: 2026-06-30
 
 ## Current State
 
@@ -54,6 +54,32 @@ Before syncing shared frontend code:
 4. Do not sync backend code into the desktop repo.
 5. Do not overwrite `desktop-shell/`.
 6. Do not use stale one-off patch scripts as application code.
+7. Keep session/local-cache fixes synced between MVP and desktop frontend.
+
+Shared files that currently must stay aligned:
+
+```txt
+frontend/src/App.jsx
+frontend/src/AppRouter.jsx
+frontend/src/pages/ConversionPage.jsx
+frontend/src/pages/HistoryPage.jsx
+frontend/src/pages/HubPrinterAgentPage.jsx
+frontend/src/pages/UserDashboard.jsx
+frontend/src/utils/desktopBridge.js
+frontend/src/utils/localDb.js
+frontend/src/utils/localHistory.js
+```
+
+The old `frontend/split_router.cjs` helper was removed. It was a one-time extraction script and still referenced deleted auth props, so do not recreate it.
+
+Order caches are now role/user scoped:
+
+```txt
+orders_user_<user_id>
+orders_hub_<user_id>
+```
+
+Logout clears active order ids and order access tokens. Do not remove that cleanup, or a later login on the same browser/desktop install can see stale payment/order state.
 
 Never sync or commit:
 

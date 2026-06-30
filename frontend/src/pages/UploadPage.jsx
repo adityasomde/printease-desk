@@ -383,40 +383,44 @@ export default function UploadPage({
   }
 
   function handleFileChange(event) {
-    setBackendPrice?.(null);
-    if (setReprintSourceDocuments) setReprintSourceDocuments([]);
-    if (setReprintDocumentExpired) setReprintDocumentExpired(false);
-    setUploadState({ progress: 0, message: `Uploading ${displayFiles.length} file(s)...`, active: true });
-    const files = Array.from(event.target.files || []);
-    
-    const largeOfficeFiles = files.filter(f => detectUploadFileKind(f) === "office" && f.size > 100 * 1024 * 1024);
-    if (largeOfficeFiles.length > 0) {
-      alert("One or more Office documents exceed 100MB. Please convert them to PDF yourself and upload the PDF.");
-      event.target.value = "";
-      return;
+    try {
+      setBackendPrice?.(null);
+      if (setReprintSourceDocuments) setReprintSourceDocuments([]);
+      if (setReprintDocumentExpired) setReprintDocumentExpired(false);
+      const files = Array.from(event.target.files || []);
+      
+      const largeOfficeFiles = files.filter(f => detectUploadFileKind(f) === "office" && f.size > 100 * 1024 * 1024);
+      if (largeOfficeFiles.length > 0) {
+        alert("One or more Office documents exceed 100MB. Please convert them to PDF yourself and upload the PDF.");
+        event.target.value = "";
+        return;
+      }
+  
+      const firstFile = files[0] || null;
+      const hasOfficeFile = files.some((file) => detectUploadFileKind(file) === "office");
+      setUploadNotice(hasOfficeFile
+        ? "DOCX, PPTX and XLSX files will be converted to PDF by the print hub's desktop agent after you continue. This usually takes 10–30 seconds. You'll see the exact page count and price once conversion completes."
+        : "");
+      setDocumentFiles(files);
+      setDocumentFile(firstFile);
+      if (!firstFile) {
+        setDocumentName("");
+        setSelectedFileIndexes([]);
+        setModalFileIndex(null);
+        setFilePreparationState((prev) => {
+          releasePreparationState(prev);
+          return {};
+        });
+        return;
+      }
+      if (files.length === 1) setDocumentName(firstFile.name);
+      if (files.length > 1) setDocumentName(`${files.length} uploaded documents`);
+      initConfigs(files);
+      startFilePreparation(files);
+    } catch (error) {
+      console.error("File selection failed:", error);
+      setUploadNotice("Could not read selected file. Please try again.");
     }
-
-    const firstFile = files[0] || null;
-    const hasOfficeFile = files.some((file) => detectUploadFileKind(file) === "office");
-    setUploadNotice(hasOfficeFile
-      ? "DOCX, PPTX and XLSX files will be converted to PDF by the print hub's desktop agent after you continue. This usually takes 10–30 seconds. You'll see the exact page count and price once conversion completes."
-      : "");
-    setDocumentFiles(files);
-    setDocumentFile(firstFile);
-    if (!firstFile) {
-      setDocumentName("");
-      setSelectedFileIndexes([]);
-      setModalFileIndex(null);
-      setFilePreparationState((prev) => {
-        releasePreparationState(prev);
-        return {};
-      });
-      return;
-    }
-    if (files.length === 1) setDocumentName(firstFile.name);
-    if (files.length > 1) setDocumentName(`${files.length} uploaded documents`);
-    initConfigs(files);
-    startFilePreparation(files);
   }
 
   useEffect(() => {
@@ -425,28 +429,33 @@ export default function UploadPage({
     }
 
     const handlePaste = (e) => {
-      const files = Array.from(e.clipboardData?.files || []).filter(isAllowedUploadFile);
-      if (files.length > 0) {
-        const hasOfficeFile = files.some((file) => detectUploadFileKind(file) === "office");
-        const largeOfficeFiles = files.filter(f => detectUploadFileKind(f) === "office" && f.size > 100 * 1024 * 1024);
-        
-        if (largeOfficeFiles.length > 0) {
-          alert("One or more pasted Office documents exceed 100MB. Please convert them to PDF yourself and upload the PDF.");
-          return;
+      try {
+        const files = Array.from(e.clipboardData?.files || []).filter(isAllowedUploadFile);
+        if (files.length > 0) {
+          const hasOfficeFile = files.some((file) => detectUploadFileKind(file) === "office");
+          const largeOfficeFiles = files.filter(f => detectUploadFileKind(f) === "office" && f.size > 100 * 1024 * 1024);
+          
+          if (largeOfficeFiles.length > 0) {
+            alert("One or more pasted Office documents exceed 100MB. Please convert them to PDF yourself and upload the PDF.");
+            return;
+          }
+  
+          setUploadNotice(hasOfficeFile
+            ? "DOCX, PPTX and XLSX files will be converted to PDF by the print hub's desktop agent after you continue. This usually takes 10–30 seconds. You'll see the exact page count and price once conversion completes."
+            : "");
+          setBackendPrice?.(null);
+          if (setReprintSourceDocuments) setReprintSourceDocuments([]);
+          if (setReprintDocumentExpired) setReprintDocumentExpired(false);
+          setDocumentFiles(files);
+          setDocumentFile(files[0]);
+          if (files.length === 1) setDocumentName(files[0].name);
+          if (files.length > 1) setDocumentName(`${files.length} uploaded documents`);
+          initConfigs(files);
+          startFilePreparation(files);
         }
-
-        setUploadNotice(hasOfficeFile
-          ? "DOCX, PPTX and XLSX files will be converted to PDF by the print hub's desktop agent after you continue. This usually takes 10–30 seconds. You'll see the exact page count and price once conversion completes."
-          : "");
-        setBackendPrice?.(null);
-        if (setReprintSourceDocuments) setReprintSourceDocuments([]);
-        if (setReprintDocumentExpired) setReprintDocumentExpired(false);
-        setDocumentFiles(files);
-        setDocumentFile(files[0]);
-        if (files.length === 1) setDocumentName(files[0].name);
-        if (files.length > 1) setDocumentName(`${files.length} uploaded documents`);
-        initConfigs(files);
-        startFilePreparation(files);
+      } catch (error) {
+        console.error("File paste failed:", error);
+        setUploadNotice("Could not read pasted file. Please try again.");
       }
     };
     window.addEventListener("paste", handlePaste);
@@ -590,7 +599,9 @@ export default function UploadPage({
   };
 
   const selectedFileCount = documentFiles.length || (documentFile ? 1 : 0) || (reprintSourceDocuments ? reprintSourceDocuments.length : 0);
-  const selectedFileSize = documentFiles.reduce((acc, file) => acc + file.size, documentFile?.size || 0);
+  const selectedFileSize = documentFiles.length
+    ? documentFiles.reduce((acc, file) => acc + file.size, 0)
+    : documentFile?.size || 0;
 
   const selectedFileLabel = isMulti
     ? `${displayFiles.length} documents selected`

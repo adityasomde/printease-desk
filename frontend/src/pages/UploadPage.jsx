@@ -554,10 +554,7 @@ export default function UploadPage({
         window.alert("Please enter a valid number of copies (at least 1).");
         return;
       }
-      if (!isWaitingForDesktop && (pages === "" || Number(pages) <= 0)) {
-        window.alert("Please enter a valid number of pages (at least 1).");
-        return;
-      }
+
     } else {
       for (let i = 0; i < displayFiles.length; i++) {
         const conf = multiFileConfigs[i] || {};
@@ -569,10 +566,7 @@ export default function UploadPage({
           return;
         }
         const isWaitingForDesktop = prepared?.status === PREPARATION_STATUS.PENDING_DESKTOP;
-        if (!isWaitingForDesktop && (filePages === "" || Number(filePages) <= 0)) {
-          window.alert(`Please enter a valid number of pages (at least 1) for document: "${displayFiles[i].name}".`);
-          return;
-        }
+
       }
     }
 

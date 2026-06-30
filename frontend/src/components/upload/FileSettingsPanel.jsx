@@ -17,10 +17,7 @@ export default function FileSettingsPanel({ activeConfig, setConfigVal, isCompac
 
   return (
     <div className={containerClass}>
-      <label className={labelClass}>
-        Pages
-        <input type="number" min="1" value={activeConfig?.pages ?? 1} onChange={(e) => setConfigVal("pages", e.target.value === "" ? "" : Number(e.target.value))} className={inputClass} />
-      </label>
+
       <label className={labelClass}>
         {isCompact ? "Range" : "Page range"}
         <input value={activeConfig?.selectedPages || ""} onChange={(e) => setConfigVal("selectedPages", e.target.value)} placeholder={isCompact ? "1,3-4" : "All, or 1,3-4"} className={inputClass} />

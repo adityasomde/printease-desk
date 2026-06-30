@@ -121,15 +121,20 @@ export default function PaymentPage({
   const displayValue = (value) => (isPricingPending ? "Pending" : (value || value === 0 ? value : "Pending"));
   const displayMoney = (value) => (isPricingPending ? "Pending" : formatCurrency(value));
 
+  const refreshFnRef = useRef(refreshActivePaymentOrder);
   useEffect(() => {
-    if (!effectiveOrder?.backendId || !isPricingPending || conversionFailed || !refreshActivePaymentOrder) return;
+    refreshFnRef.current = refreshActivePaymentOrder;
+  }, [refreshActivePaymentOrder]);
+
+  useEffect(() => {
+    if (!effectiveOrder?.backendId || !isPricingPending || conversionFailed) return;
 
     let cancelled = false;
 
     async function refreshBill() {
       setRefreshingBill(true);
       try {
-        const refreshed = await refreshActivePaymentOrder(effectiveOrder.backendId);
+        const refreshed = await refreshFnRef.current(effectiveOrder.backendId);
         if (cancelled || !refreshed) return;
         if (refreshed.order) setLiveOrder(refreshed.order);
         if (refreshed.price) setLivePrice(refreshed.price);
@@ -147,7 +152,7 @@ export default function PaymentPage({
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [conversionFailed, effectiveOrder?.backendId, isPricingPending, refreshActivePaymentOrder]);
+  }, [conversionFailed, effectiveOrder?.backendId, isPricingPending]);
 
   const handlePaymentClick = () => {
     const printablePages = effectivePrice?.printablePageCount || (selectedPageCount * (copies || 1));
